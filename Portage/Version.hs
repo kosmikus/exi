@@ -1,3 +1,10 @@
+{-| Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
+    Stability   :  provisional
+    Portability :  haskell98
+
+    Version parser, according to Portage spec.
+-}
+
 module Portage.Version
   (
   Version(..),
@@ -15,8 +22,6 @@ import Control.Monad
 import Data.List
 import Data.Maybe
 import Text.ParserCombinators.Parsec
-
--- handling of package versions
 
 data Version  =  Version  [Int]         -- [1,42,3] ~= 1.42.3
                           (Maybe Char)  -- optional letter
@@ -55,8 +60,7 @@ showRev :: Int -> String
 showRev 0 = ""
 showRev n = "-r" ++ show n
 
--- parsing a version
-
+-- | Function to call if you want to parse a version number.
 getVersion :: String -> Version
 getVersion ver = case parseVersion ver of
                    Left   _  -> 
@@ -98,13 +102,12 @@ readRev  =  option 0 (do  string "-r"
                           readNum
                      )
 
--- strip a revision from a version
-
+-- | Strip a revision number from a version.
 stripRev :: Version -> Version
 stripRev (Version a b c r) = Version a b c 0
 
--- check if one version is a prefix of the other (for 2.5* comparisons)
-
+-- | Check if one version is a prefix of the other (for comparisons with
+--   starred dependencies).
 versionPrefixOf :: Version -> Version -> Bool
 versionPrefixOf v@(Version ver1 c1 suf1 rev1) w@(Version ver2 c2 suf2 rev2)
   | rev1 > 0        =  v == w
