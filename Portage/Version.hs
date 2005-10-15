@@ -77,30 +77,30 @@ readVersion = do ver  <-  readVer
                  rev  <-  readRev
                  return (Version ver c suf rev)
 
-readVer  ::  CharParser st [Int]
-readNum  ::  CharParser st Int
-readC    ::  CharParser st (Maybe Char)
-readSuf  ::  CharParser st Suffix
-readSufType :: CharParser st (Int -> Suffix)
-readRev  ::  CharParser st Int
+readVer      ::  CharParser st [Int]
+readNum      ::  CharParser st Int
+readC        ::  CharParser st (Maybe Char)
+readSuf      ::  CharParser st Suffix
+readSufType  ::  CharParser st (Int -> Suffix)
+readRev      ::  CharParser st Int
 
-readVer  =   sepBy1 readNum (char '.')
-readNum  =   liftM read (many1 digit)
-readC    =   option Nothing (liftM Just letter)
-readSuf  =   option Normal  (do  char '_'
-                                 f  <-  readSufType
-                                 n  <-  option 0 readNum
-                                 return (f n)
-                            )
-readSufType = choice [liftM (const Alpha) (try $ string "alpha")
-                     ,liftM (const Beta ) (try $ string "beta" )
-                     ,liftM (const Pre  ) (try $ string "pre"  )
-                     ,liftM (const RC   ) (try $ string "rc"   )
-                     ,liftM (const P    ) (try $ string "p"    )
-                     ]
-readRev  =  option 0 (do  string "-r"
-                          readNum
-                     )
+readVer      =  sepBy1 readNum (char '.')
+readNum      =  liftM read (many1 digit)
+readC        =  option Nothing (liftM Just letter)
+readSuf      =  option Normal  (do  char '_'
+                                    f  <-  readSufType
+                                    n  <-  option 0 readNum
+                                    return (f n)
+                               )
+readSufType  =  choice [liftM (const Alpha) (try $ string "alpha")
+                       ,liftM (const Beta ) (try $ string "beta" )
+                       ,liftM (const Pre  ) (try $ string "pre"  )
+                       ,liftM (const RC   ) (try $ string "rc"   )
+                       ,liftM (const P    ) (try $ string "p"    )
+                       ]
+readRev      =  option 0  (do  string "-r"
+                               readNum
+                          )
 
 -- | Strip a revision number from a version.
 stripRev :: Version -> Version
