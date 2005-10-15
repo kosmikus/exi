@@ -19,11 +19,11 @@ splitUse = words
 -- | already (no duplicates, no negatives)
 mergeUse :: [UseFlag] -> [UseFlag] -> [UseFlag]
 mergeUse xs []  =  xs
-mergeUse xs ys  =  setToList $
-                   foldl  (\s u@(x:n) ->  if u == "-*"      then  emptySet
-                                          else if x == '-'  then  delFromSet s n
-                                                            else  addToSet s u
+mergeUse xs ys  =  elems $
+                   foldl  (\s u@(x:n) ->  if u == "-*"      then  empty
+                                          else if x == '-'  then  delete n s
+                                                            else  insert u s
                           )
-                          (mkSet xs)
+                          (fromList xs)
                           ys
 
