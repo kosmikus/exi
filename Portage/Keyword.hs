@@ -11,6 +11,10 @@ import Data.Set
 
 type Keyword = String
 
+-- | Splits a string of keyowrds.
+splitKeywords :: String -> [Keyword]
+splitKeywords = words
+
 -- | Merges keywords; this is similar to merging USE flags
 mergeKeywords :: [Keyword] -> [Keyword] -> [Keyword]
 mergeKeywords xs []  =  xs
