@@ -4,9 +4,9 @@ License:		GPL
 Author:			Andres Loeh
 Build-Depends:		base, parsec
 Synopsis:		Reimplementation of Gentoo Portage functions
-Exposed-Modules:	Portage.Dependency
-			Portage.Package
-			Portage.Use
-			Portage.Keyword
-			Portage.Version
+Exposed-Modules:	Portage.Dependency,
+			Portage.Package,
+			Portage.Use,
+			Portage.Keyword,
+			Portage.Version,
 			Portage.Ebuild
