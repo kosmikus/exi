@@ -23,11 +23,20 @@ import Data.List
 import Data.Maybe
 import Text.ParserCombinators.Parsec
 
-data Version  =  Version  [Int]         -- [1,42,3] ~= 1.42.3
-                          (Maybe Char)  -- optional letter
-                          Suffix
-                          Int           -- revision, 0 means none
+data Version   =  Version   [Int]         -- [1,42,3] ~= 1.42.3
+                            (Maybe Char)  -- optional letter
+                            Suffix
+                            Int           -- revision, 0 means none
+                            String        -- string representation, for leading zeros
+
+data Version'  =  Version'  [Int]
+                            (Maybe Char)
+                            Suffix
+                            Int
   deriving (Eq,Ord)
+
+projectVersion :: Version -> Version'
+projectVersion (Version ver c suf rev _) = Version' ver c suf rev
 
 data Suffix   =  Alpha Int | Beta Int | Pre Int | RC Int | Normal | P Int
   deriving (Eq,Ord)
@@ -38,8 +47,17 @@ instance Show Version where
 instance Show Suffix where
   show = showSuffix
 
+instance Eq Version where
+  v1 == v2 = projectVersion v1 == projectVersion v2
+
+instance Ord Version where
+  compare v1 v2 = compare (projectVersion v1) (projectVersion v2)
+
 showVersion :: Version -> String
-showVersion (Version ver c suf rev) 
+showVersion (Version _ _ _ _ rep) = rep
+
+showVersion' :: Version' -> String
+showVersion' (Version' ver c suf rev) 
         = showver ++ showc ++ showSuffix suf ++ showRev rev
   where showver  =  concat . intersperse "." . map show $ ver
         showc    =  maybe "" (:[]) c
@@ -71,45 +89,50 @@ parseVersion :: String -> Either ParseError Version
 parseVersion = parse readVersion "<version number>"
 
 readVersion :: CharParser st Version
-readVersion = do ver  <-  readVer
-                 c    <-  readC
-                 suf  <-  readSuf
-                 rev  <-  readRev
-                 return (Version ver c suf rev)
+readVersion =  do  (ver,  verr)  <-  readVer
+                   (c,    cr  )  <-  readC
+                   (suf,  sufr)  <-  readSuf
+                   (rev,  revr)  <-  readRev
+                   let  rep = verr ++ cr ++ sufr ++ revr
+                   return (Version ver c suf rev rep)
 
-readVer      ::  CharParser st [Int]
-readNum      ::  CharParser st Int
-readC        ::  CharParser st (Maybe Char)
-readSuf      ::  CharParser st Suffix
-readSufType  ::  CharParser st (Int -> Suffix)
-readRev      ::  CharParser st Int
+readVer      ::  CharParser st ([Int],          String)
+readNum      ::  CharParser st (Int,            String)
+readC        ::  CharParser st (Maybe Char,     String)
+readSuf      ::  CharParser st (Suffix,         String)
+readSufType  ::  CharParser st (Int -> Suffix,  String)
+readRev      ::  CharParser st (Int,            String)
 
-readVer      =  sepBy1 readNum (char '.')
-readNum      =  liftM read (many1 digit)
-readC        =  option Nothing (liftM Just letter)
-readSuf      =  option Normal  (do  char '_'
-                                    f  <-  readSufType
-                                    n  <-  option 0 readNum
-                                    return (f n)
-                               )
-readSufType  =  choice [liftM (const Alpha) (try $ string "alpha")
-                       ,liftM (const Beta ) (try $ string "beta" )
-                       ,liftM (const Pre  ) (try $ string "pre"  )
-                       ,liftM (const RC   ) (try $ string "rc"   )
-                       ,liftM (const P    ) (try $ string "p"    )
+readVer      =  liftM ((\(x,y) -> (x, concat . intersperse "." $ y)) . unzip) (sepBy1 readNum (char '.'))
+readNum      =  do  ds <- many1 digit
+                    return (read ds, ds)
+readC        =  option (Nothing,  "")  (liftM (\x -> (Just x, [x])) letter)
+readSuf      =  option (Normal,   "")  (  do  char '_'
+                                              (f,sr)  <-  readSufType
+                                              (n,nr)  <-  option (0, "") readNum
+                                              return (f n,sr ++ nr)
+                                       )
+readSufType  =  choice [  
+                          liftM (\x -> (Alpha,  x)) (try $ string "alpha"),
+                          liftM (\x -> (Beta,   x)) (try $ string "beta" ),
+                          liftM (\x -> (Pre,    x)) (try $ string "pre"  ),
+                          liftM (\x -> (RC,     x)) (try $ string "rc"   ),
+                          liftM (\x -> (P,      x)) (try $ string "p"    )
                        ]
-readRev      =  option 0  (do  string "-r"
-                               readNum
-                          )
+
+readRev      =  option (0,        "")  (  do  rr      <- string "-r"
+                                              (n,nr)  <-  readNum
+                                              return (n,rr ++ nr)
+                                       )
 
 -- | Strip a revision number from a version.
 stripRev :: Version -> Version
-stripRev (Version a b c r) = Version a b c 0
+stripRev (Version a b c r rep) = Version a b c 0 rep
 
 -- | Check if one version is a prefix of the other (for comparisons with
 --   starred dependencies).
 versionPrefixOf :: Version -> Version -> Bool
-versionPrefixOf v@(Version ver1 c1 suf1 rev1) w@(Version ver2 c2 suf2 rev2)
+versionPrefixOf v@(Version ver1 c1 suf1 rev1 _) w@(Version ver2 c2 suf2 rev2 _)
   | rev1 > 0        =  v == w
   | suf1 /= Normal  =  ver1 == ver2 && c1 == c2 && suf1 == suf2
   | isJust c1       =  ver1 == ver2 && c1 == c2
