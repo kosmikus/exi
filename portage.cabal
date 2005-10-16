@@ -7,5 +7,6 @@ Synopsis:		Reimplementation of Gentoo Portage functions
 Exposed-Modules:	Portage.Dependency
 			Portage.Package
 			Portage.Use
+			Portage.Keyword
 			Portage.Version
 
