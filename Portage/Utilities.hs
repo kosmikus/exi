@@ -7,8 +7,11 @@
 
 module Portage.Utilities
   (
+    stripComments,
+    stripNewlines,
     splitAtLast,
-    strictReadFile
+    strictReadFile,
+    (./.)
   )
   where
 
@@ -27,3 +30,15 @@ strictReadFile f  =   do  f <- readFile f
 stringSeq :: String -> b -> b
 stringSeq []      c  =  c
 stringSeq (x:xs)  c  =  stringSeq xs c
+
+-- | Concatenate two paths.
+(./.) :: FilePath -> FilePath -> FilePath
+path ./. file  =  path ++ "/" ++ file
+
+-- | Strip empty lines and comments from a string.
+stripComments :: String -> String
+stripComments = unlines . filter (not . null) . map (fst . break (=='#')) . lines
+
+-- | Strip newline characters.
+stripNewlines :: String -> String
+stripNewlines = filter (/='\n')

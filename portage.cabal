@@ -9,4 +9,6 @@ Exposed-Modules:	Portage.Dependency,
 			Portage.Use,
 			Portage.Keyword,
 			Portage.Version,
-			Portage.Ebuild
+			Portage.Ebuild,
+			Portage.Profile,
+			Portage.Constants
