@@ -70,5 +70,5 @@ getEbuild loc e  |  length l <= 14  =  error "getEbuild: corrupted ebuild (too s
                                                (getDepString cdep)
                                                (getDepString pdep)
                                                (getDepAtom prov)
-  where l = lines e
-        (dep:rdep:slt:src:restr:home:lic:des:key:inh:use:cdep:pdep:prov:_) = l
+  where  l = lines e
+         (dep:rdep:slt:src:restr:home:lic:des:key:inh:use:cdep:pdep:prov:_) = l

@@ -10,9 +10,17 @@ module Portage.Constants
 
 import Portage.Utilities
 
-profileDir     =  "/etc/make.profile"
-globalConfig   =  "/etc/make.globals"
-profileConfig  =  profileDir ./. "make.defaults"
-userConfig     =  "/etc/make.conf"
+bashBin          =  "/bin/bash"
 
-profileParent  =  "parent"
+profileDir       =  "/etc/make.profile"
+globalConfig     =  "/etc/make.globals"
+profileConfig    =  profileDir ./. "make.defaults"
+userConfig       =  "/etc/make.conf"
+
+
+profileParent    =  "parent"
+
+profilesDir  pt  =  pt ./. "profiles"
+eclassDir    pt  =  pt ./. "eclass"
+licenseDir   pt  =  pt ./. "licenses"
+metadataDir  pt  =  pt ./. "metadata"

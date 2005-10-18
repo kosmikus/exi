@@ -11,6 +11,7 @@ module Portage.Utilities
     stripNewlines,
     splitAtLast,
     strictReadFile,
+    stringSeq,
     (./.)
   )
   where
