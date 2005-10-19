@@ -29,6 +29,10 @@ data Config = Config  {
                       }
   deriving (Eq,Show)
 
+-- | Returns main portage tree plus overlays.
+trees :: Config -> [FilePath]
+trees c = portDir c : overlays c
+
 getConfig :: String -> Config
 getConfig c  |  length l < 5   =  error "getConfig: corrupted portage configuration (too short)"
              |  otherwise      =  Config  (splitKeywords key)

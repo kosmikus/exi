@@ -24,3 +24,5 @@ profilesDir  pt  =  pt ./. "profiles"
 eclassDir    pt  =  pt ./. "eclass"
 licenseDir   pt  =  pt ./. "licenses"
 metadataDir  pt  =  pt ./. "metadata"
+
+categoriesFile  pt  =  profilesDir pt ./. "categories"
