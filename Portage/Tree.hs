@@ -13,11 +13,13 @@ import qualified Data.Map as M
 import Data.Map (Map)
 
 import Portage.Package
+import Portage.Ebuild
+import Portage.Version
 import Portage.Config
 import Portage.Utilities
 import Portage.Constants
 
--- data Tree = Map Category (Map Package (Map Version Ebuild))
+data Tree = Map Category (Map Package (Map Version [Ebuild]))
 
 -- | Returns the list of categories (from disk).
 categories :: Config -> IO [Category]
