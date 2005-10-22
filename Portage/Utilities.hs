@@ -6,14 +6,6 @@
 -}
 
 module Portage.Utilities
-  (
-    stripComments,
-    stripNewlines,
-    splitAtLast,
-    strictReadFile,
-    stringSeq,
-    (./.)
-  )
   where
 
 import Data.List
@@ -43,3 +35,30 @@ stripComments = unlines . filter (not . null) . map (fst . break (=='#')) . line
 -- | Strip newline characters.
 stripNewlines :: String -> String
 stripNewlines = filter (/='\n')
+
+-- | The function 'splitPath' is a reimplementation of the Python
+--   function os.path.split.
+splitPath :: FilePath 
+          -> (FilePath,  -- ^ the part before the final slash; may be empty
+              FilePath)  -- ^ the part after the final slash; may be empty
+splitPath p
+    = let
+          slashes = elemIndices '/' p 
+          index   = if null slashes then 0 else last slashes + 1
+          (hd,tl) = splitAt index p
+          fhd | null hd || hd `isPrefixOf` repeat '/'
+                  = hd
+              | otherwise
+                  = reverse . dropWhile (=='/') . reverse $ hd
+      in
+          (fhd,tl)
+
+-- | The function 'dirname' is a reimplementation of the Python function
+--   os.path.dirname and returns the directory component of a pathname.
+dirname :: FilePath -> FilePath
+dirname = fst . splitPath
+
+-- | The function 'basename' is a reimplementation of the Python function
+--   os.path.basename and returns the non-directory component of a pathname.
+basename :: FilePath -> FilePath
+basename = snd . splitPath

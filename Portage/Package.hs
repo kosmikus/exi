@@ -22,7 +22,9 @@ data PV        =  PV Category Package Version
 showPV  ::  PV -> String
 getPV   ::  String -> PV
 
-showPV (PV cat pkg ver) = cat ++ "/" ++ pkg ++ "-" ++ showVersion ver
+showPV        (PV cat pkg ver)  =  cat ++ "/" ++ pkg ++ "-" ++ showVersion ver
+showEbuildPV  (PV cat pkg ver)  =  cat ./. pkg ./. pkg ++ "-" ++ showVersion ver ++
+                                   ".ebuild"
 
 getPV xs  =  let  (int,_:ver)  =  splitAtLast '-' xs
                   (cat,_:pkg)  =  splitAtLast '/' int

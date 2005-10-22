@@ -25,4 +25,6 @@ eclassDir    pt  =  pt ./. "eclass"
 licenseDir   pt  =  pt ./. "licenses"
 metadataDir  pt  =  pt ./. "metadata"
 
+cacheDir     pt  =  "/var/cache/edb/dep" ./. pt
+
 categoriesFile  pt  =  profilesDir pt ./. "categories"

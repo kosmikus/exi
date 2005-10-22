@@ -8,12 +8,17 @@
 module Portage.Shell
   where
 
+import Data.Bits
+import System.Posix
 import System.Process
 import System.Exit
 import System.IO
+import System.Directory
 
 import Portage.Constants
 import Portage.Utilities
+
+type MTime   =  EpochTime
 
 -- | Run a command and return the output and errors.
 runCommand :: String -> IO (ExitCode,String,String)
@@ -35,3 +40,21 @@ quote x =  "\"" ++ concatMap quotesingle x ++ "\""
         quotesingle '\\' = "\\\\"
         quotesingle '$'  = "\\$"
         quotesingle x    = [x]
+
+-- | Set the group-write bit for a file.
+makeGroupWritable :: FilePath -> IO ()
+makeGroupWritable f = do
+                          mode <- fmap fileMode (getFileStatus f)
+                          setFileMode f (mode .|. groupReadMode
+                                              .|. groupWriteMode)
+
+-- | Determine the file modification time (mtime).
+getMTime :: FilePath -> IO MTime
+getMTime f = fmap modificationTime (getFileStatus f)
+
+-- | Create a group-writable file (along with directories).
+makePortageFile :: FilePath -> IO ()
+makePortageFile f = do
+                        createDirectoryIfMissing True (dirname f)
+                        h <- openFile f WriteMode
+                        hClose h

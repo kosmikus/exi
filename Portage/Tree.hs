@@ -8,18 +8,84 @@
 module Portage.Tree
   where
 
+import System.IO.Unsafe
 import System.Directory
 import qualified Data.Map as M
 import Data.Map (Map)
 
 import Portage.Package
 import Portage.Ebuild
+import Portage.Eclass
 import Portage.Version
 import Portage.Config
 import Portage.Utilities
 import Portage.Constants
+import Portage.Shell
 
-data Tree = Map Category (Map Package (Map Version [Ebuild]))
+data Tree =  Tree
+               {
+                  eclasses  ::  Map Eclass EclassMeta,
+                  ebuilds   ::  Map Category (Map Package [Variant])
+               }
+
+-- | Create a tree from an overlay.
+createTree ::  FilePath ->                -- ^ the portage tree
+               [Category] ->              -- ^ the list of categories
+               Map Eclass EclassMeta ->   -- ^ final eclass map
+               IO Tree
+createTree pt cats ecs =  
+    do
+        eclasses' <- getEclasses
+        ebuilds' <- fmap M.fromList (mapM categoryEntries cats)
+        return (Tree eclasses' ebuilds')
+  where
+    getEclasses :: IO (Map Eclass EclassMeta)
+    getEclasses             =  do
+                                   eclasses <- getDirectoryContents (eclassDir pt)
+                                   fmap M.fromList (mapM eclassEntries eclasses)
+
+    eclassEntries :: Eclass -> IO (Eclass, EclassMeta)
+    eclassEntries eclass    =  do
+                                   mtime <-  unsafeInterleaveIO $ 
+                                             fmap getMTime (eclassDir pt ./. eclass))
+                                   return (eclass, EclassMeta mtime)
+
+    categoryEntries :: Category -> IO (Category, Map Package [Variant])
+    categoryEntries cat     =  do  
+                                   ps <- unsafeInterleaveIO $ categoryMap cat
+                                   return (cat, ps)
+
+    categoryMap :: Category -> IO (Map Package [Variant])
+    categoryMap cat         =  do
+                                   pkgs <- getDirectoryContents (pt ./. cat)
+                                   fmap M.fromList (mapM (packageEntries cat) pkgs)
+
+    packageEntries :: Category -> Package -> IO (Package, [Variant])
+    packageEntries cat pkg  =  do
+                                   es <- unsafeInterleaveIO $ packageMap cat pkg
+                                   return (cat, es)
+
+    packageMap :: Category -> Package -> IO [Variant]
+    packageMap cat pkg      =  do
+                                   ebuilds <- getDirectoryContents (pt ./. cat ./. pkg)
+                                   mapM (ebuildEntries cat pkg) ebuilds
+
+    ebuildEntries :: Category -> Package -> String -> IO Variant
+    ebuildEntries cat pkg ebuild
+                            =  do
+                                   let pv@(PV _ _ ver)  =  getPV (cat ++ "/" ++ ebuild)
+                                   let meta             =  EbuildMeta
+                                                             {
+                                                               version   =  ver,
+                                                               location  =  PortageTree pt,
+                                                               masked    =  []
+                                                             }
+                                   c <- getEbuildFromDisk pt pv ecs
+                                   return (Variant meta c)
+
+
+cacheEntry ::  FilePath -> PV -> FilePath
+cacheEntry pt pv = cacheDir pt ./. showPV pv
 
 -- | Returns the list of categories (from disk).
 categories :: Config -> IO [Category]
