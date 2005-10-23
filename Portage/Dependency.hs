@@ -174,8 +174,8 @@ readOr =
         d <- pars readDepString
         -- simplify or's with just one alternative
         case d of
-          [s] -> return [s]
-          _   -> return [Or d]
+          [s]  ->  return [s]
+          _    ->  return [Or d]
 
 
 -- read a dependency qualified with a use flag
@@ -185,13 +185,13 @@ readUseDep =
         neg <- option False (liftM (const True) excl)
         use <- ident
         qmark
-        thenf <- {- pars -} readDepString  -- removed pars due to non-compliant ebuilds
-        elsef <- option [] $
+        thenf  <-  {- pars -} readDepString  -- removed pars due to non-compliant ebuilds
+        elsef  <-  option [] $
                      do
                          col
                          ({- pars -} readDepString)
-        if null elsef then return [Use neg use thenf]
-                      else return [Use neg use thenf, Use (not neg) use elsef]
+        if null elsef  then  return [Use neg use thenf]
+                       else  return [Use neg use thenf, Use (not neg) use elsef]
 
 -- an atom can also be a parenthesized depstring, which is flattened
 
@@ -201,8 +201,8 @@ readAtom = -- hack due to strange ebuilds
 
 readOrigAtom =
     do
-        neg <- option "" (liftM (const "!") excl)
-        dep <- ident
+        neg  <-  option "" (liftM (const "!") excl)
+        dep  <-  ident
         case parse readDepAtom "" (neg ++ dep) of
           Left error  ->  fail (show error)
           Right x     ->  return [Plain x]
