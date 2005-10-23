@@ -27,4 +27,7 @@ metadataDir  pt  =  pt ./. "metadata"
 
 cacheDir     pt  =  "/var/cache/edb/dep" ./. pt
 
+ebuildsh         =  "/usr/sbin/ebuild.sh"
+
 categoriesFile  pt  =  profilesDir pt ./. "categories"
+

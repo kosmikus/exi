@@ -54,7 +54,7 @@ data Ebuild = Ebuild  {
                          iuse         ::  [UseFlag],
                          cdepend      ::  DepString,
                          pdepend      ::  DepString,
-                         provide      ::  DepAtom 
+                         provide      ::  Maybe DepAtom 
                       }
   deriving (Show,Eq)
 
@@ -99,7 +99,7 @@ getEbuild e  |  length l <= 14  =  error "getEbuild: corrupted ebuild (too short
                                            (splitUse use)
                                            (getDepString cdep)
                                            (getDepString pdep)
-                                           (getDepAtom prov)
+                                           (getMaybeDepAtom prov)
   where  l = lines e
          (dep:rdep:slt:src:restr:home:lic:des:key:inh:use:cdep:pdep:prov:_) = l
 
@@ -119,11 +119,20 @@ getEbuildFromDisk pt pv@(PV cat pkg ver) ecs =
         let cacheFile     =  cacheDir pt ./. showPV pv
         cacheExists  <-  unsafeInterleaveIO $ doesFileExist cacheFile
         cacheNewer   <-  unsafeInterleaveIO $
-                         do  cacheMTime     <-  getMTime cacheFile
+                         do  
+                             cacheMTime     <-  getMTime cacheFile
                              originalMTime  <-  getMTime originalFile
-                             return (cacheMTime > originalMTime)
+                             return (cacheMTime >= originalMTime)
         eclassOK     <-  return $ True  -- unimplemented
+        let env           =  [("ECLASSDIR",eclassDir pt),   
+                              -- TODO: is this correct, to take the *current* tree?
+                              ("EBUILD",originalFile),
+                              ("dbkey",cacheFile)]
+        let refreshCache  =  do
+                                 putStrLn ("cache refresh for " ++ show pv)
+                                 makePortageFile cacheFile
+                                 runCommandInEnv (ebuildsh ++ " depend") env
+                                 return ()
         when (not (cacheExists && cacheNewer && eclassOK)) refreshCache
         fmap getEbuild (strictReadFile cacheFile)
-  where
-    refreshCache = return ()
+

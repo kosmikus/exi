@@ -8,10 +8,12 @@
 module Portage.Tree
   where
 
+import System.IO
 import System.IO.Unsafe
 import System.Directory
 import qualified Data.Map as M
 import Data.Map (Map)
+import Data.List
 
 import Portage.Package
 import Portage.Ebuild
@@ -47,7 +49,7 @@ createTree pt cats ecs =
     eclassEntries :: Eclass -> IO (Eclass, EclassMeta)
     eclassEntries eclass    =  do
                                    mtime <-  unsafeInterleaveIO $ 
-                                             fmap getMTime (eclassDir pt ./. eclass))
+                                             getMTime (eclassDir pt ./. eclass)
                                    return (eclass, EclassMeta mtime)
 
     categoryEntries :: Category -> IO (Category, Map Package [Variant])
@@ -57,23 +59,27 @@ createTree pt cats ecs =
 
     categoryMap :: Category -> IO (Map Package [Variant])
     categoryMap cat         =  do
-                                   pkgs <- getDirectoryContents (pt ./. cat)
+                                   pkgs <- getSubdirectories (pt ./. cat)
                                    fmap M.fromList (mapM (packageEntries cat) pkgs)
 
     packageEntries :: Category -> Package -> IO (Package, [Variant])
     packageEntries cat pkg  =  do
                                    es <- unsafeInterleaveIO $ packageMap cat pkg
-                                   return (cat, es)
+                                   return (pkg, es)
 
     packageMap :: Category -> Package -> IO [Variant]
     packageMap cat pkg      =  do
-                                   ebuilds <- getDirectoryContents (pt ./. cat ./. pkg)
+                                   ebuilds <- fmap  (  map (\x -> take (length x - 7) x) .
+                                                       filter (".ebuild" `isSuffixOf`))
+                                                    (getDirectoryContents (pt ./. cat ./. pkg))
                                    mapM (ebuildEntries cat pkg) ebuilds
 
     ebuildEntries :: Category -> Package -> String -> IO Variant
     ebuildEntries cat pkg ebuild
                             =  do
-                                   let pv@(PV _ _ ver)  =  getPV (cat ++ "/" ++ ebuild)
+                                   let version          =  drop (length pkg + 1) ebuild
+                                   let ver              =  getVersion version
+                                   let pv               =  PV cat pkg ver
                                    let meta             =  EbuildMeta
                                                              {
                                                                version   =  ver,
@@ -82,6 +88,11 @@ createTree pt cats ecs =
                                                              }
                                    c <- getEbuildFromDisk pt pv ecs
                                    return (Variant meta c)
+
+testTree = do
+               cfg <- portageConfig
+               cats <- categories cfg
+               fixIO (\r -> createTree "/usr/portage" cats (eclasses r))
 
 
 cacheEntry ::  FilePath -> PV -> FilePath

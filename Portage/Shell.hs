@@ -14,16 +14,21 @@ import System.Process
 import System.Exit
 import System.IO
 import System.Directory
+import Control.Monad
 
 import Portage.Constants
 import Portage.Utilities
 
 type MTime   =  EpochTime
 
--- | Run a command and return the output and errors.
-runCommand :: String -> IO (ExitCode,String,String)
-runCommand cmd = do
-                     (cin,cout,cerr,pid) <- runInteractiveProcess "/bin/bash" ["-c", cmd] Nothing Nothing
+-- | Run a command in a specific environment and return the output and errors.
+runCommandInEnv ::  String ->              -- ^ the command
+                    [(String,String)] ->   -- ^ the environment
+                    IO (ExitCode,String,String)
+runCommandInEnv cmd env = 
+                 do
+                     let env' = if null env then Nothing else Just env
+                     (cin,cout,cerr,pid) <- runInteractiveProcess "/bin/bash" ["-c", cmd] Nothing env'
                      hClose cin
                      out <- hGetContents cout
                      err <- hGetContents cerr
@@ -31,6 +36,11 @@ runCommand cmd = do
                      stringSeq err (hClose cerr)
                      exit <- waitForProcess pid
                      return (exit,out,err)
+
+-- | Run a command and return the output and errors.
+runCommand ::  String ->              -- ^ the command
+               IO (ExitCode,String,String)
+runCommand cmd = runCommandInEnv cmd []
 
 -- | Quotes a string such that it will survive the shell.
 quote :: String -> String
@@ -52,9 +62,19 @@ makeGroupWritable f = do
 getMTime :: FilePath -> IO MTime
 getMTime f = fmap modificationTime (getFileStatus f)
 
--- | Create a group-writable file (along with directories).
+-- | Create/touch a group-writable file (along with directories).
 makePortageFile :: FilePath -> IO ()
 makePortageFile f = do
                         createDirectoryIfMissing True (dirname f)
                         h <- openFile f WriteMode
                         hClose h
+
+-- | Returns a list of subdirectories.
+getSubdirectories :: FilePath -> IO [FilePath]
+getSubdirectories f = 
+    do
+        fs <- getDirectoryContents f
+        filterM  (doesDirectoryExist . (f ./.)) 
+                 (filter  (\x -> case x of  ('.':_)  ->  False
+                                            _        ->  True)
+                          fs)

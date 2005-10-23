@@ -77,7 +77,7 @@ showDepString = concat . intersperse " " . map showDepTerm
 showDepTerm (Plain atom)              =  showDepAtom atom
 showDepTerm (Or depstring)            =  "|| ( " ++ showDepString depstring ++ " )"
 showDepTerm (Use neg flag depstring)  =  (if neg then "!" else "")
-                                         ++ flag ++ " ? ( " ++ showDepString depstring ++ " )"
+                                         ++ flag ++ "? ( " ++ showDepString depstring ++ " )"
 
 showDepAtom (DepAtom neg rev mod cat pkg ver) = 
     (if neg then "!" else "") ++ (if rev then "~" else "") ++
@@ -114,7 +114,14 @@ getDepAtom da    =  case parseDepAtom da of
                         error $ "getDepAtom: depatom parse error " ++ da
                       Right  x -> x
 
-parseDepAtom     =  parse readDepAtom "<depatom>"
+getMaybeDepAtom da
+                 =  case parseMaybeDepAtom da of
+                      Left   _ ->
+                        error $ "getMaybeDepAtom: depatom parse error '" ++ da ++ "'"
+                      Right  x -> x
+
+parseDepAtom       =  parse readDepAtom "<depatom>"
+parseMaybeDepAtom  =  parse (option Nothing (liftM Just readDepAtom)) "<depatom>"
 
 readDepAtom  =  do  neg         <-  optchar '!'
                     rev         <-  optchar '~'

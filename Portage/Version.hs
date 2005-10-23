@@ -82,7 +82,7 @@ showRev n = "-r" ++ show n
 getVersion :: String -> Version
 getVersion ver = case parseVersion ver of
                    Left   _  -> 
-                     error $ "getVersion: version parse error " ++ ver
+                     error $ "getVersion: version parse error '" ++ ver ++ "'"
                    Right  x  ->  x
 
 parseVersion :: String -> Either ParseError Version
@@ -110,7 +110,7 @@ readC        =  option (Nothing,  "")  (liftM (\x -> (Just x, [x])) letter)
 readSuf      =  option (Normal,   "")  (  do  char '_'
                                               (f,sr)  <-  readSufType
                                               (n,nr)  <-  option (0, "") readNum
-                                              return (f n,sr ++ nr)
+                                              return (f n,"_" ++ sr ++ nr)
                                        )
 readSufType  =  choice [  
                           liftM (\x -> (Alpha,  x)) (try $ string "alpha"),

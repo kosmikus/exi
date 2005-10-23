@@ -41,7 +41,7 @@ readCat        ::  CharParser st Category
 readPkgAndVer  ::  CharParser st (Package,Maybe Version)
 
 readCat        =   many1 (letter <|> digit <|> oneOf "_-")
-readPkgAndVer  =   do  pre    <-  many1 (letter <|> digit <|> char '_')
+readPkgAndVer  =   do  pre    <-  many1 (letter <|> digit <|> oneOf "_+")
                        (p,v)  <-  option ("",Nothing)
                                             (do  char '-'
                                                  liftM (\v -> ("",Just v)) readVersion 
