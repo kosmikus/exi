@@ -40,18 +40,18 @@ liftDepVer :: (Version -> Version) -> (DepVer -> DepVer)
 liftDepVer f NoVer = NoVer
 liftDepVer f (DepVer v a) = DepVer (f v) a
 
-type DepNeg  = Bool -- !
-type DepRev  = Bool -- ~
-type DepAst  = Bool -- *
-data DepMod  = DNONE | DLT | DLEQ | DEQ | DGEQ | DGT -- < <= = >= >
+type DepNeg   =  Bool -- !
+type DepRev   =  Bool -- ~
+type DepAst   =  Bool -- *
+data DepMod   =  DNONE | DLT | DLEQ | DEQ | DGEQ | DGT -- < <= = >= >
   deriving (Show,Eq)
 
-type DepString = [DepTerm]
-data DepTerm   = Plain  DepAtom
-               | Or     DepString
-               | Use    Bool -- negated?
-                        UseFlag
-                        DepString
+type DepString  =  [DepTerm]
+data DepTerm    =  Plain  DepAtom
+                |  Or     DepString
+                |  Use    Bool -- negated?
+                          UseFlag
+                          DepString
   deriving (Eq)
 
 -- | Interprets a DepString according to given USE flags (non-negatives)
