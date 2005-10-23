@@ -27,18 +27,18 @@ import Portage.Use
 -- ORs have to be interpreted as well, therefore *we* will consider
 -- an OR of atoms an atom
 
-data DepAtom = DepAtom DepNeg DepRev DepMod Category Package DepVer
+data DepAtom  =  DepAtom DepNeg DepRev DepMod Category Package DepVer
   deriving (Eq)
 
-data DepVer  = NoVer
-             | DepVer Version DepAst
+data DepVer   =  NoVer
+              |  DepVer Version DepAst
   deriving (Show,Eq)
 
 -- lift a version function to a DepVer
 
 liftDepVer :: (Version -> Version) -> (DepVer -> DepVer)
-liftDepVer f NoVer = NoVer
-liftDepVer f (DepVer v a) = DepVer (f v) a
+liftDepVer f NoVer         =  NoVer
+liftDepVer f (DepVer v a)  =  DepVer (f v) a
 
 type DepNeg   =  Bool -- !
 type DepRev   =  Bool -- ~
