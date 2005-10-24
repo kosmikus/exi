@@ -17,7 +17,8 @@ import Data.List
 
 import Portage.Package
 import Portage.Ebuild
-import Portage.Eclass
+import Portage.Eclass (Eclass, EclassMeta(EclassMeta))
+import qualified Portage.Eclass as EC
 import Portage.Version
 import Portage.Config
 import Portage.Utilities
@@ -31,11 +32,12 @@ data Tree =  Tree
                }
 
 -- | Create a tree from an overlay.
-createTree ::  FilePath ->                -- ^ the portage tree
+createTree ::  Config ->                  -- ^ portage configuration
+               FilePath ->                -- ^ the portage tree
                [Category] ->              -- ^ the list of categories
                Map Eclass EclassMeta ->   -- ^ final eclass map
                IO Tree
-createTree pt cats ecs =  
+createTree cfg pt cats ecs =  
     do
         eclasses' <- getEclasses
         ebuilds' <- fmap M.fromList (mapM categoryEntries cats)
@@ -43,14 +45,16 @@ createTree pt cats ecs =
   where
     getEclasses :: IO (Map Eclass EclassMeta)
     getEclasses             =  do
-                                   eclasses <- getDirectoryContents (eclassDir pt)
+                                   eclasses <- fmap  (  map (\x -> take (length x - 7) x) .
+                                                        filter (".eclass" `isSuffixOf`))
+                                                     (getDirectoryContents (eclassDir pt))
                                    fmap M.fromList (mapM eclassEntries eclasses)
 
     eclassEntries :: Eclass -> IO (Eclass, EclassMeta)
     eclassEntries eclass    =  do
                                    mtime <-  unsafeInterleaveIO $ 
-                                             getMTime (eclassDir pt ./. eclass)
-                                   return (eclass, EclassMeta mtime)
+                                             getMTime (eclassDir pt ./. (eclass ++ ".eclass"))
+                                   return (eclass, EclassMeta pt mtime)
 
     categoryEntries :: Category -> IO (Category, Map Package [Variant])
     categoryEntries cat     =  do  
@@ -86,14 +90,37 @@ createTree pt cats ecs =
                                                                location  =  PortageTree pt,
                                                                masked    =  []
                                                              }
-                                   c <- getEbuildFromDisk pt pv ecs
+                                   c <- getEbuildFromDisk cfg pt pv ecs
                                    return (Variant meta c)
+
+-- | Combines two trees such that the second one is the overlay and has priority.
+overlayTree :: Tree -> Tree -> Tree
+overlayTree (Tree ec1 eb1) (Tree ec2 eb2) = Tree  (overlayEclasses  ec1  ec2)
+                                                  (overlayEbuilds   eb1  eb2)
+  where
+    overlayEclasses :: Map Eclass EclassMeta -> Map Eclass EclassMeta -> Map Eclass EclassMeta
+    overlayEclasses  =  M.unionWith (curry snd)
+
+    overlayEbuilds ::  Map Category (Map Package [Variant]) ->
+                       Map Category (Map Package [Variant]) ->
+                       Map Category (Map Package [Variant])
+    overlayEbuilds   =  M.unionWith (M.unionWith shadowVariants)
+
+    shadowVariants :: [Variant] -> [Variant] -> [Variant]
+    shadowVariants vs1 vs2 = vs2 ++ foldr shadowVariant vs1 vs2
+
+    shadowVariant :: Variant -> [Variant] -> [Variant]
+    shadowVariant (Variant (EbuildMeta { version = v, location = l }) _) vs = 
+        [  if v == w then Variant (m { masked = (Shadowed l) : masked m }) x else o | 
+           o@(Variant (m@(EbuildMeta { version = w })) x) <- vs ]
 
 testTree = do
                cfg <- portageConfig
                cats <- categories cfg
-               fixIO (\r -> createTree "/usr/portage" cats (eclasses r))
-
+               fixIO (\r ->  do
+                                 pt  <-  createTree cfg (portDir cfg) cats (eclasses r)
+                                 po  <-  mapM (\t -> createTree cfg t cats (eclasses r)) (overlays cfg)
+                                 return $ foldl overlayTree pt po)
 
 cacheEntry ::  FilePath -> PV -> FilePath
 cacheEntry pt pv = cacheDir pt ./. showPV pv

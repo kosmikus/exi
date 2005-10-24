@@ -20,10 +20,11 @@ userConfig       =  "/etc/make.conf"
 
 profileParent    =  "parent"
 
-profilesDir  pt  =  pt ./. "profiles"
-eclassDir    pt  =  pt ./. "eclass"
-licenseDir   pt  =  pt ./. "licenses"
-metadataDir  pt  =  pt ./. "metadata"
+profilesDir  pt      =  pt ./. "profiles"
+eclassDir    pt      =  pt ./. "eclass"
+licenseDir   pt      =  pt ./. "licenses"
+metadataDir  pt      =  pt ./. "metadata"
+metadataCacheDir pt  =  metadataDir pt ./. "cache"
 
 cacheDir     pt  =  "/var/cache/edb/dep" ./. pt
 

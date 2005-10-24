@@ -10,9 +10,11 @@ module Portage.Ebuild
 
 import System.IO.Unsafe
 import System.Directory
-import Data.Map
+import Data.Map (Map)
+import qualified Data.Map as M
 import Control.Monad
 
+import Portage.Config
 import Portage.Dependency
 import Portage.Use
 import Portage.Keyword
@@ -50,7 +52,7 @@ data Ebuild = Ebuild  {
                          license      ::  String,
                          description  ::  String,
                          keywords     ::  [Keyword],
-                         inherited    ::  String,
+                         inherited    ::  [Eclass],
                          iuse         ::  [UseFlag],
                          cdepend      ::  DepString,
                          pdepend      ::  DepString,
@@ -95,7 +97,7 @@ getEbuild e  |  length l <= 14  =  error "getEbuild: corrupted ebuild (too short
                                            lic
                                            des
                                            (splitKeywords key)
-                                           inh
+                                           (splitEclasses inh)
                                            (splitUse use)
                                            (getDepString cdep)
                                            (getDepString pdep)
@@ -112,27 +114,82 @@ getEbuild e  |  length l <= 14  =  error "getEbuild: corrupted ebuild (too short
 --     * the eclass mtimes in the cache match the final eclass mtimes of the
 --       current tree configuration
 
-getEbuildFromDisk :: FilePath -> PV -> Map Eclass EclassMeta -> IO Ebuild
-getEbuildFromDisk pt pv@(PV cat pkg ver) ecs =
+getEbuildFromDisk ::  Config -> FilePath -> 
+                      PV -> Map Eclass EclassMeta -> IO Ebuild
+getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
     do
         let originalFile  =  pt ./. showEbuildPV pv
         let cacheFile     =  cacheDir pt ./. showPV pv
-        cacheExists  <-  unsafeInterleaveIO $ doesFileExist cacheFile
-        cacheNewer   <-  unsafeInterleaveIO $
-                         do  
-                             cacheMTime     <-  getMTime cacheFile
-                             originalMTime  <-  getMTime originalFile
-                             return (cacheMTime >= originalMTime)
-        eclassOK     <-  return $ True  -- unimplemented
-        let env           =  [("ECLASSDIR",eclassDir pt),   
-                              -- TODO: is this correct, to take the *current* tree?
-                              ("EBUILD",originalFile),
-                              ("dbkey",cacheFile)]
-        let refreshCache  =  do
-                                 putStrLn ("cache refresh for " ++ show pv)
-                                 makePortageFile cacheFile
-                                 runCommandInEnv (ebuildsh ++ " depend") env
-                                 return ()
-        when (not (cacheExists && cacheNewer && eclassOK)) refreshCache
-        fmap getEbuild (strictReadFile cacheFile)
+        let metadataFile  =  metadataCacheDir pt ./. showPV pv
+        let eclassesFile  =  cacheDir pt ./. (showPV pv ++ ".eclasses")
+        cacheExists    <-  unsafeInterleaveIO $ doesFileExist cacheFile
+        cacheNewer     <-  unsafeInterleaveIO $
+                           do  
+                               cacheMTime     <-  getMTime cacheFile
+                               originalMTime  <-  getMTime originalFile
+                               return (cacheMTime >= originalMTime)
+        cacheOriginal  <-  unsafeInterleaveIO $
+                           do
+                               metaExists     <-  doesFileExist metadataFile
+                               if metaExists
+                                 then do  cacheMTime  <-  getMTime cacheFile
+                                          metaMTime   <-  getMTime metadataFile
+                                          return (cacheMTime == metaMTime)
+                                 else return False
+        eclassesExist  <-  unsafeInterleaveIO $ doesFileExist eclassesFile
+        let env            =  [("ECLASSDIR",eclassDir (portDir cfg)),
+                               ("PORTDIR_OVERLAY",unwords (overlays cfg)), 
+                                          -- see below
+                               ("EBUILD",originalFile),
+                               ("dbkey",cacheFile)]
+        let eclassesDummy  =  -- If no eclasses mtime file is present, we assume
+                              -- the current tree
+                              do
+                                  putStrLn ("making eclass dummy for " ++ show pv)
+                                  makePortageFile eclassesFile
+                                  c <- fmap getEbuild (strictReadFile cacheFile)
+                                  let eclasses  =  inherited c
+                                  let efiles    =  
+                                        map  (\x -> eclassDir pt ./. (x ++ ".eclass"))
+                                             eclasses
+                                  mtimes <- mapM getMTime efiles
+                                  writeEclassesFile  eclassesFile
+                                                     (zip eclasses mtimes)
+        when  (cacheExists && cacheNewer && cacheOriginal && not eclassesExist) 
+              eclassesDummy
+        -- eclasses could exist now, therefore we check again
+        eclassesExist  <-  unsafeInterleaveIO $ doesFileExist eclassesFile
+        eclassesOK     <-  unsafeInterleaveIO $
+                           do
+                               eclasses <- readEclassesFile eclassesFile
+                               return (all (\(e,m) -> mtime (ecs M.! e) == m) eclasses)
+        -- read this only once you know the cache is ok
+        cacheContents  <-  unsafeInterleaveIO $
+                           fmap getEbuild (strictReadFile cacheFile)
+        let refreshCache   =  do
+                                  putStrLn ("cache refresh for " ++ show pv)
+                                  makePortageFile cacheFile
+                                  runCommandInEnv (ebuildsh ++ " depend") env
+                                  -- the cache is refreshed, now update eclasses
+                                  makePortageFile eclassesFile
+                                  let eclasses  =  inherited cacheContents
+                                  let mtimes    =
+                                        map (\e -> mtime (ecs M.! e)) eclasses
+                                  writeEclassesFile  eclassesFile
+                                                     (zip eclasses mtimes)
+        when  (not (cacheExists && cacheNewer && eclassesExist && eclassesOK))
+              refreshCache
+        return cacheContents
 
+-- A note on current portage eclass resolution: In ebuild.sh, the eclass
+-- is looked up in the current ECLASSDIR and the current overlays specified
+-- in the PORTDIR_OVERLAY environment variable. Priority is given to the
+-- last match. No cache is used for this resolution.
+
+-- A note on eclass optimisation: I thought that it is possible
+-- to assume some sane default for the eclass mtimes if we haven't generated our
+-- own file, in one special case: if there's a metadata directory in the tree,
+-- and the cache mtime matches the metadata mtime, then we know that we have the
+-- "original" ebuild from the tree. Accordingly, all the eclasses used should be
+-- the ones in this tree. This allows us not to regenerate the cache in a very
+-- frequent situation (the main portage tree).

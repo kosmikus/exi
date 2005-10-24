@@ -65,9 +65,13 @@ getMTime f = fmap modificationTime (getFileStatus f)
 -- | Create/touch a group-writable file (along with directories).
 makePortageFile :: FilePath -> IO ()
 makePortageFile f = do
-                        createDirectoryIfMissing True (dirname f)
-                        h <- openFile f WriteMode
-                        hClose h
+                        ex <- doesFileExist f
+                        when (not ex) $
+                          do
+                              createDirectoryIfMissing True (dirname f)
+                              h <- openFile f WriteMode
+                              hClose h
+                              makeGroupWritable f
 
 -- | Returns a list of subdirectories.
 getSubdirectories :: FilePath -> IO [FilePath]
