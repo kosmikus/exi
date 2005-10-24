@@ -132,6 +132,11 @@ categories c =  do  r <- findOverlayFile c categoriesFile lines (++)
                       Nothing  ->  error "categories: file not found, corrupted portage tree?"
                       Just x   ->  return x
 
+-- | Performs a traversal on a tree.
+traverseTree :: (Category -> Package -> Variant -> Variant) -> Tree -> Tree
+traverseTree f (Tree c e) =
+  Tree c (M.mapWithKey (\cat -> M.mapWithKey (\pkg -> map (\var -> f cat pkg var))) e)
+
 -- | Finds and parses a file in a list of overlays.
 findOverlayFile ::  Config ->                  -- ^ portage configuration
                     (FilePath -> FilePath) ->  -- ^ the filename (modulo portage tree)
