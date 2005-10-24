@@ -47,7 +47,7 @@ createTree cfg pt cats ecs =
     getEclasses             =  do
                                    eclasses <- fmap  (  map (\x -> take (length x - 7) x) .
                                                         filter (".eclass" `isSuffixOf`))
-                                                     (getDirectoryContents (eclassDir pt))
+                                                     (ifDirectoryExists getDirectoryContents (eclassDir pt))
                                    fmap M.fromList (mapM eclassEntries eclasses)
 
     eclassEntries :: Eclass -> IO (Eclass, EclassMeta)
@@ -63,7 +63,7 @@ createTree cfg pt cats ecs =
 
     categoryMap :: Category -> IO (Map Package [Variant])
     categoryMap cat         =  do
-                                   pkgs <- getSubdirectories (pt ./. cat)
+                                   pkgs <- ifDirectoryExists getSubdirectories (pt ./. cat)
                                    fmap M.fromList (mapM (packageEntries cat) pkgs)
 
     packageEntries :: Category -> Package -> IO (Package, [Variant])
@@ -90,7 +90,7 @@ createTree cfg pt cats ecs =
                                                                location  =  PortageTree pt,
                                                                masked    =  []
                                                              }
-                                   c <- getEbuildFromDisk cfg pt pv ecs
+                                   c <- unsafeInterleaveIO $ getEbuildFromDisk cfg pt pv ecs
                                    return (Variant meta c)
 
 -- | Combines two trees such that the second one is the overlay and has priority.

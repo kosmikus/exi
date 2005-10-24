@@ -82,3 +82,10 @@ getSubdirectories f =
                  (filter  (\x -> case x of  ('.':_)  ->  False
                                             _        ->  True)
                           fs)
+
+ifDirectoryExists :: (FilePath -> IO [FilePath]) -> FilePath -> IO [FilePath]
+ifDirectoryExists l f =
+    do
+        ex <- doesDirectoryExist f
+        if ex  then  l f
+               else  return []
