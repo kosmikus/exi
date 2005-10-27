@@ -31,6 +31,50 @@ data Tree =  Tree
                   ebuilds   ::  Map Category (Map Package [Variant])
                }
 
+-- | Create the tree of installed packages.
+createInstalledTree ::  Config ->         -- ^ portage configuration
+                        IO Tree
+createInstalledTree cfg =
+    do
+        cats <- unsafeInterleaveIO $ getSubdirectories dbDir
+        ebuilds' <- fmap M.fromList (mapM categoryEntries cats)
+        return (Tree M.empty ebuilds')
+  where
+    categoryEntries :: Category -> IO (Category, Map Package [Variant])
+    categoryEntries cat     =  do  
+                                   ps <- unsafeInterleaveIO $ categoryMap cat
+                                   return (cat, ps)
+
+    categoryMap :: Category -> IO (Map Package [Variant])
+    categoryMap cat         =  do
+                                   pkgvers  <-  ifDirectoryExists getSubdirectories (dbDir ./. cat)
+                                   let pvss  =  groupBy  (\(PV c1 p1 _) (PV c2 p2 _)
+                                                            -> c1 == c2 && p1 == p2) .
+                                                map (getPV . (cat ./.)) $
+                                                pkgvers
+                                   -- each of the sublists is non-empty
+                                   fmap M.fromList (mapM packageEntries pvss)
+
+    packageEntries :: [PV] ->   -- ^ must be nonempty
+                      IO (Package, [Variant])
+    packageEntries pvs@(PV _ pkg _:_) =  
+                               do
+                                   es <- unsafeInterleaveIO $ mapM ebuildEntries pvs
+                                   return (pkg, es)
+
+    ebuildEntries :: PV -> IO Variant
+    ebuildEntries pv@(PV cat pkg ver)
+                            =  do
+                                   let meta             =  EbuildMeta
+                                                             {
+                                                               version   =  ver,
+                                                               location  =  Installed,
+                                                               masked    =  []
+                                                             }
+                                   c <- unsafeInterleaveIO $ getInstalledEbuildFromDisk cfg pv
+                                   return (Variant meta c)
+
+
 -- | Create a tree from an overlay.
 createTree ::  Config ->                  -- ^ portage configuration
                FilePath ->                -- ^ the portage tree
@@ -121,6 +165,10 @@ testTree = do
                                  pt  <-  createTree cfg (portDir cfg) cats (eclasses r)
                                  po  <-  mapM (\t -> createTree cfg t cats (eclasses r)) (overlays cfg)
                                  return $ foldl overlayTree pt po)
+
+instTree = do
+               cfg <- portageConfig
+               createInstalledTree cfg
 
 cacheEntry ::  FilePath -> PV -> FilePath
 cacheEntry pt pv = cacheDir pt ./. showPV pv

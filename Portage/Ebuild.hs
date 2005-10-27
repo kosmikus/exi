@@ -105,6 +105,44 @@ getEbuild e  |  length l <= 14  =  error "getEbuild: corrupted ebuild (too short
   where  l = lines e
          (dep:rdep:slt:src:restr:home:lic:des:key:inh:use:cdep:pdep:prov:_) = l
 
+-- | Reads the ebuild of an installed package from disk.
+--   This is very different than for uninstalled ebuilds, because installed
+--   packages are stored differently.
+
+getInstalledEbuildFromDisk :: Config -> PV -> IO Ebuild
+getInstalledEbuildFromDisk cfg pv@(PV cat pkg ver) =
+    do
+        let dir           =  dbDir ./. showPV pv
+        dep            <-  strictReadFile $ dir ./. "DEPEND"
+        rdep           <-  strictReadFile $ dir ./. "RDEPEND"
+        slt            <-  strictReadFile $ dir ./. "SLOT"
+        src            <-  return "" -- for some reason not stored
+        restr          <-  strictReadFile $ dir ./. "RESTRICT"
+        home           <-  return "" -- for some reason not stored
+        lic            <-  return "" -- for some reason not stored
+        des            <-  return "" -- for some reason not stored
+        key            <-  return (arch cfg) -- for some reason not stored
+        inh            <-  strictReadFile $ dir ./. "INHERITED"
+        use            <-  strictReadFile $ dir ./. "IUSE"
+        cdep           <-  strictReadFile $ dir ./. "CDEPEND"
+        pdep           <-  strictReadFile $ dir ./. "PDEPEND"
+        prov           <-  strictReadFile $ dir ./. "PROVIDE"
+        return $  Ebuild
+                          (getDepString dep)
+                          (getDepString rdep)
+                          (stripNewlines slt)
+                          src
+                          (words restr)
+                          home
+                          lic
+                          des
+                          (splitKeywords key)
+                          (splitEclasses inh)
+                          (splitUse use)
+                          (getDepString cdep)
+                          (getDepString pdep)
+                          (getMaybeDepAtom prov)
+
 -- | Reads an ebuild from disk. Reads the cache entry if that is sufficient,
 --   otherwise refreshes the cache.
 --
