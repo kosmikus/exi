@@ -14,7 +14,7 @@ bashBin          =  "/bin/bash"
 
 profileDir       =  "/etc/make.profile"
 globalConfig     =  "/etc/make.globals"
-profileConfig    =  profileDir ./. "make.defaults"
+profileConfig    =  "make.defaults"
 userConfig       =  "/etc/make.conf"
 
 

@@ -14,15 +14,15 @@ import System.IO.Unsafe
 import Portage.Constants
 import Portage.Utilities
 
-readProfileFile :: FilePath -> (String -> a) -> IO [a]
+readProfileFile :: FilePath -> (FilePath -> IO a) -> IO [a]
 readProfileFile f parser = unsafeInterleaveIO $ readProfileFileFrom profileDir [] f parser
 
-readProfileFileFrom :: FilePath -> [a] -> FilePath -> (String -> a) -> IO [a]
+readProfileFileFrom :: FilePath -> [a] -> FilePath -> (FilePath -> IO a) -> IO [a]
 readProfileFileFrom pdir acc f parser =
   do  -- is the file here?
       let f_local = pdir ./. f
       f_exists    <-  doesFileExist f_local
-      f_contents  <-  if f_exists  then  strictReadFile f_local >>= return . (:[]) . parser
+      f_contents  <-  if f_exists  then  fmap (:[]) (parser f_local)
                                    else  return []
       let new_acc = f_contents ++ acc
       -- is there a parent?

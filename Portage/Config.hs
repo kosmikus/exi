@@ -15,9 +15,10 @@ import Portage.Constants
 import Portage.Keyword
 import Portage.Use
 import Portage.Shell
-
+import Portage.Profile
 
 data Config = Config  {
+                         arch              ::  Keyword,
                          acceptedKeywords  ::  [Keyword],
                          use               ::  [UseFlag],
                          portDir           ::  FilePath,
@@ -35,7 +36,8 @@ trees c = portDir c : overlays c
 
 getConfig :: String -> Config
 getConfig c  |  length l < 5   =  error "getConfig: corrupted portage configuration (too short)"
-             |  otherwise      =  Config  (splitKeywords key)
+             |  otherwise      =  Config  arch
+                                          (splitKeywords key)
                                           (splitUse use)
                                           pd
   --                                      distd
@@ -44,10 +46,11 @@ getConfig c  |  length l < 5   =  error "getConfig: corrupted portage configurat
                                           (words overlays)  -- seems strange to me, but apparently that's the current rule
                                           (words features)
   where  l = lines c
-         (key:use:pd:{- distd:pkgd:logd: -}overlays:features:_) = l
+         (arch:key:use:pd:{- distd:pkgd:logd: -}overlays:features:_) = l
 
 mergeConfig :: Config -> Config -> Config
 mergeConfig c1 c2 = Config  {
+                               arch              =  arch c1 <<< arch c2,
                                acceptedKeywords  =  mergeKeywords (acceptedKeywords c1) (acceptedKeywords c2),
                                use               =  mergeUse (use c1) (use c2),
                                portDir           =  portDir c1 <<< portDir c2,
@@ -57,7 +60,7 @@ mergeConfig c1 c2 = Config  {
   where  x <<< y  |  null y     =  x
                   |  otherwise  =  y
 
-configEnvVars = ["ACCEPT_KEYWORDS","USE","PORTDIR","PORTDIR_OVERLAY","FEATURES"]
+configEnvVars = ["ARCH","ACCEPT_KEYWORDS","USE","PORTDIR","PORTDIR_OVERLAY","FEATURES"]
 
 getEnvironmentConfig :: IO Config
 getEnvironmentConfig =  do  env <- getEnvironment
@@ -71,20 +74,20 @@ getConfigFile f =  do  (_,r,s) <- runCommand $  "source " ++ f ++ "; VARS=" ++ s
                                                 "for i in ${VARS}; do echo ${!i}; done"
                        return (getConfig r)
 
-getGlobalConfig   ::  IO Config
-getProfileConfig  ::  IO Config
-getUserConfig     ::  IO Config
+getGlobalConfig    ::  IO Config
+getProfileConfigs  ::  IO [Config]
+getUserConfig      ::  IO Config
 
-getGlobalConfig   =  getConfigFile globalConfig
-getProfileConfig  =  getConfigFile profileConfig
-getUserConfig     =  getConfigFile userConfig
+getGlobalConfig    =  getConfigFile globalConfig
+getProfileConfigs  =  readProfileFile profileConfig getConfigFile
+getUserConfig      =  getConfigFile userConfig
 
 -- | Portage configuration is read in the following order, in increasing priority:
 --   global < profile < user < environment < (package specific)
 portageConfig :: IO Config
 portageConfig =  do
-                     global   <-  getGlobalConfig
-                     profile  <-  getProfileConfig
-                     user     <-  getUserConfig
-                     env      <-  getEnvironmentConfig
-                     return (foldl1 mergeConfig [global,profile,user,env])
+                     global    <-  getGlobalConfig
+                     profiles  <-  getProfileConfigs
+                     user      <-  getUserConfig
+                     env       <-  getEnvironmentConfig
+                     return (foldl1 mergeConfig (global : profiles ++ [user,env]))
