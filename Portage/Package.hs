@@ -26,9 +26,12 @@ showPV        (PV cat pkg ver)  =  cat ++ "/" ++ pkg ++ "-" ++ showVersion ver
 showEbuildPV  (PV cat pkg ver)  =  cat ./. pkg ./. pkg ++ "-" ++ showVersion ver ++
                                    ".ebuild"
 
-getPV xs  =  let  (int,_:ver)  =  splitAtLast '-' xs
-                  (cat,_:pkg)  =  splitAtLast '/' int
-             in   PV cat pkg (getVersion ver)
+getPV xs  =  case parsePV xs of
+               Left   _  ->
+                 error $ "getPV: cat/pkg-ver parse error '" ++ xs ++ "'"
+               Right  x  ->  x
+
+parsePV   =  parse readPV "<cat/pkg-ver>"
 
 readPV    =  do  cat         <-  readCat
                  char '/'
