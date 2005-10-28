@@ -15,7 +15,11 @@ import Portage.Constants
 import Portage.Utilities
 
 readProfileFile :: FilePath -> (FilePath -> IO a) -> IO [a]
-readProfileFile f parser = unsafeInterleaveIO $ readProfileFileFrom profileDir [] f parser
+readProfileFile f parser =  unsafeInterleaveIO $ 
+                            do  -- read local profile (with priority)
+                                acc <- readProfileIn localProfileDir [] f parser
+                                -- read selected profile
+                                readProfileFileFrom profileDir acc f parser
 
 readProfileFileFrom :: FilePath -> [a] -> FilePath -> (FilePath -> IO a) -> IO [a]
 readProfileFileFrom pdir acc f parser =
@@ -25,9 +29,7 @@ readProfileFileFrom pdir acc f parser =
       p_exists    <-  doesFileExist p_local
       if p_exists  then  do  p_dir <- strictReadFile p_local >>= return . stripNewlines . stripComments
                              readProfileFileFrom (pdir ./. p_dir) new_acc f parser
-                   else  do  -- read local profile
-                             new_acc <- readProfileIn localProfileDir acc f parser
-                             return new_acc
+                   else  return new_acc
 
 readProfileIn :: FilePath -> [a] -> FilePath -> (FilePath -> IO a) -> IO [a]
 readProfileIn pdir acc f parser =
