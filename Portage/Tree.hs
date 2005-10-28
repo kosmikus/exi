@@ -139,17 +139,17 @@ createTree cfg pt cats ecs =
 
 -- | Combines two trees such that the second one is the overlay and has priority.
 overlayTree :: Tree -> Tree -> Tree
-overlayTree (Tree ec1 eb1) (Tree ec2 eb2) = Tree  (overlayEclasses  ec1  ec2)
-                                                  (overlayEbuilds   eb1  eb2)
+overlayTree (Tree ec1 eb1) (Tree ec2 eb2) =  Tree  (overlayEclasses  ec1  ec2)
+                                                   (overlayEbuilds   eb1  eb2)
+
+overlayEclasses :: Map Eclass EclassMeta -> Map Eclass EclassMeta -> Map Eclass EclassMeta
+overlayEclasses  =  M.unionWith (curry snd)
+
+overlayEbuilds ::  Map Category (Map Package [Variant]) ->
+                   Map Category (Map Package [Variant]) ->
+                   Map Category (Map Package [Variant])
+overlayEbuilds   =  M.unionWith (M.unionWith shadowVariants)
   where
-    overlayEclasses :: Map Eclass EclassMeta -> Map Eclass EclassMeta -> Map Eclass EclassMeta
-    overlayEclasses  =  M.unionWith (curry snd)
-
-    overlayEbuilds ::  Map Category (Map Package [Variant]) ->
-                       Map Category (Map Package [Variant]) ->
-                       Map Category (Map Package [Variant])
-    overlayEbuilds   =  M.unionWith (M.unionWith shadowVariants)
-
     shadowVariants :: [Variant] -> [Variant] -> [Variant]
     shadowVariants vs1 vs2 = vs2 ++ foldr shadowVariant vs1 vs2
 
@@ -157,6 +157,18 @@ overlayTree (Tree ec1 eb1) (Tree ec2 eb2) = Tree  (overlayEclasses  ec1  ec2)
     shadowVariant (Variant (EbuildMeta { version = v, location = l }) _) vs = 
         [  if v == w then Variant (m { masked = (Shadowed l) : masked m }) x else o | 
            o@(Variant (m@(EbuildMeta { version = w })) x) <- vs ]
+
+-- | Combine a tree with the tree of installed packages. Unlike |overlayTree|, the
+--   installed packages do not shadow other packages.
+overlayInstalledTree :: Tree -> Tree -> Tree
+overlayInstalledTree (Tree ec1 eb1) (Tree ec2 eb2) = 
+                                             Tree  (overlayEclasses          ec1  ec2)
+                                                   (overlayInstalledEbuilds  eb1  eb2)
+
+overlayInstalledEbuilds ::  Map Category (Map Package [Variant]) ->
+                            Map Category (Map Package [Variant]) ->
+                            Map Category (Map Package [Variant])
+overlayInstalledEbuilds = M.unionWith (M.unionWith (flip (++)))
 
 testTree = do
                cfg <- portageConfig
