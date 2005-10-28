@@ -82,12 +82,3 @@ getGlobalConfig    =  getConfigFile globalConfig
 getProfileConfigs  =  readProfileFile profileConfig getConfigFile
 getUserConfig      =  getConfigFile userConfig
 
--- | Portage configuration is read in the following order, in increasing priority:
---   global < profile < user < environment < (package specific)
-portageConfig :: IO Config
-portageConfig =  do
-                     global    <-  getGlobalConfig
-                     profiles  <-  getProfileConfigs
-                     user      <-  getUserConfig
-                     env       <-  getEnvironmentConfig
-                     return (foldl1 mergeConfig (global : profiles ++ [user,env]))

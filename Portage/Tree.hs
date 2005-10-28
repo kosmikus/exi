@@ -170,6 +170,7 @@ overlayInstalledEbuilds ::  Map Category (Map Package [Variant]) ->
                             Map Category (Map Package [Variant])
 overlayInstalledEbuilds = M.unionWith (M.unionWith (flip (++)))
 
+{-
 testTree = do
                cfg <- portageConfig
                cats <- categories cfg
@@ -177,10 +178,7 @@ testTree = do
                                  pt  <-  createTree cfg (portDir cfg) cats (eclasses r)
                                  po  <-  mapM (\t -> createTree cfg t cats (eclasses r)) (overlays cfg)
                                  return $ foldl overlayTree pt po)
-
-instTree = do
-               cfg <- portageConfig
-               createInstalledTree cfg
+-}
 
 cacheEntry ::  FilePath -> PV -> FilePath
 cacheEntry pt pv = cacheDir pt ./. showPV pv
