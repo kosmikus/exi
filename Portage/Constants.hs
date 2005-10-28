@@ -35,3 +35,5 @@ categoriesFile  pt  =  profilesDir pt ./. "categories"
 
 localConfigDir   =  "/etc/portage"
 localProfileDir  =  localConfigDir ./. "profile"
+
+useDefaults      =  "use.defaults"

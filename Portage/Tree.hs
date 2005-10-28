@@ -213,3 +213,9 @@ findOverlayFile c f p mrg =
                        []  ->  Nothing
                        xs  ->  Just (foldl1 mrg xs)
 
+-- | Safe lookup function for trees.
+(!?) :: Tree -> (Category,Package) -> [Variant]
+t !? (cat,pkg) =  concat $
+                  do  p <- M.lookup cat (ebuilds t)
+                      M.lookup pkg p
+

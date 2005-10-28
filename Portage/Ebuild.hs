@@ -85,6 +85,9 @@ data Mask          =  KeywordMasked
 data Variant = Variant EbuildMeta Ebuild
   deriving (Show,Eq)
 
+filterMaskedVariants :: [Variant] -> [Variant]
+filterMaskedVariants = filter (\(Variant m _) -> null (masked m))
+
 getEbuild :: String -> Ebuild
 getEbuild e  |  length l <= 14  =  error "getEbuild: corrupted ebuild (too short)"
              |  otherwise       =  Ebuild  
