@@ -33,3 +33,5 @@ ebuildsh         =  "/usr/sbin/ebuild.sh"
 
 categoriesFile  pt  =  profilesDir pt ./. "categories"
 
+localConfigDir   =  "/etc/portage"
+localProfileDir  =  localConfigDir ./. "profile"
