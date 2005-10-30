@@ -17,6 +17,9 @@ globalConfig     =  "/etc/make.globals"
 profileConfig    =  "make.defaults"
 userConfig       =  "/etc/make.conf"
 
+packageMask      =  "package.mask"
+packageUnMask    =  "package.unmask"
+
 
 profileParent    =  "parent"
 
@@ -37,3 +40,4 @@ localConfigDir   =  "/etc/portage"
 localProfileDir  =  localConfigDir ./. "profile"
 
 useDefaults      =  "use.defaults"
+
