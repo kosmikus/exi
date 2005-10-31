@@ -8,6 +8,7 @@
 module Portage.Mask
   where
 
+import System.IO.Unsafe
 import Data.Char
 import qualified Data.Set as S
 import Text.ParserCombinators.Parsec as P
@@ -46,19 +47,33 @@ readMaskFile :: FilePath -> IO [Masking]
 readMaskFile f = fmap (parseMask f) (strictReadFile f)
 
 
-globalMask :: Config -> IO [Masking]
-globalMask cfg = do r <- findOverlayFile cfg (\pt -> profilesDir pt ./. packageMask) (readMaskFile) (++)
-                    return $ maybe [] id r
+globalMask   ::  Config -> IO [Masking]
+profileMask  ::  IO [Masking]
+userMask     ::  IO [Masking]
+userUnMask   ::  IO [Masking]
 
-profileMask :: IO [Masking]
-profileMask = fmap concat (readProfileFile packageMask readMaskFile)
 
-userMask :: IO [Masking]
-userMask = readMaskFile (localConfigDir ./. packageMask)
+globalMask cfg  =
+    unsafeInterleaveIO $
+    do  r <- findOverlayFile cfg (\pt -> profilesDir pt ./. packageMask) (readMaskFile) (++)
+        return $ maybe [] id r
 
-userUnMask :: IO [Masking]
-userUnMask = readMaskFile (localConfigDir ./. packageUnMask)
+profileMask     =  unsafeInterleaveIO $ 
+                   fmap concat (readProfileFile packageMask readMaskFile)
 
+userMask        =  unsafeInterleaveIO $
+                   readMaskFile (localConfigDir ./. packageMask)
+
+userUnMask      =  unsafeInterleaveIO $
+                   readMaskFile (localConfigDir ./. packageUnMask)
+
+
+performMask :: Masking -> Tree -> Tree
+performMask m@(Masking { mdepatom = d }) = 
+    case catpkgFromDepAtom d of
+      (cat,pkg) -> modifyTree  cat pkg 
+                               (\v  | matchDepAtomVariant d v  ->  v { meta = meta v { masked = HardMasked (mfile m) (mreason m) : masked v } }
+                                    | otherwise                ->  v)
 
 parsePackages :: String -> [ProfilePackage]
 parsePackages = map getProfilePackage . lines . stripComments

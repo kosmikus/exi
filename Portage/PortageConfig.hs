@@ -47,5 +47,9 @@ portageConfig =
                                         pt  <-  createTree cfg (portDir cfg) cats (eclasses r)
                                         po  <-  mapM (\t -> createTree cfg t cats (eclasses r)) (overlays cfg)
                                         return $ foldl overlayTree pt po)
+        -- hardmasking (not on the installed tree!)
+        gmask     <-  globalMask cfg
+        pmask     <-  profileMask
+        umask     <-  userMask
         let itree   =  overlayInstalledTree tree inst
         return (PortageConfig cfg tree inst itree)
