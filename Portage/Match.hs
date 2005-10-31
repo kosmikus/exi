@@ -34,8 +34,11 @@ matchDepAtomVersion (DepAtom True a b c d e) v
 matchDepAtomVersion (DepAtom False True b c d e) v
     =  matchDepAtomVersion  (DepAtom False False b c d ((liftDepVer stripRev) e))
                             (stripRev v) 
-matchDepAtomVersion (DepAtom False False DNONE c d e) v
+matchDepAtomVersion (DepAtom False False DNONE c d NoVer) v
     =  True  -- no modifier, no version
+matchDepAtomVersion (DepAtom False False DNONE c d e) v
+    =  matchDepAtomVersion (DepAtom False False DEQ c d e) v
+             -- no modifier with version defaults to =
 matchDepAtomVersion (DepAtom False False m c d (DepVer w False)) v
     =  modm m v w
   where  modm DLT   =  (<)
