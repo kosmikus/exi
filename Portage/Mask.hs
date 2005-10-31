@@ -20,40 +20,45 @@ import Portage.Constants
 import Portage.Config
 import Portage.Profile
 
-type MaskReason = [String]
+
+data Masking  =  Masking
+                   {
+                      mreason   ::  [String],
+                      mfile     ::  FilePath,
+                      mdepatom  ::  DepAtom
+                   }
+  deriving (Eq,Show)
 
 -- | Parse a package.mask (or package.unmask) file.
-parseMask :: String -> [(DepAtom, MaskReason)]
-parseMask = parseMaskByLine [] [] . lines
+parseMask :: FilePath -> String -> [Masking]
+parseMask f = parseMaskByLine f [] [] . lines
 
-parseMaskByLine :: MaskReason -> MaskReason -> [String] -> [(DepAtom, MaskReason)]
-parseMaskByLine acc facc (l@('#':_) : ls)  =  let  nacc = l : acc
-                                              in   parseMaskByLine nacc (reverse nacc) ls
-parseMaskByLine acc facc (l : ls)
-  | all isSpace l                          =  parseMaskByLine [] [] ls
-  | otherwise                              =  (getDepAtom l, facc) : parseMaskByLine [] facc ls
-parseMaskByLine acc facc []                =  []
-
-
-readMaskFile :: FilePath -> IO [(DepAtom, MaskReason)]
-readMaskFile f = fmap parseMask (strictReadFile f)
+parseMaskByLine :: FilePath -> [String] -> [String] -> [String] -> [Masking]
+parseMaskByLine f acc facc (l@('#':_) : ls)  =  let  nacc = l : acc
+                                                in   parseMaskByLine f nacc (reverse nacc) ls
+parseMaskByLine f acc facc (l : ls)
+  | all isSpace l                            =  parseMaskByLine f [] [] ls
+  | otherwise                                =  Masking facc f (getDepAtom l) : parseMaskByLine f [] facc ls
+parseMaskByLine f acc facc []                =  []
 
 
-globalMask :: Config -> IO [(DepAtom, MaskReason)]
-globalMask cfg = do r <- findOverlayFile cfg (\pt -> profilesDir pt ./. packageMask) parseMask (++)
+readMaskFile :: FilePath -> IO [Masking]
+readMaskFile f = fmap (parseMask f) (strictReadFile f)
+
+
+globalMask :: Config -> IO [Masking]
+globalMask cfg = do r <- findOverlayFile cfg (\pt -> profilesDir pt ./. packageMask) (readMaskFile) (++)
                     return $ maybe [] id r
 
-profileMask :: IO [(DepAtom, MaskReason)]
+profileMask :: IO [Masking]
 profileMask = fmap concat (readProfileFile packageMask readMaskFile)
 
-userMask :: IO [(DepAtom, MaskReason)]
+userMask :: IO [Masking]
 userMask = readMaskFile (localConfigDir ./. packageMask)
 
-userUnMask :: IO [(DepAtom, MaskReason)]
+userUnMask :: IO [Masking]
 userUnMask = readMaskFile (localConfigDir ./. packageUnMask)
 
--- TODO: record filename in MaskReason
--- TODO: packages file, slightly different syntax
 
 parsePackages :: String -> [ProfilePackage]
 parsePackages = map getProfilePackage . lines . stripComments
@@ -63,9 +68,9 @@ readPackages f = fmap parsePackages (strictReadFile f)
 
 data ProfilePackage  =  ProfilePackage
                           {
-                             pnegate  ::  Bool,
-                             psystem  ::  Bool,
-                             depatom  ::  DepAtom
+                             pnegate   ::  Bool,
+                             psystem   ::  Bool,
+                             pdepatom  ::  DepAtom
                           }
   deriving (Show,Eq,Ord)
 

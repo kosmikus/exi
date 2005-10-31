@@ -2,13 +2,14 @@ Name:			Portage
 Version:		0.1
 License:		GPL
 Author:			Andres Loeh
-Build-Depends:		base, parsec, unix
+Build-Depends:		base, parsec, unix, fgl>=5.2
 Synopsis:		Reimplementation of Gentoo Portage functions
 Exposed-Modules:	Portage.Config,
 			Portage.Constants,
 			Portage.Dependency,
 			Portage.Ebuild,
 			Portage.Eclass,
+			Portage.Graph,
 			Portage.Keyword,
 			Portage.Mask,
 			Portage.Match,

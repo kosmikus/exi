@@ -67,9 +67,9 @@ createInstalledTree cfg =
                             =  do
                                    let meta             =  EbuildMeta
                                                              {
-                                                               version   =  ver,
-                                                               location  =  Installed,
-                                                               masked    =  []
+                                                                pv        =  pv,
+                                                                location  =  Installed,
+                                                                masked    =  []
                                                              }
                                    c <- unsafeInterleaveIO $ getInstalledEbuildFromDisk cfg pv
                                    return (Variant meta c)
@@ -130,7 +130,7 @@ createTree cfg pt cats ecs =
                                    let pv               =  PV cat pkg ver
                                    let meta             =  EbuildMeta
                                                              {
-                                                               version   =  ver,
+                                                               pv        =  pv,
                                                                location  =  PortageTree pt,
                                                                masked    =  []
                                                              }
@@ -154,9 +154,9 @@ overlayEbuilds   =  M.unionWith (M.unionWith shadowVariants)
     shadowVariants vs1 vs2 = vs2 ++ foldr shadowVariant vs1 vs2
 
     shadowVariant :: Variant -> [Variant] -> [Variant]
-    shadowVariant (Variant (EbuildMeta { version = v, location = l }) _) vs = 
+    shadowVariant (Variant (EbuildMeta { pv = (PV _ _ v), location = l }) _) vs = 
         [  if v == w then Variant (m { masked = (Shadowed l) : masked m }) x else o | 
-           o@(Variant (m@(EbuildMeta { version = w })) x) <- vs ]
+           o@(Variant (m@(EbuildMeta { pv = (PV _ _ w) })) x) <- vs ]
 
 -- | Combine a tree with the tree of installed packages. Unlike |overlayTree|, the
 --   installed packages do not shadow other packages.
@@ -170,22 +170,15 @@ overlayInstalledEbuilds ::  Map Category (Map Package [Variant]) ->
                             Map Category (Map Package [Variant])
 overlayInstalledEbuilds = M.unionWith (M.unionWith (flip (++)))
 
-{-
-testTree = do
-               cfg <- portageConfig
-               cats <- categories cfg
-               fixIO (\r ->  do
-                                 pt  <-  createTree cfg (portDir cfg) cats (eclasses r)
-                                 po  <-  mapM (\t -> createTree cfg t cats (eclasses r)) (overlays cfg)
-                                 return $ foldl overlayTree pt po)
--}
 
 cacheEntry ::  FilePath -> PV -> FilePath
 cacheEntry pt pv = cacheDir pt ./. showPV pv
 
 -- | Returns the list of categories (from disk).
 categories :: Config -> IO [Category]
-categories c =  do  r <- findOverlayFile c categoriesFile lines (++)
+categories c =  unsafeInterleaveIO $
+                do  r <- findOverlayFile  c categoriesFile 
+                                          (\f -> fmap lines (strictReadFile f)) (++)
                     case r of
                       Nothing  ->  error "categories: file not found, corrupted portage tree?"
                       Just x   ->  return x
@@ -206,13 +199,13 @@ modifyTree cat pkg f t = t  {  ebuilds =
 -- | Finds and parses a file in a list of overlays.
 findOverlayFile ::  Config ->                  -- ^ portage configuration
                     (FilePath -> FilePath) ->  -- ^ the filename (modulo portage tree)
-                    (String -> a) ->           -- ^ the parser
+                    (FilePath -> IO a) ->      -- ^ the parser
                     (a -> a -> a) ->           -- ^ how to merge
                     IO (Maybe a)
 findOverlayFile c f p mrg =
   let  files = map f (trees c)
        testFile n = do  ex <- doesFileExist n
-                        if ex  then  strictReadFile n >>= return . (:[]) . p
+                        if ex  then  fmap (:[]) (p n)
                                else  return []
   in   do  found <- mapM testFile files >>= return . concat
            return $  case found of

@@ -64,7 +64,7 @@ data Ebuild = Ebuild  {
 --   that is not directly stored within the ebuild file / cache entry.
 data EbuildMeta =  EbuildMeta
                       {
-                         version      ::  Version,
+                         pv           ::  PV,
                          location     ::  TreeLocation,
                          masked       ::  [Mask]   -- empty means the ebuild is visible
                       }
@@ -83,7 +83,11 @@ data Mask          =  KeywordMasked
 -- | A variant is everything that makes a specific instance of an ebuild.
 --   It's supposed to be more than this datatype currently encodes.
 
-data Variant = Variant EbuildMeta Ebuild
+data Variant =  Variant
+                  {
+                     meta    ::  EbuildMeta,
+                     ebuild  ::  Ebuild
+                  }
   deriving (Show,Eq)
 
 filterMaskedVariants :: [Variant] -> [Variant]

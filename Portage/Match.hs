@@ -12,6 +12,7 @@ import Portage.Dependency
 import Portage.Version
 import Portage.Tree
 import Portage.Ebuild
+import Portage.Package
 
 -- | Matches a dependency atom against a tree.
 matchDepAtomTree :: DepAtom -> Tree -> [Variant]
@@ -25,7 +26,7 @@ isInTree :: DepAtom -> Tree -> Bool
 isInTree d t = not . null . filterMaskedVariants $ matchDepAtomTree d t
 
 matchDepAtomVariant :: DepAtom -> Variant -> Bool
-matchDepAtomVariant d (Variant m _) = matchDepAtomVersion d (version m)
+matchDepAtomVariant d (Variant m _) = matchDepAtomVersion d (version . pv $ m)
 
 matchDepAtomVersion :: DepAtom -> Version -> Bool
 matchDepAtomVersion (DepAtom True a b c d e) v

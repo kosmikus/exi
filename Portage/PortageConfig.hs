@@ -14,6 +14,7 @@ import Portage.Config
 import Portage.Tree
 import Portage.Use
 import Portage.UseDefaults
+import Portage.Mask
 
 data PortageConfig =  PortageConfig
                         {

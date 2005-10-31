@@ -16,7 +16,12 @@ import Portage.Utilities
 
 type Category  =  String
 type Package   =  String
-data PV        =  PV Category Package Version
+data PV        =  PV 
+                    {
+                       category  ::  Category,
+                       package   ::  Package,
+                       version   ::  Version
+                    }
   deriving (Show,Eq)
 
 showPV  ::  PV -> String
