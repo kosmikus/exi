@@ -20,7 +20,8 @@ import Portage.Tree
 import Portage.Constants
 import Portage.Config
 import Portage.Profile
-
+import Portage.Match
+import Portage.Ebuild
 
 data Masking  =  Masking
                    {
@@ -72,8 +73,10 @@ performMask :: Masking -> Tree -> Tree
 performMask m@(Masking { mdepatom = d }) = 
     case catpkgFromDepAtom d of
       (cat,pkg) -> modifyTree  cat pkg 
-                               (\v  | matchDepAtomVariant d v  ->  v { meta = meta v { masked = HardMasked (mfile m) (mreason m) : masked v } }
-                                    | otherwise                ->  v)
+                               (\v ->  if matchDepAtomVariant d v
+                                       then  v { meta = let me = meta v
+                                                        in me { masked = HardMasked (mfile m) (mreason m) : masked me } }
+                                       else  v)
 
 parsePackages :: String -> [ProfilePackage]
 parsePackages = map getProfilePackage . lines . stripComments
