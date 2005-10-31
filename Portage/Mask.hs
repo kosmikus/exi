@@ -74,9 +74,21 @@ performMask m@(Masking { mdepatom = d }) =
     case catpkgFromDepAtom d of
       (cat,pkg) -> modifyTree  cat pkg 
                                (\v ->  if matchDepAtomVariant d v
-                                       then  v { meta = let me = meta v
-                                                        in me { masked = HardMasked (mfile m) (mreason m) : masked me } }
+                                       then  v { meta =  case meta v of
+                                                           me -> me { masked = HardMasked (mfile m) (mreason m) : masked me } }
                                        else  v)
+
+performUnMask :: Masking -> Tree -> Tree
+performUnMask m@(Masking { mdepatom = d }) =
+    case catpkgFromDepAtom d of
+      (cat,pkg) -> modifyTree  cat pkg
+                               (\v ->  if matchDepAtomVariant d v
+                                       then  v { meta =  case meta v of
+                                                           me -> me { masked = filter notHardMasked (masked me) } }
+                                       else  v)
+  where
+    notHardMasked (HardMasked _ _)  =  False
+    notHardMasked _                 =  True
 
 parsePackages :: String -> [ProfilePackage]
 parsePackages = map getProfilePackage . lines . stripComments

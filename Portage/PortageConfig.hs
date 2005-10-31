@@ -51,5 +51,8 @@ portageConfig =
         gmask     <-  globalMask cfg
         pmask     <-  profileMask
         umask     <-  userMask
+        uunmask   <-  userUnMask
+        tree      <-  return $ foldl (flip performMask)    tree (concat [gmask, pmask, umask])
+        tree      <-  return $ foldl (flip performUnMask)  tree uunmask
         let itree   =  overlayInstalledTree tree inst
         return (PortageConfig cfg tree inst itree)
