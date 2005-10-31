@@ -75,8 +75,9 @@ data TreeLocation  =  Installed
   deriving (Show,Eq)
 
 data Mask          =  KeywordMasked
-                   |  HardMasked     [String]      -- reason from package.mask
-                   |  Shadowed       TreeLocation  -- by which tree?
+                   |  HardMasked     FilePath [String]      -- reason from package.mask
+                   |  ProfileMasked  FilePath
+                   |  Shadowed       TreeLocation           -- by which tree?
   deriving (Show,Eq)
 
 -- | A variant is everything that makes a specific instance of an ebuild.
