@@ -195,6 +195,14 @@ traverseTree :: (Category -> Package -> Variant -> Variant) -> Tree -> Tree
 traverseTree f (Tree c e) =
   Tree c (M.mapWithKey (\cat -> M.mapWithKey (\pkg -> map (\var -> f cat pkg var))) e)
 
+-- | Modifies a tree at a single location.
+modifyTree :: Category -> Package -> (Variant -> Variant) -> Tree -> Tree
+modifyTree cat pkg f t = t  {  ebuilds = 
+                                 M.update  (\ps -> Just (M.update  (\vs -> Just (map f vs))
+                                                                   pkg ps))
+                                           cat (ebuilds t)
+                            }
+
 -- | Finds and parses a file in a list of overlays.
 findOverlayFile ::  Config ->                  -- ^ portage configuration
                     (FilePath -> FilePath) ->  -- ^ the filename (modulo portage tree)

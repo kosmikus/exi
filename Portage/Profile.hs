@@ -14,6 +14,10 @@ import System.IO.Unsafe
 import Portage.Constants
 import Portage.Utilities
 
+-- | Reads a file in the profile directories, cascading-profiles-style.
+--   It takes the name of the file (without directory), and a parser for
+--   the file. The resulting list contains the result for each of the 
+--   found files, the file with highest priority last.
 readProfileFile :: FilePath -> (FilePath -> IO a) -> IO [a]
 readProfileFile f parser =  unsafeInterleaveIO $ 
                             do  -- read local profile (with priority)

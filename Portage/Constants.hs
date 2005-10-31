@@ -19,7 +19,7 @@ userConfig       =  "/etc/make.conf"
 
 packageMask      =  "package.mask"
 packageUnMask    =  "package.unmask"
-
+packages         =  "packages"
 
 profileParent    =  "parent"
 

@@ -16,7 +16,7 @@ splitUse :: String -> [UseFlag]
 splitUse = words
 
 -- | Merges use flags; the first list is assumed to be okay
--- | already (no duplicates, no negatives)
+--   already (no duplicates, no negatives).
 mergeUse :: [UseFlag] -> [UseFlag] -> [UseFlag]
 mergeUse xs []  =  xs
 mergeUse xs ys  =  elems $

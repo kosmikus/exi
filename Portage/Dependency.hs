@@ -28,11 +28,11 @@ import Portage.Use
 -- an OR of atoms an atom
 
 data DepAtom  =  DepAtom DepNeg DepRev DepMod Category Package DepVer
-  deriving (Eq)
+  deriving (Eq,Ord)
 
 data DepVer   =  NoVer
               |  DepVer Version DepAst
-  deriving (Show,Eq)
+  deriving (Show,Eq,Ord)
 
 -- lift a version function to a DepVer
 
@@ -44,7 +44,7 @@ type DepNeg   =  Bool -- !
 type DepRev   =  Bool -- ~
 type DepAst   =  Bool -- *
 data DepMod   =  DNONE | DLT | DLEQ | DEQ | DGEQ | DGT -- < <= = >= >
-  deriving (Show,Eq)
+  deriving (Show,Eq,Ord)
 
 type DepString  =  [DepTerm]
 data DepTerm    =  Plain  DepAtom
