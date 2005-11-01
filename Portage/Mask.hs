@@ -72,21 +72,13 @@ userUnMask      =  unsafeInterleaveIO $
 
 performMask :: Masking -> Tree -> Tree
 performMask m@(Masking { mdepatom = d }) = 
-    case catpkgFromDepAtom d of
-      (cat,pkg) -> modifyTree  cat pkg 
-                               (\v ->  if matchDepAtomVariant d v
-                                       then  v { meta =  case meta v of
-                                                           me -> me { masked = HardMasked (mfile m) (mreason m) : masked me } }
-                                       else  v)
+    modifyTreeForDepAtom d (\v -> v { meta =  case meta v of
+                                                me -> me { masked = HardMasked (mfile m) (mreason m) : masked me } })
 
 performUnMask :: Masking -> Tree -> Tree
 performUnMask m@(Masking { mdepatom = d }) =
-    case catpkgFromDepAtom d of
-      (cat,pkg) -> modifyTree  cat pkg
-                               (\v ->  if matchDepAtomVariant d v
-                                       then  v { meta =  case meta v of
-                                                           me -> me { masked = filter notHardMasked (masked me) } }
-                                       else  v)
+    modifyTreeForDepAtom d (\v -> v { meta =  case meta v of
+                                                me -> me { masked = filter notHardMasked (masked me) } })
   where
     notHardMasked (HardMasked _ _)  =  False
     notHardMasked _                 =  True

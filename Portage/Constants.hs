@@ -42,3 +42,6 @@ localProfileDir  =  localConfigDir ./. "profile"
 
 useDefaults      =  "use.defaults"
 
+localUseFile         =  localConfigDir ./. "package.use"
+localKeywordsFile    =  localConfigDir ./. "package.keywords"
+

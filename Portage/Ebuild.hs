@@ -67,7 +67,9 @@ data EbuildMeta =  EbuildMeta
                       {
                          pv           ::  PV,
                          location     ::  TreeLocation,
-                         masked       ::  [Mask]   -- ^ empty means the ebuild is visible
+                         masked       ::  [Mask],           -- ^ empty means the ebuild is visible
+                         locuse       ::  [UseFlag],        -- ^ local USE flags
+                         lockey       ::  [Keyword]         -- ^ local ACCEPT_KEYWORDS
                       }
   deriving (Show,Eq)
 

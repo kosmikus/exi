@@ -70,7 +70,9 @@ createInstalledTree cfg =
                                                              {
                                                                 pv        =  pv,
                                                                 location  =  Installed,
-                                                                masked    =  []
+                                                                masked    =  [],
+                                                                locuse    =  [],
+                                                                lockey    =  []
                                                              }
                                    c <- unsafeInterleaveIO $ getInstalledEbuildFromDisk cfg pv
                                    return (Variant meta c)
@@ -133,7 +135,9 @@ createTree cfg pt cats ecs =
                                                              {
                                                                pv        =  pv,
                                                                location  =  PortageTree pt,
-                                                               masked    =  []
+                                                               masked    =  [],
+                                                               locuse    =  [],
+                                                               lockey    =  []
                                                              }
                                    c <- unsafeInterleaveIO $ getEbuildFromDisk cfg pt pv ecs
                                    return (Variant meta c)

@@ -21,6 +21,12 @@ matchDepAtomTree d@(DepAtom _ _ _ cat pkg _) t =
     let  candidates = t !? (cat,pkg)
     in   filter (matchDepAtomVariant d) candidates
 
+-- | Modifies a tree on all matches of a dependency atom.
+modifyTreeForDepAtom :: DepAtom -> (Variant -> Variant) -> Tree -> Tree
+modifyTreeForDepAtom d@(DepAtom _ _ _ cat pkg _) f =
+    modifyTree  cat pkg
+                (\v -> if matchDepAtomVariant d v then f v else v)
+
 -- | Variant of 'matchDepAtomTree' that only checks if
 --   any unmasked variant is present.
 isInTree :: DepAtom -> Tree -> Bool
