@@ -32,6 +32,13 @@ data Tree =  Tree
                   ebuilds   ::  Map Category (Map Package [Variant])
                }
 
+-- | Utility function for maps. Updates a map but uses a default if
+--   an updated key is not yet present.
+updateWithDefault :: Ord k => (v -> Maybe v) -> k -> v -> Map k v -> Map k v
+updateWithDefault f k d m =  let  m' = M.insertWith (curry snd) k d m  -- prefer the previous entry if present
+                             in   M.update f k m'
+
+
 -- | Create the tree of installed packages.
 createInstalledTree  ::  Config           -- ^ portage configuration
                      ->  IO Tree

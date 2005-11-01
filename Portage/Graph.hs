@@ -30,6 +30,7 @@ showVariant cfg (Variant m e)  =  showPV (pv m) ++ showLocation (location m)
 
 showLocation :: TreeLocation -> String
 showLocation Installed = " (installed)"
+showLocation (Provided f) = " (provided in " ++ f ++ ")"
 showLocation (PortageTree t) = " [" ++ t ++ "]"
 
 showMasked :: Mask -> String

@@ -17,6 +17,7 @@ import Portage.UseDefaults
 import Portage.Mask
 import Portage.PackageKeywords
 import Portage.PackageUse
+import Portage.PackageProvided
 
 data PortageConfig =  PortageConfig
                         {
@@ -40,6 +41,8 @@ portageConfig =
         -- read installed tree, because that's required to determine virtuals
         -- USE data
         inst      <-  createInstalledTree merged
+        uprov     <-  profileProvided
+        inst      <-  return $ foldl (flip addProvided) inst uprov
         ud        <-  computeUseDefaults inst
         -- the following is the "final" basic configuration
         let cfg     =  merged { use = arch merged : mergeUse (use merged) ud }
