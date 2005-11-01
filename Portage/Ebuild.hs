@@ -78,6 +78,11 @@ data TreeLocation  =  Installed
                    |  PortageTree    FilePath
   deriving (Show,Eq)
 
+isAvailable :: TreeLocation -> Bool
+isAvailable Installed     =  True
+isAvailable (Provided _)  =  True
+isAvailable _             =  False
+
 data Mask          =  KeywordMasked  [UseFlag]              -- ^ reasoning
                    |  HardMasked     FilePath [String]      -- ^ filename and reason
                    |  ProfileMasked  FilePath               -- ^ in which file?
