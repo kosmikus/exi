@@ -1,4 +1,5 @@
-{-| Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
+{-|
+    Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
     Stability   :  provisional
     Portability :  haskell98
 
@@ -15,7 +16,7 @@ type UseFlag = String
 splitUse :: String -> [UseFlag]
 splitUse = words
 
--- | Merges use flags; the first list is assumed to be okay
+-- | Merges USE flags; the first list is assumed to be okay
 --   already (no duplicates, no negatives).
 mergeUse :: [UseFlag] -> [UseFlag] -> [UseFlag]
 mergeUse xs []  =  xs

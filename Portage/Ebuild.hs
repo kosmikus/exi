@@ -1,4 +1,5 @@
-{-| Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
+{-| 
+    Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
     Stability   :  provisional
     Portability :  haskell98
 
@@ -25,7 +26,7 @@ import Portage.Constants
 import Portage.Utilities
 import Portage.Shell
 
--- The ebuild cache format (as created by calling "ebuild depend") is as follows:
+-- The ebuild cache format (as created by calling @ebuild depend@) is as follows:
 -- DEPEND
 -- RDEPEND
 -- SLOT
@@ -60,13 +61,13 @@ data Ebuild = Ebuild  {
                       }
   deriving (Show,Eq)
 
--- | The "EbuildMeta" type contains additional information about an ebuild
---   that is not directly stored within the ebuild file / cache entry.
+-- | The 'EbuildMeta' type contains additional information about an ebuild
+--   that is not directly stored within the ebuild file or cache entry.
 data EbuildMeta =  EbuildMeta
                       {
                          pv           ::  PV,
                          location     ::  TreeLocation,
-                         masked       ::  [Mask]   -- empty means the ebuild is visible
+                         masked       ::  [Mask]   -- ^ empty means the ebuild is visible
                       }
   deriving (Show,Eq)
 
@@ -75,14 +76,13 @@ data TreeLocation  =  Installed
   deriving (Show,Eq)
 
 data Mask          =  KeywordMasked
-                   |  HardMasked     FilePath [String]      -- reason from package.mask
-                   |  ProfileMasked  FilePath
-                   |  Shadowed       TreeLocation           -- by which tree?
+                   |  HardMasked     FilePath [String]      -- ^ filename and reason
+                   |  ProfileMasked  FilePath               -- ^ in which file?
+                   |  Shadowed       TreeLocation           -- ^ by which tree?
   deriving (Show,Eq)
 
 -- | A variant is everything that makes a specific instance of an ebuild.
 --   It's supposed to be more than this datatype currently encodes.
-
 data Variant =  Variant
                   {
                      meta    ::  EbuildMeta,
@@ -116,7 +116,6 @@ getEbuild e  |  length l <= 14  =  error "getEbuild: corrupted ebuild (too short
 -- | Reads the ebuild of an installed package from disk.
 --   This is very different than for uninstalled ebuilds, because installed
 --   packages are stored differently.
-
 getInstalledEbuildFromDisk :: Config -> PV -> IO Ebuild
 getInstalledEbuildFromDisk cfg pv@(PV cat pkg ver) =
     do
@@ -155,11 +154,12 @@ getInstalledEbuildFromDisk cfg pv@(PV cat pkg ver) =
 --   otherwise refreshes the cache.
 --
 --   The cache entry is sufficiently new if:
+--
 --     * the mtime of the cache is newer than the mtime of the original ebuild,
 --       AND
+--
 --     * the eclass mtimes in the cache match the final eclass mtimes of the
 --       current tree configuration
-
 getEbuildFromDisk ::  Config -> FilePath -> 
                       PV -> Map Eclass EclassMeta -> IO Ebuild
 getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =

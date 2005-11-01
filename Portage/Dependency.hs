@@ -1,4 +1,5 @@
-{-| Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
+{-| 
+    Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
     Stability   :  provisional
     Portability :  haskell98
 
@@ -19,10 +20,10 @@ import Portage.Use
 
 -- Grammar of dependencies:
 --
--- depstring ::= atom
---            |  usevar? ( depstring ) [ : ( depstring ) ]
---            |  !usevar? ( depstring )
---            |  || ( { depstring } )
+-- > depstring ::= atom
+-- >            |  usevar? ( depstring ) [ : ( depstring ) ]
+-- >            |  !usevar? ( depstring )
+-- >            |  || ( { depstring } )
 --
 -- ORs have to be interpreted as well, therefore *we* will consider
 -- an OR of atoms an atom
@@ -37,27 +38,31 @@ data DepVer   =  NoVer
               |  DepVer Version DepAst
   deriving (Show,Eq,Ord)
 
--- lift a version function to a DepVer
-
+-- | Lifts a function on versions to a function on 'DepVer's.
 liftDepVer :: (Version -> Version) -> (DepVer -> DepVer)
 liftDepVer f NoVer         =  NoVer
 liftDepVer f (DepVer v a)  =  DepVer (f v) a
 
-type DepNeg   =  Bool -- !
-type DepRev   =  Bool -- ~
-type DepAst   =  Bool -- *
-data DepMod   =  DNONE | DLT | DLEQ | DEQ | DGEQ | DGT -- < <= = >= >
+type DepNeg   =  Bool   -- ^ '!'
+type DepRev   =  Bool   -- ^ '~'
+type DepAst   =  Bool   -- ^ '*'
+data DepMod   =  DNONE  -- ^ no modifier
+              |  DLT    -- ^ '<'
+              |  DLEQ   -- ^ '<='
+              |  DEQ    -- ^ '='
+              |  DGEQ   -- ^ '>='
+              |  DGT    -- ^ '>'
   deriving (Show,Eq,Ord)
 
 type DepString  =  [DepTerm]
 data DepTerm    =  Plain  DepAtom
                 |  Or     DepString
-                |  Use    Bool -- negated?
+                |  Use    Bool  -- is the USE flag negated?
                           UseFlag
                           DepString
   deriving (Eq)
 
--- | Interprets a DepString according to given USE flags (non-negatives)
+-- | Interprets a DepString according to given USE flags (non-negatives).
 interpretDepString     ::  [UseFlag] -> DepString -> DepString
 interpretDepString fs  =   concatMap (interpretDepTerm fs)
 
@@ -152,15 +157,13 @@ readDepMod   =  option DNONE $
 optchar c = option False (liftM (const True) (char c))
 
 
--- read a depstring
-
+-- | Read a depstring.
 readDepString :: CharParser st DepString
 readDepString = 
     do ds <- many $ choice [readOr,P.try (readUseDep),readAtom]
        return (concat ds)
 
--- read a depstring and handle initial whitespace
-
+-- | Read a depstring and handle initial whitespace.
 readCompleteDepString =
     do
         white
@@ -169,8 +172,7 @@ readCompleteDepString =
         return d
 
 
--- read an "or" dependency
-
+-- | Read an @||@-dependency.
 readOr =
     do
         chc
@@ -181,8 +183,7 @@ readOr =
           _    ->  return [Or d]
 
 
--- read a dependency qualified with a use flag
-
+-- | Read a dependency qualified with a use flag.
 readUseDep =
     do
         neg <- option False (liftM (const True) excl)
@@ -210,8 +211,7 @@ readOrigAtom =
           Left error  ->  fail (show error)
           Right x     ->  return [Plain x]
 
--- Parsec language definition for the dependency language
-
+-- | Parsec language definition for the dependency language
 depstringLang =
     LanguageDef
         { commentStart     =  "",

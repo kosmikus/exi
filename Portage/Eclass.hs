@@ -1,4 +1,5 @@
-{-| Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
+{-|
+    Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
     Stability   :  provisional
     Portability :  haskell98
 
@@ -16,16 +17,16 @@ import Portage.Utilities
 
 type Eclass  =  String
 
--- | The "EclassMeta" type contains information about the identity of
+-- | The 'EclassMeta' type contains information about the identity of
 --   an eclass. We use modification time and tree location.
 data EclassMeta =  EclassMeta
                      {
-                        location  ::  FilePath, -- use TreeLocation instead?
+                        location  ::  FilePath, -- use 'TreeLocation' instead?
                         mtime     ::  MTime
                      }
   deriving (Show,Eq)
 
--- We do not "save" shadowed eclasses, because unlike ebuilds, eclasses
+-- We do not save shadowed eclasses, because unlike ebuilds, eclasses
 -- are not directly visible to the user (although this might change in
 -- the future). Having only one eclass per name in the finite map
 -- simplifies the situation a bit.

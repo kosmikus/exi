@@ -1,4 +1,5 @@
-{-| Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
+{-| 
+    Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
     Stability   :  provisional
     Portability :  haskell98
 
@@ -20,7 +21,7 @@ matchDepAtomTree d@(DepAtom _ _ _ cat pkg _) t =
     let  candidates = t !? (cat,pkg)
     in   filter (matchDepAtomVariant d) candidates
 
--- | Variant of |matchDepAtomTree| that only checks if
+-- | Variant of 'matchDepAtomTree' that only checks if
 --   any unmasked variant is present.
 isInTree :: DepAtom -> Tree -> Bool
 isInTree d t = not . null . filterMaskedVariants $ matchDepAtomTree d t

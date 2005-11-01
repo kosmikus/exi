@@ -1,4 +1,5 @@
-{-| Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
+{-| 
+    Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
     Stability   :  provisional
     Portability :  haskell98
 
@@ -31,7 +32,7 @@ data Masking  =  Masking
                    }
   deriving (Eq,Show)
 
--- | Parse a package.mask (or package.unmask) file.
+-- | Parse a @package.mask@ (or @package.unmask@) file.
 parseMask :: FilePath -> String -> [Masking]
 parseMask f = parseMaskByLine f [] [] . lines
 
@@ -104,8 +105,8 @@ data ProfilePackage  =  ProfilePackage
                           }
   deriving (Show,Eq,Ord)
 
--- | Get a dependency atom which can be modified by an initial *,
---   indicating a base system package, and by an additional initial -,
+-- | Get a dependency atom which can be modified by an initial @*@,
+--   indicating a base system package, and by an additional initial @-@,
 --   indicating removal of a package from the profile.
 getProfilePackage :: String -> ProfilePackage
 getProfilePackage p   =  case parseProfilePackage p of

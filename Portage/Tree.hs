@@ -1,4 +1,5 @@
-{-| Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
+{-|
+    Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
     Stability   :  provisional
     Portability :  haskell98
 
@@ -32,8 +33,8 @@ data Tree =  Tree
                }
 
 -- | Create the tree of installed packages.
-createInstalledTree ::  Config ->         -- ^ portage configuration
-                        IO Tree
+createInstalledTree  ::  Config           -- ^ portage configuration
+                     ->  IO Tree
 createInstalledTree cfg =
     do
         cats <- unsafeInterleaveIO $ getSubdirectories dbDir
@@ -55,8 +56,8 @@ createInstalledTree cfg =
                                    -- each of the sublists is non-empty
                                    fmap M.fromList (mapM packageEntries pvss)
 
-    packageEntries :: [PV] ->   -- ^ must be nonempty
-                      IO (Package, [Variant])
+    packageEntries  ::  [PV]      -- ^ must be nonempty
+                    ->  IO (Package, [Variant])
     packageEntries pvs@(PV _ pkg _:_) =  
                                do
                                    es <- unsafeInterleaveIO $ mapM ebuildEntries pvs
@@ -76,11 +77,11 @@ createInstalledTree cfg =
 
 
 -- | Create a tree from an overlay.
-createTree ::  Config ->                  -- ^ portage configuration
-               FilePath ->                -- ^ the portage tree
-               [Category] ->              -- ^ the list of categories
-               Map Eclass EclassMeta ->   -- ^ final eclass map
-               IO Tree
+createTree  ::  Config                     -- ^ portage configuration
+            ->  FilePath                   -- ^ the portage tree
+            ->  [Category]                 -- ^ the list of categories
+            ->  Map Eclass EclassMeta      -- ^ final eclass map
+            ->  IO Tree
 createTree cfg pt cats ecs =  
     do
         eclasses' <- getEclasses
@@ -158,7 +159,7 @@ overlayEbuilds   =  M.unionWith (M.unionWith shadowVariants)
         [  if v == w then Variant (m { masked = (Shadowed l) : masked m }) x else o | 
            o@(Variant (m@(EbuildMeta { pv = (PV _ _ w) })) x) <- vs ]
 
--- | Combine a tree with the tree of installed packages. Unlike |overlayTree|, the
+-- | Combine a tree with the tree of installed packages. Unlike 'overlayTree', the
 --   installed packages do not shadow other packages.
 overlayInstalledTree :: Tree -> Tree -> Tree
 overlayInstalledTree (Tree ec1 eb1) (Tree ec2 eb2) = 
@@ -197,11 +198,11 @@ modifyTree cat pkg f t = t  {  ebuilds =
                             }
 
 -- | Finds and parses a file in a list of overlays.
-findOverlayFile ::  Config ->                  -- ^ portage configuration
-                    (FilePath -> FilePath) ->  -- ^ the filename (modulo portage tree)
-                    (FilePath -> IO a) ->      -- ^ the parser
-                    (a -> a -> a) ->           -- ^ how to merge
-                    IO (Maybe a)
+findOverlayFile  ::  Config                     -- ^ portage configuration
+                 ->  (FilePath -> FilePath)     -- ^ the filename (modulo portage tree)
+                 ->  (FilePath -> IO a)         -- ^ the parser
+                 ->  (a -> a -> a)              -- ^ how to merge
+                 ->  IO (Maybe a)
 findOverlayFile c f p mrg =
   let  files = map f (trees c)
        testFile n = do  ex <- doesFileExist n

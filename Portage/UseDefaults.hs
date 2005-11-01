@@ -1,4 +1,5 @@
-{-| Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
+{-|
+    Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
     Stability   :  provisional
     Portability :  haskell98
 
@@ -16,26 +17,26 @@ import Portage.Utilities
 import Portage.Constants
 import Portage.Match
 
--- The format of the use.defaults file (from "man portage"):
+-- The format of the use.defaults file (from @man portage@):
 -- Line-based, with shell-style comments.
 -- Each line contains a USE flag followed by a list of depend atoms.
 -- The semantics is that the USE flag should be active if all of the
 -- depend atoms are fulfilled in the installed tree.
--- If you want an "or"-like semantics, use the same USE flag multiple
+-- If you want an or-like semantics, use the same USE flag multiple
 -- times on different lines.
 
--- | Parse a use.defaults file.
+-- | Parse a @use.defaults@ file.
 getUseDefaults :: String -> [(UseFlag,[DepAtom])]
 getUseDefaults = map getUseDefault . lines . stripComments
 
--- | Parse a single line of the use.defaults file.
+-- | Parse a single line of the @use.defaults@ file.
 getUseDefault :: String -> (UseFlag,[DepAtom])
 getUseDefault l =  let  (u:ds) = words l
                    in   (u,map getDepAtom ds)
 
 
-computeUseDefaults ::  Tree ->         -- ^ the tree of installed packages
-                       IO [UseFlag]    -- ^ resulting USE flags
+computeUseDefaults  ::  Tree            -- ^ the tree of installed packages
+                    ->  IO [UseFlag]    -- ^ resulting USE flags
 computeUseDefaults t = 
     do
         ls <- fmap concat (readProfileFile  useDefaults

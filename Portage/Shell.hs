@@ -1,4 +1,5 @@
-{-| Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
+{-|
+    Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
     Stability   :  provisional
     Portability :  haskell98
 
@@ -22,9 +23,9 @@ import Portage.Utilities
 type MTime   =  EpochTime
 
 -- | Run a command in a specific environment and return the output and errors.
-runCommandInEnv ::  String ->              -- ^ the command
-                    [(String,String)] ->   -- ^ the environment
-                    IO (ExitCode,String,String)
+runCommandInEnv  ::  String                -- ^ the command
+                 ->  [(String,String)]     -- ^ the environment
+                 ->  IO (ExitCode,String,String)
 runCommandInEnv cmd env = 
                  do
                      let env' = if null env then Nothing else Just env
@@ -38,8 +39,8 @@ runCommandInEnv cmd env =
                      return (exit,out,err)
 
 -- | Run a command and return the output and errors.
-runCommand ::  String ->              -- ^ the command
-               IO (ExitCode,String,String)
+runCommand  ::  String               -- ^ the command
+            ->  IO (ExitCode,String,String)
 runCommand cmd = runCommandInEnv cmd []
 
 -- | Quotes a string such that it will survive the shell.
@@ -62,7 +63,7 @@ makeGroupWritable f = do
 getMTime :: FilePath -> IO MTime
 getMTime f = fmap modificationTime (getFileStatus f)
 
--- | Create/touch a group-writable file (along with directories).
+-- | Create (touch) a group-writable file (along with directories).
 makePortageFile :: FilePath -> IO ()
 makePortageFile f = do
                         ex <- doesFileExist f

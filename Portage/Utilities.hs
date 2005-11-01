@@ -1,4 +1,5 @@
-{-| Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
+{-|
+    Maintainer  :  Andres Loeh <kosmikus@gentoo.org>
     Stability   :  provisional
     Portability :  haskell98
 
@@ -37,10 +38,10 @@ stripNewlines :: String -> String
 stripNewlines = filter (/='\n')
 
 -- | The function 'splitPath' is a reimplementation of the Python
---   function os.path.split.
+--   function @os.path.split@.
 splitPath :: FilePath 
-          -> (FilePath,  -- ^ the part before the final slash; may be empty
-              FilePath)  -- ^ the part after the final slash; may be empty
+          -> (FilePath,  -- the part before the final slash; may be empty
+              FilePath)  -- the part after the final slash; may be empty
 splitPath p
     = let
           slashes = elemIndices '/' p 
@@ -54,11 +55,11 @@ splitPath p
           (fhd,tl)
 
 -- | The function 'dirname' is a reimplementation of the Python function
---   os.path.dirname and returns the directory component of a pathname.
+--   @os.path.dirname and@ returns the directory component of a pathname.
 dirname :: FilePath -> FilePath
 dirname = fst . splitPath
 
 -- | The function 'basename' is a reimplementation of the Python function
---   os.path.basename and returns the non-directory component of a pathname.
+--   @os.path.basename@ and returns the non-directory component of a pathname.
 basename :: FilePath -> FilePath
 basename = snd . splitPath
