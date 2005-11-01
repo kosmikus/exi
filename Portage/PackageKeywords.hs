@@ -33,7 +33,7 @@ parseKeywords = map parseKeywordsLine . lines . stripComments
 parseKeywordsLine :: String -> KeywordsForPackage
 parseKeywordsLine x =
     case words x of
-      []      ->  error $ "parseKeywordsLine: parse error in package.keywords file on line '" ++ x ++ "'"
+      []      ->  error $ "parseKeywordsLine: internal error, empty line in package.keywords file"
       (d:ks)  ->  KeywordsForPackage ks (getDepAtom d)
 
 readKeywordsFile :: FilePath -> IO [KeywordsForPackage]

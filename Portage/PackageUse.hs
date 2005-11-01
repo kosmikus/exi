@@ -34,7 +34,7 @@ parseUse = map parseUseLine . lines . stripComments
 parseUseLine :: String -> UseForPackage
 parseUseLine x =
     case words x of
-      []      ->  error $ "parseUseLine: parse error in package.use file on line '" ++ x ++ "'"
+      []      ->  error $ "parseUseLine: internal error, empty line in package.use file"
       (d:us)  ->  UseForPackage us (getDepAtom d)
 
 readUseFile :: FilePath -> IO [UseForPackage]
