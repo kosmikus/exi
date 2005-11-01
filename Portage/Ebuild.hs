@@ -169,7 +169,7 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
         let originalFile  =  pt ./. showEbuildPV pv
         let cacheFile     =  cacheDir pt ./. showPV pv
         let metadataFile  =  metadataCacheDir pt ./. showPV pv
-        let eclassesFile  =  cacheDir pt ./. (showPV pv ++ ".eclasses")
+        let eclassesFile  =  ownCacheDir pt ./. (showPV pv ++ ".eclasses")
         cacheExists    <-  unsafeInterleaveIO $ doesFileExist cacheFile
         cacheNewer     <-  unsafeInterleaveIO $
                            do  

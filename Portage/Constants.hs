@@ -31,6 +31,7 @@ metadataDir  pt      =  pt ./. "metadata"
 metadataCacheDir pt  =  metadataDir pt ./. "cache"
 
 cacheDir     pt  =  "/var/cache/edb/dep" ./. pt
+ownCacheDir  pt  =  "/var/cache/hdb/dep" ./. pt  -- for non-portage compliant own files
 dbDir            =  "/var/db/pkg"
 
 ebuildsh         =  "/usr/sbin/ebuild.sh"
