@@ -15,6 +15,7 @@ import Portage.Tree
 import Portage.Use
 import Portage.UseDefaults
 import Portage.Mask
+import Portage.PackageKeywords
 
 data PortageConfig =  PortageConfig
                         {
@@ -52,7 +53,11 @@ portageConfig =
         pmask     <-  profileMask
         umask     <-  userMask
         uunmask   <-  userUnMask
-        tree      <-  return $ foldl (flip performMask)    tree (concat [gmask, pmask, umask])
-        tree      <-  return $ foldl (flip performUnMask)  tree uunmask
+        tree      <-  return $ foldl (flip performMask)      tree (concat [gmask, pmask, umask])
+        tree      <-  return $ foldl (flip performUnMask)    tree uunmask
+        -- keyword-masking (also not on the installed tree)
+        ukey      <-  userKeywords
+        tree      <-  return $ foldl (flip performKeywords)  tree ukey
+        tree      <-  return $ traverseTree (keywordMask cfg) tree
         let itree   =  overlayInstalledTree tree inst
         return (PortageConfig cfg tree inst itree)

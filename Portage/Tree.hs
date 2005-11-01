@@ -189,9 +189,9 @@ categories c =  unsafeInterleaveIO $
                       Just x   ->  return x
 
 -- | Performs a traversal on a tree.
-traverseTree :: (Category -> Package -> Variant -> Variant) -> Tree -> Tree
+traverseTree :: (Variant -> Variant) -> Tree -> Tree
 traverseTree f (Tree c e) =
-  Tree c (M.mapWithKey (\cat -> M.mapWithKey (\pkg -> map (\var -> f cat pkg var))) e)
+  Tree c (M.map (M.map (map (\var -> f var))) e)
 
 -- | Modifies a tree at a single location.
 modifyTree :: Category -> Package -> (Variant -> Variant) -> Tree -> Tree

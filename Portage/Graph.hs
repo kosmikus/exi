@@ -30,7 +30,7 @@ showLocation Installed = " (installed)"
 showLocation (PortageTree t) = " [" ++ t ++ "]"
 
 showMasked :: Mask -> String
-showMasked KeywordMasked = "(masked by keyword)"
+showMasked (KeywordMasked xs) = "(masked by keyword: " ++ show xs ++ ")"
 showMasked (HardMasked f r) = "(hardmasked in " ++ f ++ ")"
 showMasked (ProfileMasked f) = "(excluded from profile in " ++ f ++")"
 showMasked (Shadowed t) = "(shadowed by " ++ showLocation t ++ ")"

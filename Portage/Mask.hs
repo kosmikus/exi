@@ -11,6 +11,7 @@ module Portage.Mask
 
 import System.IO.Unsafe
 import Data.Char
+import Data.List
 import qualified Data.Set as S
 import Text.ParserCombinators.Parsec as P
 import Text.ParserCombinators.Parsec.Token
@@ -23,6 +24,7 @@ import Portage.Config
 import Portage.Profile
 import Portage.Match
 import Portage.Ebuild
+import Portage.Keyword
 
 data Masking  =  Masking
                    {
@@ -127,3 +129,13 @@ mergeProfilePackages xs ys  =  S.elems $
 profilePackages :: IO [ProfilePackage]
 profilePackages = fmap  (foldl1 mergeProfilePackages)
                         (readProfileFile packages readPackages)
+
+
+-- | Tree traversal that performs keyword-based masking. To be used with
+--   traverseTree.
+keywordMask :: Config -> Variant -> Variant
+keywordMask cfg v@(Variant m e) =  let  ekey      =  keywords e
+                                        finalkey  =  mergeKeywords (acceptedKeywords cfg) (lockey m)
+                                   in   if null (intersect ekey finalkey)
+                                        then  Variant m { masked = KeywordMasked (archFilter (arch cfg) ekey) : masked m } e
+                                        else  v

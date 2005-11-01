@@ -24,6 +24,7 @@ data KeywordsForPackage  =  KeywordsForPackage
                                  kkeywords  ::  [Keyword],
                                  kdepatom   ::  DepAtom
                               }
+  deriving (Eq,Show)
 
 -- | Parse a @package.keywords@ file.
 parseKeywords :: String -> [KeywordsForPackage]
@@ -38,9 +39,9 @@ parseKeywordsLine x =
 readKeywordsFile :: FilePath -> IO [KeywordsForPackage]
 readKeywordsFile f = fmap parseKeywords (strictReadFile f)
 
-localKeywords  ::  IO [KeywordsForPackage]
-localKeywords  =   unsafeInterleaveIO $
-                   readKeywordsFile localKeywordsFile
+userKeywords  ::  IO [KeywordsForPackage]
+userKeywords  =   unsafeInterleaveIO $
+                  readKeywordsFile localKeywordsFile
 
 performKeywords :: KeywordsForPackage -> Tree -> Tree
 performKeywords (KeywordsForPackage ks d) =

@@ -77,7 +77,7 @@ data TreeLocation  =  Installed
                    |  PortageTree  FilePath
   deriving (Show,Eq)
 
-data Mask          =  KeywordMasked
+data Mask          =  KeywordMasked  [UseFlag]              -- ^ reasoning
                    |  HardMasked     FilePath [String]      -- ^ filename and reason
                    |  ProfileMasked  FilePath               -- ^ in which file?
                    |  Shadowed       TreeLocation           -- ^ by which tree?
