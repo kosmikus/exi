@@ -66,16 +66,8 @@ createInstalledTree cfg =
     ebuildEntries :: PV -> IO Variant
     ebuildEntries pv@(PV cat pkg ver)
                             =  do
-                                   let meta             =  EbuildMeta
-                                                             {
-                                                                pv        =  pv,
-                                                                location  =  Installed,
-                                                                masked    =  [],
-                                                                locuse    =  [],
-                                                                lockey    =  []
-                                                             }
-                                   c <- unsafeInterleaveIO $ getInstalledEbuildFromDisk cfg pv
-                                   return (Variant meta c)
+                                   c <- unsafeInterleaveIO $ getInstalledVariantFromDisk cfg pv
+                                   return c
 
 
 -- | Create a tree from an overlay.

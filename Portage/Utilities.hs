@@ -9,6 +9,7 @@
 module Portage.Utilities
   where
 
+import System.Directory
 import Data.List
 
 -- | Split a list at the last occurrence of an element.
@@ -19,6 +20,12 @@ splitAtLast s xs  =   splitAt (maximum (elemIndices s xs)) xs
 strictReadFile :: FilePath -> IO String
 strictReadFile f  =   do  f <- readFile f
                           f `stringSeq` return f
+
+-- | Reads a file completely into memory. Returns the
+--   empty string if the file does not exist.
+strictReadFileIfExists :: FilePath -> IO String
+strictReadFileIfExists f  =   do  x <- doesFileExist f
+                                  if x then strictReadFile f else return []
 
 -- | Completely evaluates a string.
 stringSeq :: String -> b -> b

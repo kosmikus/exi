@@ -17,13 +17,16 @@ import Portage.Dependency
 import Portage.Ebuild
 import Portage.Package
 import Portage.PortageConfig
+import Portage.Config
+import Portage.Use
 
 findVersions :: Tree -> DepAtom -> [Variant]
 findVersions = flip matchDepAtomTree
 
-showVariant :: Variant -> String
-showVariant (Variant m e)  =  showPV (pv m) ++ showLocation (location m) 
-                              ++ " " ++ unwords (map showMasked (masked m))
+showVariant :: Config -> Variant -> String
+showVariant cfg (Variant m e)  =  showPV (pv m) ++ showLocation (location m) 
+                                  ++ " " ++ unwords (map showMasked (masked m))
+                                  ++ "\n" ++ unwords (diffUse (use cfg) (iuse e))
 
 showLocation :: TreeLocation -> String
 showLocation Installed = " (installed)"

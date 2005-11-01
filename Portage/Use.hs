@@ -8,7 +8,7 @@
 
 module Portage.Use where
 
-import Data.Set
+import qualified Data.Set as S
 
 type UseFlag = String
 
@@ -20,11 +20,20 @@ splitUse = words
 --   already (no duplicates, no negatives).
 mergeUse :: [UseFlag] -> [UseFlag] -> [UseFlag]
 mergeUse xs []  =  xs
-mergeUse xs ys  =  elems $
-                   foldl  (\s u@(x:n) ->  if u == "-*"      then  empty
-                                          else if x == '-'  then  delete n s
-                                                            else  insert u s
+mergeUse xs ys  =  S.elems $
+                   foldl  (\s u@(x:n) ->  if u == "-*"      then  S.empty
+                                          else if x == '-'  then  S.delete n s
+                                                            else  S.insert u s
                           )
-                          (fromList xs)
+                          (S.fromList xs)
                           ys
 
+-- | Computes a difference of USE flags. Both lists are
+--   assumed to contain only positives. The resulting list
+--   contains modifiers though.
+diffUse :: [UseFlag] -> [UseFlag] -> [UseFlag]
+diffUse xs ys =  let  sx     =  S.fromList xs 
+                      sy     =  S.fromList ys
+                      plus   =  S.intersection sx sy
+                      minus  =  sy S.\\ plus
+                 in   S.elems plus ++ map ('-':) (S.elems minus)

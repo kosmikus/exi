@@ -118,39 +118,49 @@ getEbuild e  |  length l <= 14  =  error "getEbuild: corrupted ebuild (too short
 -- | Reads the ebuild of an installed package from disk.
 --   This is very different than for uninstalled ebuilds, because installed
 --   packages are stored differently.
-getInstalledEbuildFromDisk :: Config -> PV -> IO Ebuild
-getInstalledEbuildFromDisk cfg pv@(PV cat pkg ver) =
+getInstalledVariantFromDisk :: Config -> PV -> IO Variant
+getInstalledVariantFromDisk cfg pv@(PV cat pkg ver) =
     do
-        let dir           =  dbDir ./. showPV pv
-        dep            <-  strictReadFile $ dir ./. "DEPEND"
-        rdep           <-  strictReadFile $ dir ./. "RDEPEND"
-        slt            <-  strictReadFile $ dir ./. "SLOT"
+        let readCacheFile f  =  unsafeInterleaveIO $ strictReadFileIfExists f
+        let dir              =  dbDir ./. showPV pv
+        dep            <-  readCacheFile $ dir ./. "DEPEND"
+        rdep           <-  readCacheFile $ dir ./. "RDEPEND"
+        slt            <-  readCacheFile $ dir ./. "SLOT"
         src            <-  return "" -- for some reason not stored
-        restr          <-  strictReadFile $ dir ./. "RESTRICT"
+        restr          <-  readCacheFile $ dir ./. "RESTRICT"
         home           <-  return "" -- for some reason not stored
         lic            <-  return "" -- for some reason not stored
         des            <-  return "" -- for some reason not stored
         key            <-  return (arch cfg) -- for some reason not stored
-        inh            <-  strictReadFile $ dir ./. "INHERITED"
-        use            <-  strictReadFile $ dir ./. "IUSE"
-        cdep           <-  strictReadFile $ dir ./. "CDEPEND"
-        pdep           <-  strictReadFile $ dir ./. "PDEPEND"
-        prov           <-  strictReadFile $ dir ./. "PROVIDE"
-        return $  Ebuild
-                          (getDepString dep)
-                          (getDepString rdep)
-                          (stripNewlines slt)
-                          src
-                          (words restr)
-                          home
-                          lic
-                          des
-                          (splitKeywords key)
-                          (splitEclasses inh)
-                          (splitUse use)
-                          (getDepString cdep)
-                          (getDepString pdep)
-                          (getMaybeDepAtom prov)
+        inh            <-  readCacheFile $ dir ./. "INHERITED"
+        iuse           <-  fmap splitUse $ readCacheFile $ dir ./. "IUSE"
+        cdep           <-  readCacheFile $ dir ./. "CDEPEND"
+        pdep           <-  readCacheFile $ dir ./. "PDEPEND"
+        prov           <-  readCacheFile $ dir ./. "PROVIDE"
+        -- this one is to compute the local USE flag modifications
+        use            <-  fmap splitUse $ readCacheFile $ dir ./. "USE"
+        let m  =  EbuildMeta
+                    pv
+                    Installed
+                    []
+                    (diffUse use iuse)
+                    []
+        let e  =  Ebuild
+                    (getDepString dep)
+                    (getDepString rdep)
+                    (stripNewlines slt)
+                    src
+                    (words restr)
+                    home
+                    lic
+                    des
+                    (splitKeywords key)
+                    (splitEclasses inh)
+                    iuse
+                    (getDepString cdep)
+                    (getDepString pdep)
+                    (getMaybeDepAtom prov)
+        return (Variant m e)
 
 -- | Reads an ebuild from disk. Reads the cache entry if that is sufficient,
 --   otherwise refreshes the cache.
