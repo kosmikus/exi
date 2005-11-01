@@ -74,7 +74,8 @@ data EbuildMeta =  EbuildMeta
   deriving (Show,Eq)
 
 data TreeLocation  =  Installed
-                   |  PortageTree  FilePath
+                   |  Provided       FilePath               -- ^ in which file?
+                   |  PortageTree    FilePath
   deriving (Show,Eq)
 
 data Mask          =  KeywordMasked  [UseFlag]              -- ^ reasoning
