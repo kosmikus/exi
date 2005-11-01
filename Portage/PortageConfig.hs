@@ -19,13 +19,16 @@ import Portage.Mask
 import Portage.PackageKeywords
 import Portage.PackageUse
 import Portage.PackageProvided
+import Portage.Dependency
+import Portage.Virtual
 
 data PortageConfig =  PortageConfig
                         {
-                           config  ::  Config,
-                           tree    ::  Tree,
-                           inst    ::  Tree,
-                           itree   ::  Tree
+                           config    ::  Config,
+                           tree      ::  Tree,
+                           inst      ::  Tree,
+                           itree     ::  Tree,
+                           virtuals  ::  DepAtom -> DepTerm
                         }
 
 -- | Portage configuration is read in the following order, in increasing priority:
@@ -68,5 +71,8 @@ portageConfig =
         tree      <-  return $ foldl (flip performUseFlags)  tree uuse
         -- keyword masking
         tree      <-  return $ traverseTree (keywordMask cfg) tree
-        let itree   =  overlayInstalledTree tree inst
-        return (PortageConfig cfg tree inst itree)
+        -- virtuals
+        pvirt     <-  profileVirtuals
+        let itree     =  overlayInstalledTree tree inst
+        let virtuals  =  computeVirtuals pvirt inst
+        return (PortageConfig cfg tree inst itree virtuals)

@@ -21,6 +21,7 @@ userConfig       =  "/etc/make.conf"
 packageMask      =  "package.mask"
 packageUnMask    =  "package.unmask"
 packageProvided  =  "package.provided"
+virtuals         =  "virtuals"
 packages         =  "packages"
 
 profileParent    =  "parent"
