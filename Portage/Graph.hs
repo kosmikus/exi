@@ -29,12 +29,16 @@ findVersions = flip matchDepAtomTree
 showVariant :: Config -> Variant -> String
 showVariant cfg (Variant m e)  =  showPV (pv m) ++ showLocation (location m) 
                                   ++ " " ++ unwords (map showMasked (masked m))
-                                  ++ "\n" ++ unwords (diffUse (use cfg) (iuse e))
+                                  ++ "\n" ++ concatMap hardMask (masked m) ++ unwords (diffUse (use cfg) (iuse e))
 
 showLocation :: TreeLocation -> String
 showLocation Installed = " (installed)"
 showLocation (Provided f) = " (provided in " ++ f ++ ")"
 showLocation (PortageTree t) = " [" ++ t ++ "]"
+
+hardMask :: Mask -> String
+hardMask (HardMasked f r) = unlines r
+hardMask _                = ""
 
 showMasked :: Mask -> String
 showMasked (KeywordMasked xs) = "(masked by keyword: " ++ show xs ++ ")"
