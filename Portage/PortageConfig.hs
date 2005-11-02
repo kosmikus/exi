@@ -40,16 +40,20 @@ portageConfig =
         global    <-  getGlobalConfig
         profiles  <-  getProfileConfigs
         user      <-  getUserConfig
-        env       <-  getEnvironmentConfig
-        let merged  =  foldl1 mergeConfig (global : profiles ++ [user,env])
+        merged    <-  return $ foldl1 mergeConfig (global : profiles ++ [user])
         -- read installed tree, because that's required to determine virtuals
         -- USE data
         inst      <-  createInstalledTree merged
         uprov     <-  profileProvided
         inst      <-  return $ foldl (flip addProvided) inst uprov
         ud        <-  computeUseDefaults inst
+        merged    <-  return $ merged { use = arch merged : mergeUse (use merged) ud }
+        -- environment config is not required for installed tree, but should
+        -- override use.defaults
+        env       <-  getEnvironmentConfig
+        merged    <-  return $ mergeConfig merged env
         -- the following is the "final" basic configuration
-        let cfg     =  merged { use = arch merged : mergeUse (use merged) ud }
+        let cfg     =  merged
         -- now read the portage tree(s)
         cats      <-  categories cfg
         tree      <-  fixIO (\r ->  do
