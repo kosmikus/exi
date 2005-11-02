@@ -11,12 +11,18 @@ module Portage.Config
 
 import System.Environment
 import Data.List
+import Data.Map (Map(..))
+import qualified Data.Map as M
+import Data.Set (Set(..))
+import qualified Data.Set as S
 
 import Portage.Constants
 import Portage.Keyword
 import Portage.Use
 import Portage.Shell
 import Portage.Profile
+
+type EnvMap = Map String String  -- ^ untyped environment map
 
 data Config = Config  {
                          arch              ::  Keyword,
@@ -27,7 +33,8 @@ data Config = Config  {
   --                     pkgDir            ::  FilePath,
   --                     logDir            ::  FilePath,
                          overlays          ::  [FilePath],
-                         features          ::  [String]
+                         features          ::  [String],
+                         useExpand         ::  [(String,String)]
                       }
   deriving (Eq,Show)
 
@@ -35,49 +42,55 @@ data Config = Config  {
 trees :: Config -> [FilePath]
 trees c = portDir c : overlays c
 
-getConfig :: String -> Config
-getConfig c  |  length l < 5   =  error "getConfig: corrupted portage configuration (too short)"
-             |  otherwise      =  Config  arch
-                                          (splitKeywords key)
-                                          (splitUse use)
-                                          pd
-  --                                      distd
-  --                                      pkgd
-  --                                      logd
-                                          (words overlays)  -- seems strange to me, but apparently that's the current rule
-                                          (words features)
-  where  l = lines c
-         (arch:key:use:pd:{- distd:pkgd:logd: -}overlays:features:_) = l
+getConfig :: EnvMap -> Config
+getConfig c  =  Config
+                  arch
+                  (mergeKeywords  []  (splitKeywords key))
+                  (mergeUse       []  (splitUse use))
+                  pd
+  --              distd
+  --              pkgd
+  --              logd
+                  (nub (words overlays))  -- space as separator seems strange to me, but apparently that's the current rule
+                  (nub (words features))
+                  (zip expand expandvars)
+  where  vars        =  map (\k -> M.findWithDefault "" k c) configEnvVars
+         (arch:key:use:pd:{- distd:pkgd:logd: -}overlays:features:exp:_) = vars
+         expand      =  words exp
+         expandvars  =  map (\k -> M.findWithDefault "" k c) expand
 
-mergeConfig :: Config -> Config -> Config
-mergeConfig c1 c2 = Config  {
-                               arch              =  arch c1 <<< arch c2,
-                               acceptedKeywords  =  mergeKeywords (acceptedKeywords c1) (acceptedKeywords c2),
-                               use               =  mergeUse (use c1) (use c2),
-                               portDir           =  portDir c1 <<< portDir c2,
-                               overlays          =  nub (overlays c1 ++ overlays c2),
-                               features          =  nub (features c1 ++ features c2)
-                            }
+mergeEnvMap :: EnvMap -> EnvMap -> EnvMap
+mergeEnvMap m1 m2 =  M.unionWithKey
+                       (\k -> if S.member k incrementals
+                              then (\x y -> x ++ " " ++ y)
+                              else (<<<))
+                       m1 m2
   where  x <<< y  |  null y     =  x
                   |  otherwise  =  y
 
-configEnvVars = ["ARCH","ACCEPT_KEYWORDS","USE","PORTDIR","PORTDIR_OVERLAY","FEATURES"]
+incrementals = S.fromList ["USE","USE_EXPAND","PORTDIR_OVERLAY","FEATURES"]
 
-getEnvironmentConfig :: IO Config
-getEnvironmentConfig =  do  env <- getEnvironment
-                            let vars = lookupList env configEnvVars
-                            return $ getConfig (unlines vars)
-  where  lookupList :: [(String,String)] -> [String] -> [String]
-         lookupList xs = map (maybe [] id . flip lookup xs)
+configEnvVars = ["ARCH","ACCEPT_KEYWORDS","USE","PORTDIR","PORTDIR_OVERLAY","FEATURES","USE_EXPAND"]
 
-getConfigFile :: FilePath -> IO Config
-getConfigFile f =  do  (_,r,s) <- runCommand $  "source " ++ f ++ "; VARS=" ++ show (unwords configEnvVars) ++ "; " ++
-                                                "for i in ${VARS}; do echo ${!i}; done"
-                       return (getConfig r)
+getEnvironmentConfig :: IO EnvMap
+getEnvironmentConfig =  fmap M.fromList getEnvironment
 
-getGlobalConfig    ::  IO Config
-getProfileConfigs  ::  IO [Config]
-getUserConfig      ::  IO Config
+getConfigFile :: FilePath -> IO EnvMap
+getConfigFile f =  do  (_,r,s) <- runCommand $  "source " ++ f ++ "; set"
+                       return (parseEnvMap r)
+
+parseEnvMap :: String -> EnvMap
+parseEnvMap r =  M.fromList $
+                   [  (v,stripQuotes c) | 
+                      l <- lines r,
+                      (v,'=':c) <- return $ break (=='=') l ]
+  where  stripQuotes ('\'':r@(_:_))  =  init r  -- makes use of knowledge how bash outputs the vars
+         stripQuotes x              =  x
+
+
+getGlobalConfig    ::  IO EnvMap
+getProfileConfigs  ::  IO [EnvMap]
+getUserConfig      ::  IO EnvMap
 
 getGlobalConfig    =  getConfigFile globalConfig
 getProfileConfigs  =  readProfileFile profileConfig getConfigFile

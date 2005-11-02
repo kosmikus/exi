@@ -40,26 +40,27 @@ portageConfig =
         global    <-  getGlobalConfig
         profiles  <-  getProfileConfigs
         user      <-  getUserConfig
-        merged    <-  return $ foldl1 mergeConfig (global : profiles ++ [user])
-        -- read installed tree, because that's required to determine virtuals
-        -- USE data
-        inst      <-  createInstalledTree merged
+        env       <-  getEnvironmentConfig
+        merged    <-  return $ foldl1 mergeEnvMap (global : profiles ++ [user,env])
+        cfg       <-  return $ getConfig merged
+        envcfg    <-  return $ getConfig env
+
+        -- read installed tree, because that's required to determine USE data
+        inst      <-  createInstalledTree cfg
         uprov     <-  profileProvided
         inst      <-  return $ foldl (flip addProvided) inst uprov
         ud        <-  computeUseDefaults inst
-        merged    <-  return $ merged { use = arch merged : mergeUse (use merged) ud }
-        -- environment config is not required for installed tree, but should
-        -- override use.defaults
-        env       <-  getEnvironmentConfig
-        merged    <-  return $ mergeConfig merged env
-        -- the following is the "final" basic configuration
-        let cfg     =  merged
+        -- environment config overrides use.defaults
+        cfg       <-  return $ cfg { use = arch cfg : (use cfg `mergeUse` ud `mergeUse` use envcfg ++ expandUse (useExpand cfg)) }
+                          -- the (++) is to produce the same order as original portage
+
         -- now read the portage tree(s)
         cats      <-  categories cfg
         tree      <-  fixIO (\r ->  do
                                         pt  <-  createTree cfg (portDir cfg) cats (eclasses r)
                                         po  <-  mapM (\t -> createTree cfg t cats (eclasses r)) (overlays cfg)
                                         return $ foldl overlayTree pt po)
+
         -- hardmasking (not on the installed tree!)
         gmask     <-  globalMask cfg
         pmask     <-  profileMask
@@ -67,6 +68,7 @@ portageConfig =
         uunmask   <-  userUnMask
         tree      <-  return $ foldl (flip performMask)      tree (concat [gmask, pmask, umask])
         tree      <-  return $ foldl (flip performUnMask)    tree uunmask
+
         -- keyword distribution (also not on the installed tree)
         ukey      <-  userKeywords
         tree      <-  return $ foldl (flip performKeywords)  tree ukey
@@ -77,6 +79,8 @@ portageConfig =
         tree      <-  return $ traverseTree (keywordMask cfg) tree
         -- virtuals
         pvirt     <-  profileVirtuals
+
+        -- preparing the results
         let itree     =  overlayInstalledTree tree inst
         let virtuals  =  computeVirtuals pvirt inst
         return (PortageConfig cfg tree inst itree virtuals)

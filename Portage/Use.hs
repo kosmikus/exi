@@ -8,6 +8,7 @@
 
 module Portage.Use where
 
+import Data.Char
 import qualified Data.Set as S
 
 type UseFlag = String
@@ -37,3 +38,9 @@ diffUse xs ys =  let  sx     =  S.fromList xs
                       plus   =  S.intersection sx sy
                       minus  =  sy S.\\ plus
                  in   S.elems plus ++ map ('-':) (S.elems minus)
+
+-- | Perform USE flag expansion.
+expandUse :: [(String,String)] -> [UseFlag]
+expandUse = concatMap expand
+  where  expand (_,"")  =  []
+         expand (v,c)   =  [map toLower v ++ "_" ++ c]
