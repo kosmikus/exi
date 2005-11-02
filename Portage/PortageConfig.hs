@@ -80,3 +80,8 @@ portageConfig =
         let itree     =  overlayInstalledTree tree inst
         let virtuals  =  computeVirtuals pvirt inst
         return (PortageConfig cfg tree inst itree virtuals)
+
+
+-- Difference with Portage implementation:
+-- portage gives priority to environment settings over user-specified per-package settings.
+-- I'm not convinced this is good, so I'll do it the other way around for now.

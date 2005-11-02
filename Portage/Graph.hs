@@ -29,7 +29,7 @@ findVersions = flip matchDepAtomTree
 showVariant :: Config -> Variant -> String
 showVariant cfg (Variant m e)  =  showPV (pv m) ++ showLocation (location m) 
                                   ++ " " ++ unwords (map showMasked (masked m))
-                                  ++ "\n" ++ concatMap hardMask (masked m) ++ unwords (diffUse (use cfg) (iuse e))
+                                  ++ "\n" ++ concatMap hardMask (masked m) ++ unwords (diffUse (mergeUse (use cfg) (locuse m)) (iuse e))
 
 showLocation :: TreeLocation -> String
 showLocation Installed = " (installed)"
