@@ -42,5 +42,4 @@ diffUse xs ys =  let  sx     =  S.fromList xs
 -- | Perform USE flag expansion.
 expandUse :: [(String,String)] -> [UseFlag]
 expandUse = concatMap expand
-  where  expand (_,"")  =  []
-         expand (v,c)   =  [map toLower v ++ "_" ++ c]
+  where  expand (v,c)   =  [map toLower v ++ "_" ++ w | w <- words c ]
