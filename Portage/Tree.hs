@@ -58,6 +58,7 @@ createInstalledTree cfg =
                                    pkgvers  <-  ifDirectoryExists getSubdirectories (dbDir ./. cat)
                                    let pvss  =  groupBy  (\(PV c1 p1 _) (PV c2 p2 _)
                                                             -> c1 == c2 && p1 == p2) .
+                                                sort .
                                                 map (getPV . (cat ./.)) $
                                                 pkgvers
                                    -- each of the sublists is non-empty

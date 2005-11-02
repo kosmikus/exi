@@ -23,7 +23,7 @@ data PV        =  PV
                        package   ::  Package,
                        version   ::  Version
                     }
-  deriving (Show,Eq)
+  deriving (Show,Eq,Ord)
 
 showPV     ::  PV -> String
 getPV      ::  String -> PV
