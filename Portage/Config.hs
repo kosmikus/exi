@@ -76,13 +76,12 @@ configEnvVars = ["ARCH","ACCEPT_KEYWORDS","USE","PORTDIR","PORTDIR_OVERLAY","FEA
 getEnvironmentConfig :: IO EnvMap
 getEnvironmentConfig =  fmap M.fromList getEnvironment
 
--- | Reads a configuration file with the help of the shell. We unset all the incremental
---   variables explicitly, because otherwise clutter from the current environment might
---   accumulate. Nevertheless, this isn't very clean. It would be preferable to only output
---   variables that are actually set in the file.
+-- | Reads a configuration file with the help of the shell. We unset 
+--   all we can explicity, because otherwise clutter from the current
+--   environment might accumulate (this is particularly important for
+--   the incremental variables).
 getConfigFile :: FilePath -> IO EnvMap
-getConfigFile f =  do  (_,r,s) <- runCommand $  "INCREMENTALS=" ++ show (unwords incrementals) ++ ";" ++
-                                                "for i in ${INCREMENTALS}; do unset ${i}; done;" ++
+getConfigFile f =  do  (_,r,s) <- runCommand $  "unset $(set | sed 's/^\\([^=]*\\)=.*$/\\1/') 2>/dev/null;" ++
                                                 "source " ++ f ++ "; set"
                        return (parseEnvMap r)
 
