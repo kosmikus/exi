@@ -13,6 +13,7 @@ import System.IO
 
 import Portage.Config
 import Portage.Tree
+import Portage.Keyword
 import Portage.Use
 import Portage.UseDefaults
 import Portage.Mask
@@ -50,9 +51,12 @@ portageConfig =
         uprov     <-  profileProvided
         inst      <-  return $ foldl (flip addProvided) inst uprov
         ud        <-  computeUseDefaults inst
-        -- environment config overrides use.defaults
-        cfg       <-  return $ cfg { use = arch cfg : (use cfg `mergeUse` ud `mergeUse` use envcfg ++ expandUse (useExpand cfg)) }
-                          -- the (++) is to produce the same order as original portage
+        -- normalize keywords and USE flags; environment config overrides use.defaults
+        cfg       <-  return $ cfg  {  
+                                       acceptedKeywords = mergeKeywords [] (acceptedKeywords cfg),
+                                       use = arch cfg : mergeUse [] (use cfg ++ ud ++ use envcfg) ++ expandUse (useExpand cfg)
+                                    }
+                          -- the outer (++) for expandUse is to produce the same order as original portage
 
         -- now read the portage tree(s)
         cats      <-  categories cfg
@@ -70,10 +74,16 @@ portageConfig =
         tree      <-  return $ foldl (flip performUnMask)    tree uunmask
 
         -- keyword distribution (also not on the installed tree)
+        -- Portage allows the environment to override package-specific keywords.
+        -- We therefore add the environment keywords at the end of each package-specific
+        -- entry.
         ukey      <-  userKeywords
+        ukey      <-  return $ map (mapKeywordsForPackage (++ acceptedKeywords envcfg)) ukey -- environment override
         tree      <-  return $ foldl (flip performKeywords)  tree ukey
         -- USE flag distribution (again, not on the installed tree)
+        -- Same thing as for keywords with the environment-specific USE flags.
         uuse      <-  userUseFlags
+        uuse      <-  return $ map (mapUseForPackage (++ use envcfg)) uuse -- environment override
         tree      <-  return $ foldl (flip performUseFlags)  tree uuse
         -- keyword masking
         tree      <-  return $ traverseTree (keywordMask cfg) tree
@@ -85,7 +95,3 @@ portageConfig =
         let virtuals  =  computeVirtuals pvirt inst
         return (PortageConfig cfg tree inst itree virtuals)
 
-
--- Difference with Portage implementation:
--- portage gives priority to environment settings over user-specified per-package settings.
--- I'm not convinced this is good, so I'll do it the other way around for now.

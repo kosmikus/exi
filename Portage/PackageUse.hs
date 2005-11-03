@@ -26,6 +26,10 @@ data UseForPackage  =  UseForPackage
   deriving (Eq,Show)
 
 -- TODO: unify with "Portage.PackageKeywords"
+mapUseForPackage :: ([UseFlag] -> [UseFlag]) -> UseForPackage -> UseForPackage
+mapUseForPackage f u = u { uuse = f (uuse u) }
+
+-- | Performs a USE flag modification.
 
 -- | Parse a @package.use@ file.
 parseUse :: String -> [UseForPackage]

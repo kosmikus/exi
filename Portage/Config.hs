@@ -45,8 +45,8 @@ trees c = portDir c : overlays c
 getConfig :: EnvMap -> Config
 getConfig c  =  Config
                   arch
-                  (mergeKeywords  []  (splitKeywords key))
-                  (mergeUse       []  (splitUse use))
+                  (splitKeywords key)     -- unprocessed for now
+                  (splitUse use)          -- unprocessed for now
                   pd
   --              distd
   --              pkgd
@@ -61,22 +61,29 @@ getConfig c  =  Config
 
 mergeEnvMap :: EnvMap -> EnvMap -> EnvMap
 mergeEnvMap m1 m2 =  M.unionWithKey
-                       (\k -> if S.member k incrementals
+                       (\k -> if S.member k incrementals'
                               then (\x y -> x ++ " " ++ y)
                               else (<<<))
                        m1 m2
   where  x <<< y  |  null y     =  x
                   |  otherwise  =  y
 
-incrementals = S.fromList ["USE","USE_EXPAND","PORTDIR_OVERLAY","FEATURES"]
+incrementals'  =  S.fromList incrementals
+incrementals   =  ["USE","USE_EXPAND","PORTDIR_OVERLAY","FEATURES"]
 
 configEnvVars = ["ARCH","ACCEPT_KEYWORDS","USE","PORTDIR","PORTDIR_OVERLAY","FEATURES","USE_EXPAND"]
 
 getEnvironmentConfig :: IO EnvMap
 getEnvironmentConfig =  fmap M.fromList getEnvironment
 
+-- | Reads a configuration file with the help of the shell. We unset all the incremental
+--   variables explicitly, because otherwise clutter from the current environment might
+--   accumulate. Nevertheless, this isn't very clean. It would be preferable to only output
+--   variables that are actually set in the file.
 getConfigFile :: FilePath -> IO EnvMap
-getConfigFile f =  do  (_,r,s) <- runCommand $  "source " ++ f ++ "; set"
+getConfigFile f =  do  (_,r,s) <- runCommand $  "INCREMENTALS=" ++ show (unwords incrementals) ++ ";" ++
+                                                "for i in ${INCREMENTALS}; do unset ${i}; done;" ++
+                                                "source " ++ f ++ "; set"
                        return (parseEnvMap r)
 
 parseEnvMap :: String -> EnvMap

@@ -26,6 +26,10 @@ data KeywordsForPackage  =  KeywordsForPackage
                               }
   deriving (Eq,Show)
 
+-- | Performs a keyword modification.
+mapKeywordsForPackage :: ([Keyword] -> [Keyword]) -> KeywordsForPackage -> KeywordsForPackage
+mapKeywordsForPackage f k = k { kkeywords = f (kkeywords k) }
+
 -- | Parse a @package.keywords@ file.
 parseKeywords :: String -> [KeywordsForPackage]
 parseKeywords = map parseKeywordsLine . lines . stripComments 
