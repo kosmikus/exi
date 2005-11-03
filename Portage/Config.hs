@@ -61,15 +61,14 @@ getConfig c  =  Config
 
 mergeEnvMap :: EnvMap -> EnvMap -> EnvMap
 mergeEnvMap m1 m2 =  M.unionWithKey
-                       (\k -> if S.member k incrementals'
+                       (\k -> if S.member k incrementals
                               then (\x y -> x ++ " " ++ y)
                               else (<<<))
                        m1 m2
   where  x <<< y  |  null y     =  x
                   |  otherwise  =  y
 
-incrementals'  =  S.fromList incrementals
-incrementals   =  ["USE","USE_EXPAND","PORTDIR_OVERLAY","FEATURES"]
+incrementals   =  S.fromList ["USE","USE_EXPAND","PORTDIR_OVERLAY","FEATURES"]
 
 configEnvVars = ["ARCH","ACCEPT_KEYWORDS","USE","PORTDIR","PORTDIR_OVERLAY","FEATURES","USE_EXPAND"]
 
