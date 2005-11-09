@@ -7,14 +7,18 @@ edges that represent Dependencies.
 
 As Actions, we have at least the following:
 
-  Action               Meaning                               Effect
-  -------------------  ------------------------------------  -----------
-  Build <variant>      "after this, the variant is built"    compilation
-  Available <variant>  "after this, we can run the variant"  none
+  Action                 Meaning                                         Effect
+  -------------------    ----------------------------------------------  -----------
+  Build <variant>        "after this, the variant is built"              compilation
+  Available <variant>    "after this, we can run the variant"            none
+  Unblocking <variant>   "after this, variant is not blocking anything"  none
+  Unblocked <variant>    "after this, variant is not blocked"            none
+  Unavailable <variant>  "after this, the variant is unavailable"        failure
 
+For installed variants v, we can add nodes "Available v" and
+"Unavailable v". Furthermore, we add
 
-For installed variants v, we can add a node "Available v"
-without further dependencies.
+  * a conflict from "Unavailable v" to "Available v"
 
 If a variant is requested by the user, we want it to be "Available"
 in the end.
@@ -22,19 +26,33 @@ in the end.
 If we want to insert an "Available" for an uninstalled variant v, we
 have to
 
-  * create two nodes, "Available v" and "Build v"
-  * there is a (meta-)dependency from "Available v" to "Build v"
+  * create five nodes, "Unavailable v", "Available v", "Unblocked v",
+    "Build v" and "Unblocking v".
+  * there are (meta-)dependencies between each of the above five
+    nodes, in the given order
   * for all DEPENDs w of v, there are dependencies from
     "Build v" to "Available w"
   * for all RDEPENDs w of v, there are dependencies from
     "Available v" to "Available w"
   * for all PDEPENDs w of v, there are dependencies from
     "Available v" to "Build w"
-
-The following are not well thought-through: what if the blocking
-dependencies are already available?
-
   * for all blocking DEPENDs w of v, there are dependencies
-    from "Build w" to "Build v"
-  * for all blocking RDEPENDs w of v, there are block-dependencies
-    from "Build w" to "Build v"
+    from "Unblocking w" to "Unblocked v" (for ALL variants
+    in the trees that w applies to)
+  * for all blocking RDEPENDs w of v, there are dependencies
+    from "Unavailable w" to "Unblocking v" (for ALL variants
+    in the trees that w applies to)
+
+
+Only variants with "Available" nodes are really present in the graph.
+
+All other nodes can be freely inserted into the graph, but when adding
+new "Available" nodes, we have to watch out for cycles and slot conflicts.
+
+If we have a slot conflict, then we can either try to modify the new
+variant (easy), or we have to modify the old variant. We're looking for
+another variant of the same slot which is not yet blocked (by dependencies
+on the unavailability). When trying the new variant, we automatically
+invalidate the old by adding a dependency on its unavailabilty. This
+backtracking is costly, though, therefore it should be part of the
+strategy.
