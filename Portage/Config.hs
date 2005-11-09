@@ -68,7 +68,7 @@ mergeEnvMap m1 m2 =  M.unionWithKey
   where  x <<< y  |  null y     =  x
                   |  otherwise  =  y
 
-incrementals   =  S.fromList ["USE","USE_EXPAND","PORTDIR_OVERLAY","FEATURES"]
+incrementals   =  S.fromList ["USE","USE_EXPAND","PORTDIR_OVERLAY","FEATURES","ACCEPT_KEYWORDS"]
 
 configEnvVars = ["ARCH","ACCEPT_KEYWORDS","USE","PORTDIR","PORTDIR_OVERLAY","FEATURES","USE_EXPAND"]
 
