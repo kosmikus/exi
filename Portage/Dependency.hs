@@ -189,11 +189,11 @@ readUseDep =
         neg <- option False (liftM (const True) excl)
         use <- ident
         qmark
-        thenf  <-  {- pars -} readDepString  -- removed pars due to non-compliant ebuilds
+        thenf  <-  pars readDepString  -- we had removed "pars" due to strange ebuilds
         elsef  <-  option [] $
                      do
                          col
-                         ({- pars -} readDepString)
+                         (pars readDepString)  -- see above ...
         if null elsef  then  return [Use neg use thenf]
                        else  return [Use neg use thenf, Use (not neg) use elsef]
 
