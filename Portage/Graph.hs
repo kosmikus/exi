@@ -19,7 +19,7 @@ import Control.Monad.State
 import Portage.Tree
 import Portage.Match
 import Portage.Dependency
-import Portage.Ebuild hiding (isAvailable)
+import Portage.Ebuild (Variant(..), Ebuild(iuse), EbuildMeta(..), TreeLocation(..), Mask(..))
 import qualified Portage.Ebuild as E
 import Portage.Package
 import Portage.PortageConfig
@@ -63,6 +63,7 @@ data Failure  =  AllMasked Category Package [Variant]
 type DGraph = Graph
 type Graph = Gr Action DepType
 data DepType = Normal | Runtime | Post | Meta
+  deriving (Eq,Show)
 
 data Action  =  Unavailable  Variant
              |  Available    Variant
@@ -82,6 +83,14 @@ instance Eq Action where
   Top                ==  Top                =  True
   _                  ==  _                  =  False
 
+instance Show Action where
+  show (Unavailable  v) = "NA " ++ showPV (pv (meta v))
+  show (Available    v) = "A  " ++ showPV (pv (meta v))
+  show (Unblocked    v) = "U< " ++ showPV (pv (meta v))
+  show (Build        v) = "B  " ++ showPV (pv (meta v))
+  show (Unblocking   v) = "U> " ++ showPV (pv (meta v))
+  show Top              = "/"
+
 isAvailable :: Variant -> Map PV NodeInfo -> Bool
 isAvailable v m =  case M.lookup (pv (meta v)) m of
                      Nothing  ->  False
@@ -89,17 +98,61 @@ isAvailable v m =  case M.lookup (pv (meta v)) m of
 
 data DepState =  DepState
                    {
-                      pconfig  ::  PortageConfig,
-                      dlocuse  ::  [UseFlag],
-                      graph    ::  Graph,
-                      labels   ::  Map PV NodeInfo,
-                      counter  ::  Int
+                      pconfig   ::  PortageConfig,
+                      dlocuse   ::  [UseFlag],
+                      graph     ::  Graph,
+                      labels    ::  Map PV NodeInfo,
+                      counter   ::  Int,
+                      dcontext  ::  NodeContext
                    }
 
 data NodeInfo =  NodeInfo
-                   {  node     ::  Node,
+                   {  
+                      node     ::  Node,
                       active   ::  Bool
                    }
+
+data NodeContext =  NodeContext
+                      {
+                         base         ::  Node,
+                         deptype      ::  DepType,
+                         source       ::  Int,
+                         target       ::  Int,
+                         blocktarget  ::  Int
+                      }
+
+type Progress = String
+
+depend :: Node -> NodeContext
+depend b   =  NodeContext
+                {
+                   base         =  b,
+                   deptype      =  Normal,
+                   source       =  build,
+                   target       =  available,
+                   blocktarget  =  unblocked
+                }
+
+rdepend :: Node -> NodeContext
+rdepend b  =  NodeContext
+                {
+                   base         =  b,
+                   deptype      =  Runtime,
+                   source       =  available,
+                   target       =  available,
+                   blocktarget  =  unavailable
+                }
+
+pdepend :: Node -> NodeContext
+pdepend b  =  NodeContext
+                {
+                   base         =  b,
+                   deptype      =  Post,
+                   source       =  available,
+                   target       =  build,
+                   blocktarget  =  unavailable
+                }
+
 
 unavailable  =  0
 available    =  1
@@ -131,55 +184,60 @@ newNode =
         return (head $ newNodes 1 g)
 
 -- | Insert a set of new nodes into the graph, if it doesn't exist yet.
-insNewNode :: Variant -> GG Node
-insNewNode v =
+insNewNode :: Variant -> Bool -> GG Node
+insNewNode v a =
     do  ls <- gets labels
         let pv' = pv (meta v)
         case M.lookup pv' ls of
           Nothing ->  do  n <- stepCounter
+                          registerNode pv' n
                           modifyGraph (insEdges [  (s,t,Meta)
                                                 |  (s,t) <- 
-                                                   [(unavailable  `at` n, available   `at` n),
-                                                    (available    `at` n, unblocked   `at` n),
-                                                    (unblocked    `at` n, build       `at` n),
-                                                    (build        `at` n, unblocked   `at` n)] ] .
-                                       insNodes [  (unavailable  `at` n, Unavailable  v),
-                                                   (available    `at` n, Available    v),
-                                                   (unblocked    `at` n, Unblocked    v),
-                                                   (build        `at` n, Build        v),
-                                                   (unblocking   `at` n, Unblocking   v)])
+                                                   (unavailable  `at` n, available   `at` n) :
+                                                   if a then
+                                                   [  (available    `at` n, build       `at` n)]
+                                                   else
+                                                   [  (available    `at` n, unblocked   `at` n),
+                                                      (unblocked    `at` n, build       `at` n),
+                                                      (build        `at` n, unblocked   `at` n)] ] .
+                                       insNodes (  [  (unavailable  `at` n, Unavailable  v),
+                                                      (available    `at` n, Available    v),
+                                                      (unblocked    `at` n, Unblocked    v)] ++
+                                                   (  if a then
+                                                      [  (build        `at` n, Available    v)]
+                                                      else
+                                                      [  (build        `at` n, Build        v)]) ++
+                                                   [  (unblocking   `at` n, Unblocking   v)]))
                           return n
           Just (NodeInfo n _) -> return n
 
 activate :: Variant -> GG ()
 activate v = modify (\s -> s { labels = M.update (\i -> Just $ i { active = True }) (pv (meta v)) (labels s) })
 
--- | Builds a graph for the whole dependency string,
---   by processing each term separately.
-buildGraphForDepString :: DepString -> GG [Node]
-buildGraphForDepString = fmap concat . mapM buildGraphForDepTerm
+registerNode :: PV -> Node -> GG ()
+registerNode pv n = modify (\s -> s { labels = M.insert pv (NodeInfo n False) (labels s) })
 
 -- | Builds a graph for the whole dependency string,
---   and adds edges as specified by the given arguments.
-buildGraphForDepStringWith :: DepType -> Int -> Int -> Node -> DepString -> GG ()
-buildGraphForDepStringWith dt s t m ds =
-    do  ns <- buildGraphForDepString ds
-        modifyGraph (insEdges [(s `at` m, t `at` n, dt) | n <- ns])
+--   by processing each term separately.
+buildGraphForDepString :: DepString -> GG [Progress]
+buildGraphForDepString ds = fmap concat (mapM buildGraphForDepTerm ds)
 
 -- | Builds a graph for a single term.
 --   If it is an atom, just delegate.
 --   If it is a use-qualified thing, check the USE flag and delegate.
 --   If it is an or-dependency, ...
-buildGraphForDepTerm :: DepTerm -> GG [Node]
+buildGraphForDepTerm :: DepTerm -> GG [Progress]
 buildGraphForDepTerm dt =
     do  luse <- gets dlocuse
         case dt of
-          Plain d                   ->  fmap (:[]) (buildGraphForDepAtom d)
+          Plain d                   ->  buildGraphForDepAtom d
           Use n f ds
             | n /= (f `elem` luse)  ->  buildGraphForDepString ds
             | otherwise             ->  return []
+          Or []                     ->  return []  -- preliminary!
+          Or (dt:_)                 ->  buildGraphForDepTerm dt
 
-buildGraphForDepAtom :: DepAtom -> GG Node
+buildGraphForDepAtom :: DepAtom -> GG [Progress]
 buildGraphForDepAtom da =
     do  pc  <-  gets pconfig
         g   <-  gets graph
@@ -188,28 +246,42 @@ buildGraphForDepAtom da =
             t          =  itree pc
             (cat,pkg)  =  catpkgFromDepAtom da
         case sselect s cat pkg (findVersions t da) of
+          Reject f -> return []  -- fail (show f)
           Accept v@(Variant m e)  ->  
             let  avail      =  E.isAvailable (location m)  -- installed or provided?
                  already    =  isAvailable v ls
-                 stop       =  already || avail && sstop s v 
+                 stop       =  avail && sstop s v 
                                  -- if it's an installed ebuild, we can decide to stop here!
-            in                     let  rdeps    =  rdepend  e
-                                        deps     =  depend   e
-                                        pdeps    =  pdepend  e
+            in   if already
+                   then  return []
+                   else            let  rdeps    =  E.rdepend  e
+                                        deps     =  E.depend   e
+                                        pdeps    =  E.pdepend  e
                                         luse     =  mergeUse (use (config pc)) (locuse m)
                                    in   -- set new local USE context
                                         withState (\s -> s { dlocuse = luse }) $
                                         do
                                             -- insert nodes for v, and activate
-                                            n <- insNewNode v
+                                            n <- insNewNode v stop
                                             activate v
-                                            -- add deps to graph
-                                            buildGraphForDepStringWith Normal build available n deps
-                                            -- add rdeps to graph
-                                            buildGraphForDepStringWith Runtime available available n rdeps
-                                            -- add pdeps to graph
-                                            buildGraphForDepStringWith Runtime available build n pdeps
-                                            return n
+                                            -- insert edge according to current context
+                                            ctx <- gets dcontext
+                                            modifyGraph (insEdge (  source ctx `at` base ctx, 
+                                                                    target ctx `at` n,
+                                                                    deptype ctx))
+                                            if stop
+                                              then return [show n ++ ": " ++ showPV (pv (meta v))]
+                                              else do
+                                                       -- add deps to graph
+                                                       p1 <- withState (\s -> s { dcontext = depend n }) $
+                                                               buildGraphForDepString deps
+                                                       -- add rdeps to graph
+                                                       p2 <- withState (\s -> s { dcontext = rdepend n }) $
+                                                               buildGraphForDepString rdeps
+                                                       -- add pdeps to graph
+                                                       p3 <- withState (\s -> s { dcontext = pdepend n }) $
+                                                               buildGraphForDepString pdeps
+                                                       return ([show n ++ ": " ++ showPV (pv (meta v)) ++ "PDEPEND: " ++ show pdeps] ++ p1 ++ p2 ++ p3)
 
 strategy :: PortageConfig -> Strategy
 strategy = const updateStrategy
@@ -231,6 +303,6 @@ updateStrategy =  Strategy
   where
     select :: Category -> Package -> [Variant] -> Selection
     select cat pkg vs =
-      case sortBy (\(Variant m1 _) (Variant m2 _) -> compare (version (pv m2)) (version (pv m1))) . filterMaskedVariants $ vs of
+      case sortBy (\(Variant m1 _) (Variant m2 _) -> compare (version (pv m2)) (version (pv m1))) . E.filterMaskedVariants $ vs of
         (v:_)  ->  Accept v
         []     ->  Reject (AllMasked cat pkg vs)
