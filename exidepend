@@ -1,0 +1,39 @@
+#!/usr/bin/python -O
+# Copyright 1999-2004 Gentoo Foundation
+# Distributed under the terms of the GNU General Public License v2
+# $Header: /var/cvsroot/gentoo-src/portage/bin/ebuild,v 1.18.2.3 2005/05/07 04:32:59 ferringb Exp $
+
+import os,sys
+sys.path = ["/usr/lib/portage/pym"]+sys.path
+import portage_util
+
+def getroot():
+	try:
+		a=os.environ["ROOT"]
+		if a == '/':
+			return '/'
+	except SystemExit, e:
+		raise # Needed else we can't exit.
+	except:
+		return '/'
+	return os.path.normpath(a)+'/'
+
+os.environ["PORTAGE_CALLER"]="ebuild"
+		
+import portage
+
+try:
+	tmpsettings = portage.config(clone=portage.settings)
+
+	a=portage.doebuild(sys.argv[1],'depend',getroot(),tmpsettings,debug=1,dbkey=sys.argv[2])
+except KeyboardInterrupt:
+	print "(interrupted by user -- ctrl-C?)"
+	a=1
+except IOError:
+	a=1
+	print "ebuild: this ebuild generated output during the depend phase (bad)"
+if a == None:
+	portage_util.writemsg("Could not run the required binary?\n")
+	sys.exit(127)
+if a:
+	sys.exit(a)
