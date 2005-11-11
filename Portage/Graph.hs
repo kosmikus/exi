@@ -264,7 +264,7 @@ buildGraphForDepAtom da =
                                                                     target ctx `at` n,
                                                                     deptype ctx))
                                             if stop
-                                              then return [show n ++ ": " ++ showPV (pv (meta v))]
+                                              then return [show n ++ ": " ++ showPV (pv (meta v)) ++ " available"]
                                               else do
                                                        -- add deps to graph
                                                        p1 <- withState (\s -> s { dcontext = depend n }) $
@@ -275,5 +275,5 @@ buildGraphForDepAtom da =
                                                        -- add pdeps to graph
                                                        p3 <- withState (\s -> s { dcontext = pdepend n }) $
                                                                buildGraphForDepString pdeps
-                                                       return ([show n ++ ": " ++ showPV (pv (meta v)) ++ "PDEPEND: " ++ show pdeps] ++ p1 ++ p2 ++ p3)
+                                                       return ([show n ++ ": " ++ showPV (pv (meta v)) ++ ", PDEPEND: " ++ show pdeps] ++ p1 ++ p2 ++ p3)
 

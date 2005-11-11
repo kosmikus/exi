@@ -10,12 +10,13 @@ import Portage.Dependency
 import Portage.PortageConfig
 import Portage.Strategy
 
-main = do  x <- portageConfig
-           [a] <- getArgs
-           main' x a
+main = do  [a] <- getArgs
+           main' a
            
 
-main' x d = putStr $ unlines $ map (showVariant (config x)) $ findVersions (itree x) (getDepAtom d)
+main' d = 
+    do  x <- portageConfig
+        putStr $ unlines $ map (showVariant (config x)) $ findVersions (itree x) (getDepAtom d)
 
 
 
@@ -31,8 +32,13 @@ pretend' b d =
                                  dcontext  =  (rdepend 0) { source = 0 }
                               }
         let fs = runState (buildGraphForDepString (getDepString d)) initialState 
-        print (fst fs)
-        putStr $ unlines $ map show $ postorderF $ dffWith lab' [0] $ graph $ snd $ fs
+        putStrLn $ "Calculating dependencies: "
+        putStr $ unlines $ fst fs
+        putStrLn $ "\nGraph complete: "
+        let mergelist = postorderF $ dffWith lab' [0] $ graph $ snd $ fs
+        putStr $ unlines $ map show $ mergelist
+        putStrLn $ "\nShort version: "
+        putStr $ unlines $ map show $ filter (\ a -> case a of Build _ -> True; _ -> False) $ mergelist
 
 p  = pretend' False
 up = pretend' True
