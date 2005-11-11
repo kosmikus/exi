@@ -42,7 +42,7 @@ updateStrategy =  Strategy
         []     ->  Reject (AllMasked cat pkg vs)
 
 updateOrder :: Variant -> Variant -> Ordering
-updateOrder v1 v2 = compare (version (pv (meta v1))) (version (pv (meta v2)))
+updateOrder v1 v2 = compare (version (pv (meta v2))) (version (pv (meta v1)))
 
 
 defaultStrategy :: Strategy
@@ -60,6 +60,6 @@ defaultStrategy =  Strategy
 
 defaultOrder :: Variant -> Variant -> Ordering
 defaultOrder (Variant { meta = m1 }) (Variant { meta = m2 }) =
-    compare  (isAvailable (location m1), version (pv m1))
-             (isAvailable (location m2), version (pv m2))
+    compare  (isAvailable (location m2), version (pv m2))
+             (isAvailable (location m1), version (pv m1))
 
