@@ -22,6 +22,7 @@ import Portage.PackageUse
 import Portage.PackageProvided
 import Portage.Dependency
 import Portage.Virtual
+import Portage.Strategy
 
 data PortageConfig =  PortageConfig
                         {
@@ -29,7 +30,8 @@ data PortageConfig =  PortageConfig
                            tree      ::  Tree,
                            inst      ::  Tree,
                            itree     ::  Tree,
-                           virtuals  ::  DepAtom -> DepTerm
+                           virtuals  ::  DepAtom -> DepTerm,
+                           strategy  ::  Strategy
                         }
 
 -- | Portage configuration is read in the following order, in increasing priority:
@@ -93,5 +95,5 @@ portageConfig =
         -- preparing the results
         let itree     =  overlayInstalledTree tree inst
         let virtuals  =  computeVirtuals pvirt inst
-        return (PortageConfig cfg tree inst itree virtuals)
+        return (PortageConfig cfg tree inst itree virtuals defaultStrategy)
 

@@ -11,7 +11,6 @@ module Portage.Graph
 
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.List (sortBy)
 import Data.Graph.Inductive hiding (version, Graph())
 import Control.Monad.Identity
 import Control.Monad.State
@@ -25,6 +24,7 @@ import Portage.Package
 import Portage.PortageConfig
 import Portage.Config
 import Portage.Use
+import Portage.Strategy
 
 findVersions :: Tree -> DepAtom -> [Variant]
 findVersions = flip matchDepAtomTree
@@ -48,12 +48,6 @@ showMasked (KeywordMasked xs) = "(masked by keyword: " ++ show xs ++ ")"
 showMasked (HardMasked f r) = "(hardmasked in " ++ f ++ ")"
 showMasked (ProfileMasked f) = "(excluded from profile in " ++ f ++")"
 showMasked (Shadowed t) = "(shadowed by " ++ showLocation t ++ ")"
-
-data Selection  =  Accept   Variant
-                |  Reject   Failure
-
-data Failure  =  AllMasked Category Package [Variant]
-  deriving (Eq,Show)
 
 
 -- x :: Graph -> DepString -> Graph
@@ -283,26 +277,3 @@ buildGraphForDepAtom da =
                                                                buildGraphForDepString pdeps
                                                        return ([show n ++ ": " ++ showPV (pv (meta v)) ++ "PDEPEND: " ++ show pdeps] ++ p1 ++ p2 ++ p3)
 
-strategy :: PortageConfig -> Strategy
-strategy = const updateStrategy
-
-data Strategy =  Strategy
-                   {
-                      -- | Select the best variant for a given package.
-                      sselect  ::  Category -> Package -> [Variant] -> Selection,
-                      -- | Decide whether to stop on an already available variant.
-                      sstop    ::  Variant -> Bool
-                   }
-
-updateStrategy :: Strategy
-updateStrategy =  Strategy
-                    {
-                       sselect  =  select,
-                       sstop    =  const True
-                    }
-  where
-    select :: Category -> Package -> [Variant] -> Selection
-    select cat pkg vs =
-      case sortBy (\(Variant m1 _) (Variant m2 _) -> compare (version (pv m2)) (version (pv m1))) . E.filterMaskedVariants $ vs of
-        (v:_)  ->  Accept v
-        []     ->  Reject (AllMasked cat pkg vs)
