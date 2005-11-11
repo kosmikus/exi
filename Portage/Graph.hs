@@ -11,6 +11,7 @@ module Portage.Graph
 
 import Data.Map (Map)
 import qualified Data.Map as M
+import Data.List
 import Data.Graph.Inductive hiding (version, Graph())
 import Control.Monad.Identity
 import Control.Monad.State
@@ -30,14 +31,23 @@ findVersions :: Tree -> DepAtom -> [Variant]
 findVersions = flip matchDepAtomTree
 
 showVariant :: Config -> Variant -> String
-showVariant cfg (Variant m e)  =  showPV (pv m) ++ showLocation (location m) 
+showVariant cfg (Variant m e)  =  showPV (pv m) ++ showSlot (E.slot e) ++ showLocation cfg (location m) 
                                   ++ " " ++ unwords (map showMasked (masked m))
-                                  ++ "\n" ++ concatMap hardMask (masked m) ++ unwords (diffUse (mergeUse (use cfg) (locuse m)) (iuse e))
+                                  ++ " " ++ concatMap hardMask (masked m) ++ unwords (diffUse (mergeUse (use cfg) (locuse m)) (iuse e))
 
-showLocation :: TreeLocation -> String
-showLocation Installed = " (installed)"
-showLocation (Provided f) = " (provided in " ++ f ++ ")"
-showLocation (PortageTree t) = " [" ++ t ++ "]"
+showSlot :: String -> String
+showSlot ['0'] = ""
+showSlot s = "{" ++ s ++ "}"
+
+showLocation :: Config -> TreeLocation -> String
+showLocation c Installed        =  " (installed)"
+showLocation c (Provided f)     =  " (provided in " ++ f ++ ")"
+showLocation c (PortageTree t)  =  if portDir c == t then "" else " [" ++ t ++ "]"
+
+showTreeLocation :: TreeLocation -> String
+showTreeLocation Installed        =  "installed packages"
+showTreeLocation (Provided f)     =  "provided packages from " ++ f
+showTreeLocation (PortageTree t)  =  t
 
 hardMask :: Mask -> String
 hardMask (HardMasked f r) = unlines r
@@ -47,7 +57,7 @@ showMasked :: Mask -> String
 showMasked (KeywordMasked xs) = "(masked by keyword: " ++ show xs ++ ")"
 showMasked (HardMasked f r) = "(hardmasked in " ++ f ++ ")"
 showMasked (ProfileMasked f) = "(excluded from profile in " ++ f ++")"
-showMasked (Shadowed t) = "(shadowed by " ++ showLocation t ++ ")"
+showMasked (Shadowed t) = "(shadowed by " ++ showTreeLocation t ++ ")"
 
 
 -- x :: Graph -> DepString -> Graph
@@ -84,6 +94,14 @@ instance Show Action where
   show (Build        v) = "B  " ++ showPV (pv (meta v))
   show (Unblocking   v) = "U> " ++ showPV (pv (meta v))
   show Top              = "/"
+
+showAction :: Config -> Action -> String
+showAction c (Unavailable  v) = "NA " ++ showVariant c v
+showAction c (Available    v) = "A  " ++ showVariant c v
+showAction c (Unblocked    v) = "U< " ++ showVariant c v
+showAction c (Build        v) = "B  " ++ showVariant c v
+showAction c (Unblocking   v) = "U> " ++ showVariant c v
+showAction c Top              = "/"
 
 isAvailable :: Variant -> Map PV NodeInfo -> Bool
 isAvailable v m =  case M.lookup (pv (meta v)) m of
@@ -211,34 +229,81 @@ activate v = modify (\s -> s { labels = M.update (\i -> Just $ i { active = True
 registerNode :: PV -> Node -> GG ()
 registerNode pv n = modify (\s -> s { labels = M.insert pv (NodeInfo n False) (labels s) })
 
+-- | Builds a graph for an uninterpreted dependency string,
+--   i.e., a dependency string containing USE flags.
+buildGraphForUDepString :: DepString -> GG [Progress]
+buildGraphForUDepString ds =
+    do
+        luse  <-  gets dlocuse
+        buildGraphForDepString (interpretDepString luse ds)
+
 -- | Builds a graph for the whole dependency string,
 --   by processing each term separately.
+--   Precondition: dependency string must be interpreted,
+--   without USE flags.
 buildGraphForDepString :: DepString -> GG [Progress]
 buildGraphForDepString ds = fmap concat (mapM buildGraphForDepTerm ds)
 
 -- | Builds a graph for a single term.
+--   Precondition: dependency string must be interpreted,
+--   without USE flags.
 --   If it is an atom, just delegate.
 --   If it is a use-qualified thing, check the USE flag and delegate.
 --   If it is an or-dependency, ...
 buildGraphForDepTerm :: DepTerm -> GG [Progress]
 buildGraphForDepTerm dt =
-    do  luse <- gets dlocuse
+    do  
+        pc    <-  gets pconfig
         case dt of
-          Plain d                   ->  buildGraphForDepAtom d
-          Use n f ds
-            | n /= (f `elem` luse)  ->  buildGraphForDepString ds
-            | otherwise             ->  return []
-          Or []                     ->  return []  -- preliminary!
-          Or (dt:_)                 ->  buildGraphForDepTerm dt
+          Plain d                   ->  case virtuals pc d of
+                                          Nothing   ->  buildGraphForDepAtom d
+                                          Just dt'  ->  buildGraphForDepTerm dt'
+          And ds                    ->  buildGraphForDepString ds
+          Or ds                     ->  buildGraphForOr ds
+
+buildGraphForOr :: DepString -> GG [Progress]
+buildGraphForOr []         =  return []  -- strange case, empty OR, but ok
+buildGraphForOr ds@(dt:_)  =
+    do
+        pc    <-  gets pconfig
+        case findInstalled pc ds of
+          Nothing   ->  do  p <- buildGraphForDepTerm dt  -- default
+                            return $ ["|| resolved to default"] ++ p
+          Just dt'  ->  do  
+                            p <- buildGraphForDepTerm dt'  -- installed
+                            return $ ["|| resolved to available"] ++ p
+  where
+    findInstalled :: PortageConfig -> DepString -> Maybe DepTerm
+    findInstalled pc = find isInstalledTerm
+      where
+        isInstalledTerm :: DepTerm -> Bool
+        isInstalledTerm (Or ds)    =  any isInstalledTerm ds
+        isInstalledTerm (And ds)   =  all isInstalledTerm ds
+        isInstalledTerm (Plain d)  =  isInstalled pc d
+
+-- Critical case for OR-dependencies:
+-- || ( ( a b ) c )
+-- genone says in #gentoo-portage:
+-- if nothing is installed it selects a+b, 
+-- if only a and/or b is installed it selects a+b, 
+-- if c and one of a or b is installed it selects c
+
+isInstalled :: PortageConfig -> DepAtom -> Bool
+isInstalled pc da =
+    let  (cat,pkg)  =  catpkgFromDepAtom da
+         t          =  itree pc
+    in   case selectInstalled cat pkg (findVersions t da) of
+           Accept v  ->  True
+           _         ->  False
 
 buildGraphForDepAtom :: DepAtom -> GG [Progress]
 buildGraphForDepAtom da =
     do  pc  <-  gets pconfig
         g   <-  gets graph
         ls  <-  gets labels
-        let s          =  strategy pc
-            t          =  itree pc
-            (cat,pkg)  =  catpkgFromDepAtom da
+        let  s          =  strategy pc
+             t          =  itree pc
+             (cat,pkg)  =  catpkgFromDepAtom da
         case sselect s cat pkg (findVersions t da) of
           Reject f -> return []  -- fail (show f)
           Accept v@(Variant m e)  ->  
@@ -268,12 +333,12 @@ buildGraphForDepAtom da =
                                               else do
                                                        -- add deps to graph
                                                        p1 <- withState (\s -> s { dcontext = depend n }) $
-                                                               buildGraphForDepString deps
+                                                               buildGraphForUDepString deps
                                                        -- add rdeps to graph
                                                        p2 <- withState (\s -> s { dcontext = rdepend n }) $
-                                                               buildGraphForDepString rdeps
+                                                               buildGraphForUDepString rdeps
                                                        -- add pdeps to graph
                                                        p3 <- withState (\s -> s { dcontext = pdepend n }) $
-                                                               buildGraphForDepString pdeps
+                                                               buildGraphForUDepString pdeps
                                                        return ([show n ++ ": " ++ showPV (pv (meta v)) ++ ", PDEPEND: " ++ show pdeps] ++ p1 ++ p2 ++ p3)
 

@@ -18,6 +18,7 @@ data Selection  =  Accept   Variant
                 |  Reject   Failure
 
 data Failure  =  AllMasked Category Package [Variant]
+              |  NoneInstalled Category Package [Variant]
   deriving (Eq,Show)
 
 data Strategy =  Strategy
@@ -32,15 +33,15 @@ makeStrategy :: (Variant -> Variant -> Ordering) -> Strategy
 makeStrategy order =  
     Strategy
       {
-         sselect  =  select,
+         sselect  =  select order,
          sstop    =  const True
       }
-  where
-    select :: Category -> Package -> [Variant] -> Selection
-    select cat pkg vs =
-      case sortBy order . filterMaskedVariants $ vs of
-        (v:_)  ->  Accept v
-        []     ->  Reject (AllMasked cat pkg vs)
+
+select :: (Variant -> Variant -> Ordering) -> Category -> Package -> [Variant] -> Selection
+select order cat pkg vs =
+  case sortBy order . filterMaskedVariants $ vs of
+    (v:_)  ->  Accept v
+    []     ->  Reject (AllMasked cat pkg vs)
 
 updateOrder :: Variant -> Variant -> Ordering
 updateOrder v1 v2 = compare (version (pv (meta v2))) (version (pv (meta v1)))
@@ -49,6 +50,12 @@ defaultOrder :: Variant -> Variant -> Ordering
 defaultOrder (Variant { meta = m1 }) (Variant { meta = m2 }) =
     compare  (isAvailable (location m2), version (pv m2))
              (isAvailable (location m1), version (pv m1))
+
+selectInstalled :: Category -> Package -> [Variant] -> Selection
+selectInstalled cat pkg vs =
+  case sortBy updateOrder . filter (isAvailable . location . meta) . filterMaskedVariants $ vs of
+    (v:_)  ->  Accept v
+    []     ->  Reject (NoneInstalled cat pkg vs)
 
 updateStrategy, defaultStrategy :: Strategy
 updateStrategy   =  makeStrategy updateOrder
