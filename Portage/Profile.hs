@@ -44,3 +44,17 @@ readProfileIn pdir acc f parser =
       f_contents  <-  if f_exists  then  fmap (:[]) (parser f_local)
                                    else  return []
       return $ f_contents ++ acc
+
+getProfileDirs :: IO [FilePath]
+getProfileDirs =  unsafeInterleaveIO $
+                    getProfileDirsFrom profileDir [localProfileDir]
+
+getProfileDirsFrom :: FilePath -> [FilePath] -> IO [FilePath]
+getProfileDirsFrom pdir acc =
+  do  let new_acc = pdir : acc
+      -- is there a parent?
+      let p_local = pdir ./. profileParent
+      p_exists <- doesFileExist p_local
+      if p_exists  then  do  p_dir <- strictReadFile p_local >>= return . stripNewlines . stripComments
+                             getProfileDirsFrom (pdir ./. p_dir) new_acc
+                   else  return new_acc

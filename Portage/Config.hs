@@ -29,6 +29,7 @@ data Config = Config  {
                          acceptedKeywords  ::  [Keyword],
                          use               ::  [UseFlag],
                          portDir           ::  FilePath,
+                         tmpDir            ::  FilePath,
   --                     distDir           ::  FilePath,
   --                     pkgDir            ::  FilePath,
   --                     logDir            ::  FilePath,
@@ -48,6 +49,7 @@ getConfig c  =  Config
                   (splitKeywords key)     -- unprocessed for now
                   (splitUse use)          -- unprocessed for now
                   pd
+                  tmpd
   --              distd
   --              pkgd
   --              logd
@@ -55,7 +57,7 @@ getConfig c  =  Config
                   (nub (words features))
                   (zip expand expandvars)
   where  vars        =  map (\k -> M.findWithDefault "" k c) configEnvVars
-         (arch:key:use:pd:{- distd:pkgd:logd: -}overlays:features:exp:_) = vars
+         (arch:key:use:pd:tmpd:{- distd:pkgd:logd: -}overlays:features:exp:_) = vars
          expand      =  words exp
          expandvars  =  map (\k -> M.findWithDefault "" k c) expand
 
@@ -70,7 +72,7 @@ mergeEnvMap m1 m2 =  M.unionWithKey
 
 incrementals   =  S.fromList ["USE","USE_EXPAND","PORTDIR_OVERLAY","FEATURES","ACCEPT_KEYWORDS"]
 
-configEnvVars = ["ARCH","ACCEPT_KEYWORDS","USE","PORTDIR","PORTDIR_OVERLAY","FEATURES","USE_EXPAND"]
+configEnvVars = ["ARCH","ACCEPT_KEYWORDS","USE","PORTDIR","PORTAGE_TMPDIR","PORTDIR_OVERLAY","FEATURES","USE_EXPAND"]
 
 getEnvironmentConfig :: IO EnvMap
 getEnvironmentConfig =  fmap M.fromList getEnvironment

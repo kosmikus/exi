@@ -32,15 +32,13 @@ licenseDir   pt      =  pt ./. "licenses"
 metadataDir  pt      =  pt ./. "metadata"
 metadataCacheDir pt  =  metadataDir pt ./. "cache"
 
+files            =  "files"
+
 cacheDir     pt  =  "/var/cache/edb/dep" ./. pt
 ownCacheDir  pt  =  "/var/cache/hdb/dep" ./. pt  -- for non-portage compliant own files
 dbDir            =  "/var/db/pkg"
 
--- old:
 ebuildsh         =  "/usr/sbin/ebuild.sh"
-
--- now:
-dependBin        =  "/usr/sbin/exidepend"
 
 categoriesFile  pt  =  profilesDir pt ./. "categories"
 
@@ -52,3 +50,9 @@ useDefaults      =  "use.defaults"
 localUseFlagsFile    =  localConfigDir ./. "package.use"
 localKeywordsFile    =  localConfigDir ./. "package.keywords"
 
+-- original portage code
+portageBasePath  =  "/usr/lib/portage"
+portageBinPath   =  portageBasePath ./. "bin"
+portagePymPath   =  portageBasePath ./. "pym"
+
+bashrcFile       =  localConfigDir ./. "bashrc"

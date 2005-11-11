@@ -16,6 +16,8 @@ module Portage.Version
   parseVersion,
   getVersion,
   stripRev,
+  getRev,
+  showRevPR,
   versionPrefixOf
   ) where
 
@@ -79,6 +81,9 @@ showRev :: Int -> String
 showRev 0 = ""
 showRev n = "-r" ++ show n
 
+showRevPR :: Int -> String
+showRevPR n = "r" ++ show n
+
 -- | Function to call if you want to parse a version number.
 getVersion :: String -> Version
 getVersion ver = case parseVersion ver of
@@ -129,6 +134,10 @@ readRev      =  option (0,        "")  (  do  rr      <- string "-r"
 -- | Strip a revision number from a version.
 stripRev :: Version -> Version
 stripRev (Version a b c r rep) = Version a b c 0 rep
+
+-- | Get a revision number from a version.
+getRev :: Version -> Int
+getRev (Version a b c r rep) = r
 
 -- | Check if one version is a prefix of the other (for comparisons with
 --   starred dependencies).

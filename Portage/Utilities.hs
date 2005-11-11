@@ -12,6 +12,14 @@ module Portage.Utilities
 import System.Directory
 import Data.List
 
+-- | Variant of |words| that accepts a custom separator.
+split :: Char -> String -> [String]
+split c s = case dropWhile (==c) s of
+              ""  ->  []
+              s'  ->  w : split c s''
+                        where (w, s'') = break (==c) s'
+
+
 -- | Split a list at the last occurrence of an element.
 splitAtLast :: (Eq a) => a -> [a] -> ([a],[a])
 splitAtLast s xs  =   splitAt (maximum (elemIndices s xs)) xs

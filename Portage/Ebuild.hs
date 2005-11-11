@@ -9,11 +9,15 @@
 module Portage.Ebuild
   where
 
+import System.Environment
 import System.IO.Unsafe
 import System.Directory
 import Data.Map (Map)
 import qualified Data.Map as M
+import Data.List (isPrefixOf)
 import Control.Monad
+import Control.Exception
+import Prelude hiding (catch)
 
 import Portage.Config
 import Portage.Dependency
@@ -25,6 +29,7 @@ import Portage.Eclass
 import Portage.Constants
 import Portage.Utilities
 import Portage.Shell
+import Portage.Profile
 
 -- The ebuild cache format (as created by calling @ebuild depend@) is as follows:
 -- DEPEND
@@ -228,7 +233,7 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
         let refreshCache   =  do
                                   putStrLn ("cache refresh for " ++ showPV pv)
                                   makePortageFile cacheFile
-                                  runCommand (dependBin ++ " " ++ quote originalFile ++ " " ++ quote cacheFile)
+                                  makeCacheEntry cfg pt pv
                                   -- the cache is refreshed, now update eclasses
                                   makePortageFile eclassesFile
                                   let eclasses  =  inherited cacheContents
@@ -239,6 +244,78 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
         when  (not (cacheExists && cacheNewer && eclassesExist && eclassesOK))
               refreshCache
         return cacheContents
+
+-- | This code is following the code in @doebuild@ from @portage.py@.
+makeCacheEntry :: Config -> FilePath -> PV -> IO ()
+makeCacheEntry cfg pt pv@(PV cat pkg ver) =
+    do
+        let originalFile  =  pt ./. showEbuildPV pv
+        let cacheFile     =  cacheDir pt ./. showPV pv
+        let metadataFile  =  metadataCacheDir pt ./. showPV pv
+
+        -- ROOT
+        envroot  <-  catch (getEnv "ROOT") (const $ return "/")
+        envroot  <-  if null envroot || not ("/" `isPrefixOf` envroot)
+                       then return ('/' : envroot)
+                       else return envroot
+        -- current directory
+        wd       <-  getCurrentDirectory
+
+        -- ebuild directory
+        let ebuildDir     =  dirname originalFile
+        let filesDir      =  ebuildDir ./. files
+
+        -- profile directories
+        profileDirs <- getProfileDirs
+
+        -- version without revision
+        let ver           =  showVersion (stripRev (version pv))
+        -- only the revision
+        let rev           =  getRev (version pv)
+
+        -- processing the path
+        path     <-  catch (getEnv "PATH") (const $ return "")
+        path     <-  return $
+                     if not (portageBinPath `elem` split ':' path)
+                       then  portageBinPath ++ ":" ++ path
+                       else  path
+
+        -- build prefix
+        let buildPrefix   =  tmpDir cfg ./. "portage"
+        let home          =  buildPrefix ./. "homedir"
+        let pkgTmpDir     =  tmpDir cfg ./. "portage-pkg"
+        let buildDir      =  buildPrefix ./. showPV pv
+        
+        let env =
+              [  ("ROOT",            envroot),
+                 ("STARTDIR",        wd),
+                 ("EBUILD",          originalFile),
+                 ("O",               ebuildDir),
+                 ("FILESDIR",        filesDir),
+                 ("PF",              showPV pv),
+                 ("ECLASSDIR",       eclassDir (portDir cfg)),
+                 -- TODO: do we need SANDBOX_LOG?
+                 ("PROFILE_PATHS",   unlines profileDirs),
+                 ("P",               (pkg ++ "-" ++ ver)),
+                 ("PN",              pkg),
+                 ("PV",              ver),
+                 ("PR",              showRevPR rev),
+                 ("PVR",             showVersion (version pv)),
+                 ("SLOT",            ""),
+                 ("PATH",            path),
+                 ("BUILD_PREFIX",    buildPrefix),
+                 ("HOME",            home),
+                 ("PKG_TMPDIR",      pkgTmpDir),
+                 ("BUILDDIR",        buildDir),
+                 ("PORTAGE_BASHRC",  bashrcFile),
+                 -- TODO: KV and KVERS missing ...
+                 ("dbkey",           cacheFile)
+              ]
+
+        runCommandInEnv (ebuildsh ++ " depend") env
+        return ()
+                
+
 
 -- A note on current portage eclass resolution: In ebuild.sh, the eclass
 -- is looked up in the current ECLASSDIR and the current overlays specified
