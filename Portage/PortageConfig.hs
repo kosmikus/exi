@@ -30,7 +30,7 @@ data PortageConfig =  PortageConfig
                            tree      ::  Tree,
                            inst      ::  Tree,
                            itree     ::  Tree,
-                           virtuals  ::  DepAtom -> DepTerm,
+                           virtuals  ::  DepAtom -> Maybe DepTerm,
                            strategy  ::  Strategy
                         }
 

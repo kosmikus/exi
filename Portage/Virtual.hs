@@ -62,7 +62,7 @@ providedByTree t = M.fold (\p r -> M.fold (\vs s -> foldr addProvide s vs) r p) 
 
 -- | Compute the dependency that corresponds to each virtual. This function
 --   is supposed to be partially applied to the first two arguments.
-computeVirtuals :: [Virtual] -> Tree -> (DepAtom -> DepTerm)
+computeVirtuals :: [Virtual] -> Tree -> (DepAtom -> Maybe DepTerm)
 computeVirtuals vs t =
     let
       -- add the virtuals as defaults to the map
@@ -71,7 +71,8 @@ computeVirtuals vs t =
       -- note that there can still be duplicates in the map, but we avoid doing a nub on the whole thing for
       -- efficiency reasons
     in
-      \d -> Or (map (Plain . mergeWithTemplate d) (M.findWithDefault [] (catpkgFromDepAtom d) vm))
+      \d ->  fmap  (\cp -> Or (map (Plain . mergeWithTemplate d) cp))
+                   (M.lookup (catpkgFromDepAtom d) vm)
 
 -- | The first atom is the virtual. It serves as a template w.r.t. modifiers,
 --   version etc.
