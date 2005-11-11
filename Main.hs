@@ -19,8 +19,7 @@ main' d =
         putStr $ unlines $ map (showVariant (config x)) $ findVersions (itree x) (getDepAtom d)
 
 
-
-pretend' b d = 
+pretend' b v d = 
     do  x <- fmap (if b then (\x -> x { strategy = updateStrategy }) else id ) portageConfig
         let initialState =  DepState
                               {
@@ -31,14 +30,18 @@ pretend' b d =
                                  counter   =  1,
                                  dcontext  =  (rdepend 0) { source = 0 }
                               }
-        let fs = runState (buildGraphForDepString (getDepString d)) initialState 
-        putStrLn $ "Calculating dependencies: "
-        putStr $ unlines $ fst fs
+        let fs = runState (buildGraphForUDepString (getDepString d)) initialState 
+        putStr $ "Calculating dependencies: "
+        when v $ putStrLn ""
+        putStr $ (if v then unlines else map (const '.')) $ fst fs
         putStrLn $ "\nGraph complete: "
         let mergelist = postorderF $ dffWith lab' [0] $ graph $ snd $ fs
         putStr $ unlines $ map show $ mergelist
         putStrLn $ "\nShort version: "
-        putStr $ unlines $ map show $ filter (\ a -> case a of Build _ -> True; _ -> False) $ mergelist
+        putStr $ unlines  $  map (showAction (config x)) 
+                          $  filter (\ a -> case a of Build _ -> True; _ -> False) $ mergelist
 
-p  = pretend' False
-up = pretend' True
+p   = pretend' False False
+up  = pretend' True  False
+pv  = pretend' False True
+upv = pretend' True  True
