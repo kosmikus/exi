@@ -201,15 +201,10 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                                           return (cacheMTime == metaMTime)
                                  else return False
         eclassesExist  <-  unsafeInterleaveIO $ doesFileExist eclassesFile
-        let env            =  [("ECLASSDIR",eclassDir (portDir cfg)),
-                               ("PORTDIR_OVERLAY",unwords (overlays cfg)), 
-                                          -- see below
-                               ("EBUILD",originalFile),
-                               ("dbkey",cacheFile)]
         let eclassesDummy  =  -- If no eclasses mtime file is present, we assume
                               -- the current tree
                               do
-                                  putStrLn ("making eclass dummy for " ++ show pv)
+                                  putStrLn ("making eclass dummy for " ++ showPV pv)
                                   makePortageFile eclassesFile
                                   c <- fmap getEbuild (strictReadFile cacheFile)
                                   let eclasses  =  inherited c
@@ -231,9 +226,9 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
         cacheContents  <-  unsafeInterleaveIO $
                            fmap getEbuild (strictReadFile cacheFile)
         let refreshCache   =  do
-                                  putStrLn ("cache refresh for " ++ show pv)
+                                  putStrLn ("cache refresh for " ++ showPV pv)
                                   makePortageFile cacheFile
-                                  runCommandInEnv (ebuildsh ++ " depend") env
+                                  runCommand (dependBin ++ " " ++ quote originalFile ++ " " ++ quote cacheFile)
                                   -- the cache is refreshed, now update eclasses
                                   makePortageFile eclassesFile
                                   let eclasses  =  inherited cacheContents
