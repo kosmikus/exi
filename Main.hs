@@ -9,6 +9,8 @@ import Portage.Graph
 import Portage.Dependency
 import Portage.PortageConfig
 import Portage.Strategy
+import Portage.Ebuild hiding (rdepend)
+import Portage.Package
 
 main = do  [a] <- getArgs
            main' a
@@ -33,7 +35,7 @@ pretend' b v d =
         let fs = runState (buildGraphForUDepString (getDepString d)) initialState 
         putStr $ "Calculating dependencies: "
         when v $ putStrLn ""
-        putStr $ (if v then unlines else map (const '.')) $ fst fs
+        putStr $ (if v then unlines . map showProgressLong else concatMap showProgressShort) $ fst fs
         putStrLn $ "\nGraph complete: "
         let mergelist = postorderF $ dffWith lab' [0] $ graph $ snd $ fs
         putStr $ unlines $ map show $ mergelist
@@ -41,7 +43,26 @@ pretend' b v d =
         putStr $ unlines  $  map (showAction (config x)) 
                           $  filter (\ a -> case a of Build _ -> True; _ -> False) $ mergelist
 
+showProgressLong (LookAtEbuild pv o) = showPV pv ++ " " ++ showOriginLong o
+showProgressLong (Message s)         = s
+
+showProgressShort (LookAtEbuild pv o) = showOriginShort o
+showProgressShort (Message s)         = ""
+
+showOriginLong FromCache         =  "(from cache)"
+showOriginLong CacheRegen        =  "(regenerated cache entry)"
+showOriginLong EclassDummy       =  "(made eclass dummy)"
+showOriginLong FromInstalledDB   =  "(available)"
+showOriginLong IsProvided        =  "(provided)"
+
+showOriginShort FromCache        =  "."
+showOriginShort CacheRegen       =  "C"
+showOriginShort EclassDummy      =  "E"
+showOriginShort FromInstalledDB  =  "i"
+showOriginShort IsProvided       =  "p"
+
 p   = pretend' False False
 up  = pretend' True  False
 pv  = pretend' False True
 upv = pretend' True  True
+

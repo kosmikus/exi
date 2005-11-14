@@ -44,6 +44,7 @@ addProvided (f,pv@(PV cat pkg ver)) t =
                     []
                     []
                     []
+                    IsProvided
     ebuild      = Ebuild
                     []
                     []

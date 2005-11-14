@@ -74,8 +74,12 @@ data EbuildMeta =  EbuildMeta
                          location     ::  TreeLocation,
                          masked       ::  [Mask],           -- ^ empty means the ebuild is visible
                          locuse       ::  [UseFlag],        -- ^ local USE flags
-                         lockey       ::  [Keyword]         -- ^ local ACCEPT_KEYWORDS
+                         lockey       ::  [Keyword],        -- ^ local ACCEPT_KEYWORDS
+                         origin       ::  EbuildOrigin      -- ^ where did we get this data from?
                       }
+  deriving (Show,Eq)
+
+data EbuildOrigin = FromCache | CacheRegen | EclassDummy | FromInstalledDB | IsProvided
   deriving (Show,Eq)
 
 data TreeLocation  =  Installed
@@ -156,6 +160,7 @@ getInstalledVariantFromDisk cfg pv@(PV cat pkg ver) =
                     []
                     (diffUse use iuse)
                     []
+                    FromInstalledDB
         let e  =  Ebuild
                     (getDepString dep)
                     (getDepString rdep)
@@ -184,7 +189,7 @@ getInstalledVariantFromDisk cfg pv@(PV cat pkg ver) =
 --     * the eclass mtimes in the cache match the final eclass mtimes of the
 --       current tree configuration
 getEbuildFromDisk ::  Config -> FilePath -> 
-                      PV -> Map Eclass EclassMeta -> IO Ebuild
+                      PV -> Map Eclass EclassMeta -> IO (Ebuild,EbuildOrigin)
 getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
     do
         let originalFile  =  pt ./. showEbuildPV pv
@@ -219,8 +224,9 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                                   mtimes <- mapM getMTime efiles
                                   writeEclassesFile  eclassesFile
                                                      (zip eclasses mtimes)
-        when  (cacheExists && cacheNewer && cacheOriginal && not eclassesExist) 
-              eclassesDummy
+        oed <- if (cacheExists && cacheNewer && cacheOriginal && not eclassesExist) 
+                 then eclassesDummy >> return True
+                 else return False
         -- eclasses could exist now, therefore we check again
         eclassesExist  <-  unsafeInterleaveIO $ doesFileExist eclassesFile
         eclassesOK     <-  unsafeInterleaveIO $
@@ -241,9 +247,13 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                                         map (\e -> mtime (ecs M.! e)) eclasses
                                   writeEclassesFile  eclassesFile
                                                      (zip eclasses mtimes)
-        when  (not (cacheExists && cacheNewer && eclassesExist && eclassesOK))
-              refreshCache
-        return cacheContents
+        orc <- if (not (cacheExists && cacheNewer && eclassesExist && eclassesOK))
+                 then refreshCache >> return True
+                 else return False
+        let origin | orc        =  CacheRegen
+                   | oed        =  EclassDummy
+                   | otherwise  =  FromCache
+        return (cacheContents,origin)
 
 -- | This code is following the code in @doebuild@ from @portage.py@.
 makeCacheEntry :: Config -> FilePath -> PV -> IO ()

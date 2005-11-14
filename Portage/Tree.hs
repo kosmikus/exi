@@ -131,15 +131,16 @@ createTree cfg pt cats ecs =
                                    let version          =  drop (length pkg + 1) ebuild
                                    let ver              =  getVersion version
                                    let pv               =  PV cat pkg ver
+                                   (c,o) <- unsafeInterleaveIO $ getEbuildFromDisk cfg pt pv ecs
                                    let meta             =  EbuildMeta
                                                              {
                                                                pv        =  pv,
                                                                location  =  PortageTree pt,
                                                                masked    =  [],
                                                                locuse    =  [],
-                                                               lockey    =  []
+                                                               lockey    =  [],
+                                                               origin    =  o
                                                              }
-                                   c <- unsafeInterleaveIO $ getEbuildFromDisk cfg pt pv ecs
                                    return (Variant meta c)
 
 -- | Combines two trees such that the second one is the overlay and has priority.

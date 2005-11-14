@@ -19,7 +19,7 @@ import Control.Monad.State
 import Portage.Tree
 import Portage.Match
 import Portage.Dependency
-import Portage.Ebuild (Variant(..), Ebuild(iuse), EbuildMeta(..), TreeLocation(..), Mask(..))
+import Portage.Ebuild (Variant(..), Ebuild(iuse), EbuildMeta(..), EbuildOrigin(..), TreeLocation(..), Mask(..))
 import qualified Portage.Ebuild as E
 import Portage.Package
 import Portage.PortageConfig
@@ -133,7 +133,9 @@ data NodeContext =  NodeContext
                          blocktarget  ::  Int
                       }
 
-type Progress = String
+data Progress =  LookAtEbuild  PV EbuildOrigin
+              |  Message       String
+  deriving (Eq,Show)
 
 depend :: Node -> NodeContext
 depend b   =  NodeContext
@@ -270,10 +272,10 @@ buildGraphForOr ds@(dt:_)  =
         pc    <-  gets pconfig
         case findInstalled pc ds of
           Nothing   ->  do  p <- buildGraphForDepTerm dt  -- default
-                            return $ ["|| resolved to default"] ++ p
+                            return $ [Message $ "|| (" ++ show ds ++ ")) resolved to default"] ++ p
           Just dt'  ->  do  
                             p <- buildGraphForDepTerm dt'  -- installed
-                            return $ ["|| resolved to available"] ++ p
+                            return $ [Message $ "|| (" ++ show ds ++ ")) resolved to available: " ++ show dt'] ++ p
   where
     findInstalled :: PortageConfig -> DepString -> Maybe DepTerm
     findInstalled pc = find (isInstalledTerm . resolveVirtuals pc)
@@ -331,7 +333,7 @@ buildGraphForDepAtom da =
                                                                     target ctx `at` n,
                                                                     deptype ctx))
                                             if stop
-                                              then return [show n ++ ": " ++ showPV (pv (meta v)) ++ " available"]
+                                              then return [LookAtEbuild (pv (meta v)) (origin (meta v))]
                                               else do
                                                        -- add deps to graph
                                                        p1 <- withState (\s -> s { dcontext = depend n }) $
@@ -342,5 +344,5 @@ buildGraphForDepAtom da =
                                                        -- add pdeps to graph
                                                        p3 <- withState (\s -> s { dcontext = pdepend n }) $
                                                                buildGraphForUDepString pdeps
-                                                       return ([show n ++ ": " ++ showPV (pv (meta v)) ++ ", PDEPEND: " ++ show pdeps] ++ p1 ++ p2 ++ p3)
+                                                       return ([LookAtEbuild (pv (meta v)) (origin (meta v))] ++ p1 ++ p2 ++ p3)
 
