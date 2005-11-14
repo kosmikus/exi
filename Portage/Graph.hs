@@ -254,12 +254,14 @@ buildGraphForDepTerm :: DepTerm -> GG [Progress]
 buildGraphForDepTerm dt =
     do  
         pc    <-  gets pconfig
-        case dt of
-          Plain d                   ->  case virtuals pc d of
-                                          Nothing   ->  buildGraphForDepAtom d
-                                          Just dt'  ->  buildGraphForDepTerm dt'
+        case resolveVirtuals pc dt of
+          Plain d                   ->  buildGraphForDepAtom d
           And ds                    ->  buildGraphForDepString ds
           Or ds                     ->  buildGraphForOr ds
+
+resolveVirtuals :: PortageConfig -> DepTerm -> DepTerm
+resolveVirtuals pc (Plain d)  =  maybe (Plain d) id (virtuals pc d)
+resolveVirtuals _  dt         =  dt
 
 buildGraphForOr :: DepString -> GG [Progress]
 buildGraphForOr []         =  return []  -- strange case, empty OR, but ok
@@ -274,7 +276,7 @@ buildGraphForOr ds@(dt:_)  =
                             return $ ["|| resolved to available"] ++ p
   where
     findInstalled :: PortageConfig -> DepString -> Maybe DepTerm
-    findInstalled pc = find isInstalledTerm
+    findInstalled pc = find (isInstalledTerm . resolveVirtuals pc)
       where
         isInstalledTerm :: DepTerm -> Bool
         isInstalledTerm (Or ds)    =  any isInstalledTerm ds
