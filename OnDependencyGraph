@@ -9,16 +9,8 @@ As Actions, we have at least the following:
 
   Action                 Meaning                                         Effect
   -------------------    ----------------------------------------------  -----------
-  Build <variant>        "after this, the variant is built"              compilation
   Available <variant>    "after this, we can run the variant"            none
-  Unblocking <variant>   "after this, variant is not blocking anything"  none
-  Unblocked <variant>    "after this, variant is not blocked"            none
-  Unavailable <variant>  "after this, the variant is unavailable"        failure
-
-For installed variants v, we can add nodes "Available v" and
-"Unavailable v". Furthermore, we add
-
-  * a conflict from "Unavailable v" to "Available v"
+  Built <variant>        "after this, the variant is built"              compilation
 
 If a variant is requested by the user, we want it to be "Available"
 in the end.
@@ -26,14 +18,119 @@ in the end.
 If we want to insert an "Available" for an uninstalled variant v, we
 have to
 
-  * create five nodes, "Unavailable v", "Available v", "Unblocked v",
-    "Build v" and "Unblocking v".
-  * there are (meta-)dependencies between each of the above five
-    nodes, in the given order
+  * create three nodes, one for each state, with meta-dependencies from
+    each state to the next
   * for all DEPENDs w of v, there are dependencies from
-    "Build v" to "Available w"
+    "Built v" to "Available w"
   * for all RDEPENDs w of v, there are dependencies from
     "Available v" to "Available w"
+
+So far, any cycles are real cycles and are real errors in the dependency
+graph.
+
+[1]
+The idea of a PDEPEND is much like that of an RDEPEND, but it can introduce
+cycles. A package we PDEPEND usually (R)DEPENDS on us in turn, and we do not
+want this to cause an error. 
+
+So, a typical situation is that of ghc and cabal:
+
+ghc PDEPENDs on cabal
+cabal DEPENDs on ghc
+cabal RDEPENDs on ghc
+
+The idea is that cabal's dependencies should not point to ghc's Available
+state, but to something intermediate.
+
+If a cycle contains a path
+
+X.? -(R)DEPEND-> Y.Available -PDEPEND-> Z.Available
+
+we change it to
+
+X.? -(R)DEPEND-> Y.Pre-Available
+Y.Available -PDEPEND-> Z.Available
+Y.Available -META-> Y.Pre-Available
+
+This will resolve this particular cycle.
+
+[2]
+TOP
+
+There is a special node called TOP. If a package X is to be installed
+on the system, there should be a direct edge from TOP to X.Available.
+
+If we do not want something to happen, we can depend on TOP. For instance,
+if X is supposed not to be installed on the system, let X.Available
+depend on TOP. As a result, X.Available cannot be depended on from
+TOP without introducing a cycle, and thus an inconsistency.
+
+[3]
+For blockers, we have to distinguish between DEPEND blockers, and
+R/PDEPEND blockers. The latter are far more severe and can never be
+resolved if encountered.
+
+If X DEPENDs on !Y, we have that Y.Built depends on X.Built.
+That's if Y has an installation history (see [4]). If Y has a
+remove history, then X.Built depends on Y.Removed. If Y is
+already installed, there's an unresolvable conflict. One way
+to represent this is to add a remove history for Y even though
+an installed history already exists.
+
+[4]
+Package histories
+=================
+
+A package can have different histories within the graph.
+
+(1) A package is already installed.
+(2) A package is newly installed.
+(3) A package is removed.
+(4) A package is upgraded.
+
+Depending on the history of the package, there is a diffferent
+set of nodes in the graph for that package.
+
+(1) We only have X.Available, and an edge from TOP to X.Available.
+(2) We have X.Available, X.Built, and possibly X.Pre-Available,
+    and an edge from TOP to X.Available.
+(3) We have X.Available, and X.Removed, and an edge from TOP to
+    X.Removed. Of course, X.Removed meta-depends on X.Available.
+(4) This is a combination of (1) and (3). X is upgraded to Y.
+    In the beginning, we have X.Available, in the end, we want
+    X.Removed and Y.Available. There certainly is an edge from
+    TOP to Y.Available.
+
+Whenever we depend on X.Available, X.Removed should depend on us.
+In particular, if TOP depends on X.Available, then X.Removed
+depends on TOP.
+
+
+One idea is to have a potential Remove event for all packages.
+So we introduce events Built, (Pre-)Available, Removed for
+all packages. TOP is usually connected to Available, but for
+upgrades we remove this connection.
+
+
+[5]
+Cycle detection
+===============
+
+A really important feature will be that we have reasonably
+efficient detection of cycles. We could first compute SCCs.
+We know that each SCC has at least one back-edge, which yields
+a cycle. We could iterate this process.
+
+We require cycles to be given as lists of edges, so that
+we can check what kind of edges make up a path.
+
+Data.Graph.Inductive has a type Path, which is a list of
+nodes. We can compute our representation from this list
+of nodes.
+
+
+
+
   * for all PDEPENDs w of v, there are dependencies from
     "Available v" to "Build w"
   * for all blocking DEPENDs w of v, there are dependencies
