@@ -35,10 +35,6 @@ showVariant cfg (Variant m e)  =  showPV (pv m) ++ showSlot (E.slot e) ++ showLo
                                   ++ " " ++ unwords (map showMasked (masked m))
                                   ++ " " ++ concatMap hardMask (masked m) ++ unwords (diffUse (mergeUse (use cfg) (locuse m)) (iuse e))
 
-showSlot :: String -> String
-showSlot ['0'] = ""
-showSlot s = "{" ++ s ++ "}"
-
 showLocation :: Config -> TreeLocation -> String
 showLocation c Installed        =  " (installed)"
 showLocation c (Provided f)     =  " (provided in " ++ f ++ ")"

@@ -48,12 +48,24 @@ data PVS       =  PVS
   deriving (Show,Eq,Ord)
 
 showPV     ::  PV -> String
+showP      ::  P -> String
+showPS     ::  PS -> String
+showPVS    ::  PVS -> String
 getPV      ::  String -> PV
 getP       ::  String -> P
 
 showPV        (PV cat pkg ver)  =  cat ++ "/" ++ pkg ++ "-" ++ showVersion ver
 showEbuildPV  (PV cat pkg ver)  =  cat ./. pkg ./. pkg ++ "-" ++ showVersion ver ++
                                    ".ebuild"
+showP         (P cat pkg)       =  cat ++ "/" ++ pkg
+showPS        (PS cat pkg slot) =
+    cat ++ "/" ++ pkg ++ showSlot slot
+showPVS       (PVS cat pkg ver slot) =
+    cat ++ "/" ++ pkg ++ "-" ++ showVersion ver ++ showSlot slot
+
+showSlot   ::  String -> String
+showSlot ['0'] = ""
+showSlot slot = "{" ++ slot ++ "}"
 
 getPV xs      =  case parsePV xs of
                    Left   e  ->
