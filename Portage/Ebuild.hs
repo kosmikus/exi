@@ -279,9 +279,9 @@ makeCacheEntry cfg pt pv@(PV cat pkg ver) =
         profileDirs <- getProfileDirs
 
         -- version without revision
-        let ver           =  showVersion (stripRev (version pv))
+        let ver           =  showVersion (stripRev (verPV pv))
         -- only the revision
-        let rev           =  getRev (version pv)
+        let rev           =  getRev (verPV pv)
 
         -- processing the path
         path     <-  catch (getEnv "PATH") (const $ return "")
@@ -310,7 +310,7 @@ makeCacheEntry cfg pt pv@(PV cat pkg ver) =
                  ("PN",              pkg),
                  ("PV",              ver),
                  ("PR",              showRevPR rev),
-                 ("PVR",             showVersion (version pv)),
+                 ("PVR",             showVersion (verPV pv)),
                  ("SLOT",            ""),
                  ("PATH",            path),
                  ("BUILD_PREFIX",    buildPrefix),

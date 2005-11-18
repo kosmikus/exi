@@ -41,7 +41,7 @@ data Version'  =  Version'  [Int]
 projectVersion :: Version -> Version'
 projectVersion (Version ver c suf rev _) = Version' ver c suf rev
 
-data Suffix   =  Alpha Int | Beta Int | Pre Int | RC Int | Normal | P Int
+data Suffix   =  Alpha Int | Beta Int | Pre Int | RC Int | Normal | P_ Int
   deriving (Eq,Ord)
 
 instance Show Version where
@@ -71,7 +71,7 @@ showSuffix (Beta n)   =  "_beta"  ++ showPos n
 showSuffix (Pre n)    =  "_pre"   ++ showPos n
 showSuffix (RC n)     =  "_rc"    ++ showPos n
 showSuffix Normal     =  ""
-showSuffix (P n)      =  "_p"     ++ showPos n
+showSuffix (P_ n)     =  "_p"     ++ showPos n
 
 showPos :: Int -> String
 showPos 0 = ""
@@ -123,7 +123,7 @@ readSufType  =  choice [
                           liftM (\x -> (Beta,   x)) (try $ string "beta" ),
                           liftM (\x -> (Pre,    x)) (try $ string "pre"  ),
                           liftM (\x -> (RC,     x)) (try $ string "rc"   ),
-                          liftM (\x -> (P,      x)) (try $ string "p"    )
+                          liftM (\x -> (P_,     x)) (try $ string "p"    )
                        ]
 
 readRev      =  option (0,        "")  (  do  rr      <- string "-r"

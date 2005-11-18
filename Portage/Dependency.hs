@@ -31,8 +31,8 @@ import Portage.Use
 data DepAtom  =  DepAtom DepNeg DepRev DepMod Category Package DepVer
   deriving (Eq,Ord)
 
-catpkgFromDepAtom :: DepAtom -> (Category, Package)
-catpkgFromDepAtom (DepAtom _ _ _ cat pkg _) = (cat,pkg)
+pFromDepAtom :: DepAtom -> P
+pFromDepAtom (DepAtom _ _ _ cat pkg _) = P cat pkg
 
 data DepVer   =  NoVer
               |  DepVer Version DepAst

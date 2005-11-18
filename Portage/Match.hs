@@ -33,7 +33,7 @@ isInTree :: DepAtom -> Tree -> Bool
 isInTree d t = not . null . filterMaskedVariants $ matchDepAtomTree d t
 
 matchDepAtomVariant :: DepAtom -> Variant -> Bool
-matchDepAtomVariant d (Variant m _) = matchDepAtomVersion d (version . pv $ m)
+matchDepAtomVariant d (Variant m _) = matchDepAtomVersion d (verPV . pv $ m)
 
 matchDepAtomVersion :: DepAtom -> Version -> Bool
 matchDepAtomVersion (DepAtom True a b c d e) v

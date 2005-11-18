@@ -294,9 +294,9 @@ buildGraphForOr ds@(dt:_)  =
 
 isInstalled :: PortageConfig -> DepAtom -> Bool
 isInstalled pc da =
-    let  (cat,pkg)  =  catpkgFromDepAtom da
-         t          =  itree pc
-    in   case selectInstalled cat pkg (findVersions t da) of
+    let  p  =  pFromDepAtom da
+         t  =  itree pc
+    in   case selectInstalled p (findVersions t da) of
            Accept v  ->  True
            _         ->  False
 
@@ -305,10 +305,10 @@ buildGraphForDepAtom da =
     do  pc  <-  gets pconfig
         g   <-  gets graph
         ls  <-  gets labels
-        let  s          =  strategy pc
-             t          =  itree pc
-             (cat,pkg)  =  catpkgFromDepAtom da
-        case sselect s cat pkg (findVersions t da) of
+        let  s  =  strategy pc
+             t  =  itree pc
+             p  =  pFromDepAtom da
+        case sselect s p (findVersions t da) of
           Reject f -> return []  -- fail (show f)
           Accept v@(Variant m e)  ->  
             let  avail      =  E.isAvailable (location m)  -- installed or provided?
