@@ -3,6 +3,7 @@ module Main where
 import System.Environment
 import Data.Graph.Inductive hiding (context)
 import qualified Data.Map as M
+import Data.Maybe (fromJust)
 import Control.Monad.State
 
 import Portage.Graph
@@ -37,11 +38,20 @@ pretend' b v d =
         when v $ putStrLn ""
         putStr $ (if v then unlines . map showProgressLong else concatMap showProgressShort) $ fst fs
         putStrLn $ "\nGraph complete: "
-        let mergelist = postorderF $ dffWith lab' [0] $ graph $ snd $ fs
+        let gr = graph $ snd $ fs
+        let mergelist = postorderF $ dffWith lab' [0] $ gr
         putStr $ unlines $ map show $ mergelist
         putStrLn $ "\nShort version: "
         putStr $ unlines  $  map (showAction (config x)) 
                           $  filter (\ a -> case a of Build _ -> True; _ -> False) $ mergelist
+        -- preliminary; should be only on the graph reachable from Top:
+        let sccs = scc $ gr
+        let cycles = filter (\x -> length x > 1) sccs
+        when (not (null cycles)) $
+            do
+                putStrLn "The graph has cycles:" 
+                putStr $ unlines $ map (unlines . map (show . fromJust . lab gr)) cycles
+        return gr
 
 showProgressLong (LookAtEbuild pv o) = showPV pv ++ " " ++ showOriginLong o
 showProgressLong (Message s)         = s
