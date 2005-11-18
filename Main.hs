@@ -12,6 +12,8 @@ import Portage.PortageConfig
 import Portage.Strategy
 import Portage.Ebuild hiding (rdepend)
 import Portage.Package
+import Portage.Tree
+import Portage.Config
 
 main = do  [a] <- getArgs
            main' a
@@ -76,3 +78,9 @@ up  = pretend' True  False
 pv  = pretend' False True
 upv = pretend' True  True
 
+
+-- expand function, too slow:
+expand :: Package -> Tree -> [P]
+expand p t =  M.foldWithKey 
+              (\c m r ->  if p `elem` M.keys m 
+                          then (P c p : r) else r) [] (ebuilds t)
