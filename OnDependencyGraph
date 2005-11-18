@@ -128,28 +128,3 @@ Data.Graph.Inductive has a type Path, which is a list of
 nodes. We can compute our representation from this list
 of nodes.
 
-
-
-
-  * for all PDEPENDs w of v, there are dependencies from
-    "Available v" to "Build w"
-  * for all blocking DEPENDs w of v, there are dependencies
-    from "Unblocking w" to "Unblocked v" (for ALL variants
-    in the trees that w applies to)
-  * for all blocking RDEPENDs w of v, there are dependencies
-    from "Unavailable w" to "Unblocking v" (for ALL variants
-    in the trees that w applies to)
-
-
-Only variants with "Available" nodes are really present in the graph.
-
-All other nodes can be freely inserted into the graph, but when adding
-new "Available" nodes, we have to watch out for cycles and slot conflicts.
-
-If we have a slot conflict, then we can either try to modify the new
-variant (easy), or we have to modify the old variant. We're looking for
-another variant of the same slot which is not yet blocked (by dependencies
-on the unavailability). When trying the new variant, we automatically
-invalidate the old by adding a dependency on its unavailabilty. This
-backtracking is costly, though, therefore it should be part of the
-strategy.
