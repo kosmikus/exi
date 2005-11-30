@@ -2,6 +2,133 @@
 Some ideas about dependency graph generation
 ============================================
 
+Ok, here's the new version.
+
+Each variant is represented by a number of nodes in the dependency
+graph. These nodes are called the "history" of the variant in the
+graph. Variants can have different forms of histories, reflecting
+different processes that happen during the resolution of the
+dependency graph.
+
+For instance, a variant can have an "install" history if it isn't
+available in the beginning, but will be pulled into the system. It
+can have an "available" history if it is available and will remain
+so. It can have a "remove" history if it is available but will be
+removed.
+
+An "upgrade" from one variant to another is, in essence, a combination
+of a "remove" history for the old variant with an "install" history
+for the new variant.
+
+One design principle is that problems should appear as cycles in the
+dependency graph. In the end, we can check if the graph is cycle-free
+and if it is, we can go ahead and perform the resulting actions.
+
+Aha, actions. Actions such as "fetching", "building", "merging",
+"unmerging", are attached to some of the nodes.
+
+
+= Representation =
+
+For easy access, we should retain the histories that are stored in the
+graph.
+
+> histories :: Map PS History
+>
+> History = Install Version
+>         | Available Version
+>         | Remove Version
+>         | Upgrade Version Version  -- can also be used for downgrades
+
+We should also have a direct map to look up nodes.
+
+> nodes :: Map Node Int
+>
+> Node = (Action, PVS)  -- or PV?
+
+
+
+= Actions =
+
+In principle, we require the following sorts of nodes:
+
+Built: a variant is built
+Available: a variant is available for use
+Removed: a variant is no longer on the system
+
+Possibly, we require Pre-Available to resolve PDEPEND cycles.
+
+In addition, we require the following two meta-nodes:
+
+Top: This is the goal.
+Bottom: This is what's present before we start.
+
+
+
+= "Install" history =
+
+An install history looks as follows
+
+
+   /- X.R ---\
+   |         |
+   v         v
+  Top ----> X.A ----> X.B ----> Bot
+
+Explanation:
+
+X.B --> Bot: The package can only be built if we have a consistent
+             status quo.
+X.A --> X.B: The package cannot be used before it isn't built.
+Top --> X.A: We *want* X on the system in the end.
+X.R --> Top: If we have Top --> X.R somehow, this is a desired
+             conflict.
+X.R --> X.A: We cannot remove X before it isn't available.
+
+
+
+= "Available" history =
+
+   /- X.R ---\
+   |         |
+   v         v
+  Top ----> X.A <---- Bot
+           =X.B
+
+Bot --> X.A: The package is available before we start.
+X.A === X.B: Building doesn't make sense. The package is already
+             there.
+Top --> X.A: We want X on the system in the end.
+X.R --> Top: If we have Top --> X.R somehow, this is a desired
+             conflict.
+X.R --> X.A: We cannot remove X before it isn't available.
+
+
+
+= "Remove" history =
+
+  Top ----> X.R ----> X.A <---- Bot
+                     =X.B
+
+Bot --> X.A: The package is available before we start.
+X.A === X.B: Building doesn't make sense. The package is already
+             there.
+X.R --> X.A: We cannot remove X before is isn't available.
+Top --> X.R: We want X removed in the end.
+
+
+
+= Dependencies =
+
+For X DEPENDs on Y, add X.B --> Y.A, and Y.R --> X.B .
+For X RDEPENDs on Y, add X.A --> Y.A, and Y.R --> X.R .
+
+PDEPENDs necessarily create cycles.
+
+
+
+Old stuff:
+
 The dependency graph contains nodes that are Actions, and
 edges that represent Dependencies.
 
