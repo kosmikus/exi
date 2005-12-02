@@ -79,6 +79,9 @@ data EbuildMeta =  EbuildMeta
                       }
   deriving (Show,Eq)
 
+pvs :: Variant -> PVS
+pvs v = addSlot (pv . meta $ v) (slot . ebuild $ v)
+
 data EbuildOrigin = FromCache | CacheRegen | EclassDummy | FromInstalledDB | IsProvided
   deriving (Show,Eq)
 

@@ -47,6 +47,9 @@ data PVS       =  PVS
                     }
   deriving (Show,Eq,Ord)
 
+addSlot    ::  PV -> String -> PVS
+addSlot (PV c p v) s = PVS c p v s
+
 showPV     ::  PV -> String
 showP      ::  P -> String
 showPS     ::  PS -> String
