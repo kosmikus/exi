@@ -50,6 +50,9 @@ data PVS       =  PVS
 addSlot    ::  PV -> String -> PVS
 addSlot (PV c p v) s = PVS c p v s
 
+extractPS  ::  PVS -> PS
+extractPS (PVS c p v s) = PS c p s
+
 showPV     ::  PV -> String
 showP      ::  P -> String
 showPS     ::  PS -> String

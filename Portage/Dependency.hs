@@ -31,6 +31,9 @@ import Portage.Use
 data DepAtom  =  DepAtom DepNeg DepRev DepMod Category Package DepVer
   deriving (Eq,Ord)
 
+blocking :: DepAtom -> Bool
+blocking (DepAtom b _ _ _ _ _) = b
+
 pFromDepAtom :: DepAtom -> P
 pFromDepAtom (DepAtom _ _ _ cat pkg _) = P cat pkg
 
