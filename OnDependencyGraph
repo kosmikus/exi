@@ -93,11 +93,11 @@ X.R --> X.A: We cannot remove X before it isn't available.
    |         |
    v         v
   Top ----> X.A <---- Bot
-           =X.B
+           
+            X.B <---- Bot
 
 Bot --> X.A: The package is available before we start.
-X.A === X.B: Building doesn't make sense. The package is already
-             there.
+Bot --> X.B: Dito for building.
 Top --> X.A: We want X on the system in the end.
 X.R --> Top: If we have Top --> X.R somehow, this is a desired
              conflict.
@@ -108,11 +108,11 @@ X.R --> X.A: We cannot remove X before it isn't available.
 = "Remove" history =
 
   Top ----> X.R ----> X.A <---- Bot
-                     =X.B
+                      
+                      X.B <---- Bot
 
 Bot --> X.A: The package is available before we start.
-X.A === X.B: Building doesn't make sense. The package is already
-             there.
+Bot --> X.B: Dito for building.
 X.R --> X.A: We cannot remove X before is isn't available.
 Top --> X.R: We want X removed in the end.
 
@@ -120,11 +120,68 @@ Top --> X.R: We want X removed in the end.
 
 = Dependencies =
 
-For X DEPENDs on Y, add X.B --> Y.A, and Y.R --> X.B .
-For X RDEPENDs on Y, add X.A --> Y.A, and Y.R --> X.R .
+For X DEPENDs on Y, add X.B --> Y.A, and Y.R --> X.B.
+For X RDEPENDs on Y, add X.A --> Y.A, and Y.R --> X.R.
 
 PDEPENDs necessarily create cycles.
+If X PDEPENDS on Y, but Y DEPENDs on X (which it usually
+does), then Y cannot assume that X is completely usable before
+Y is installed. After all, for X to be completely usable Y
+would have to be installed already.
 
+For X PDEPENDs on Y, add X.A --> Y.A, and Y.R --> X.R.
+
+
+= Blockers =
+
+For X DEPENDs on !Y, add Y.B --> X.B.
+For X RDEPENDs on !Y, add Y.B --> X.R.
+
+
+Are these sufficient?
+
+Yes, I think so: if X is installed, and Y available, and we have
+X RDEPEND !Y, we get the cycle:
+
+  Top --> X.A --> X.B --> Bot --> Y.B ==> X.R --> Top
+
+Nice, huh?
+
+What if X is installed, Y is available, and we have
+X DEPEND !Y?
+
+  Top --> X.A --> X.B --> Bot --> Y.B ==> X.B
+
+Still a conflict, but we could do better (remove Y, but
+not without reverse dependency handling).
+
+What if X is installed, Y is installed, and we have
+X DEPEND !Y?
+
+  Top --> X.A --> X.B --> Bot
+   |               ^       ^
+   |               |       |
+   \----> Y.A --> Y.B -----/
+
+Ok, but X must be built before Y.
+
+
+
+= Histories vs. dependencies =
+
+If we take dependencies into account, histories can be simplified.
+Essentially, there are two histories only:
+
+~ "Available" history (for packages that are available initially)
+
+  X.R ----> X.A <---- Bot
+             =
+            X.B
+
+
+~ "Install" history
+
+  X.R ----> X.A ----> X.B ----> Bot
 
 
 Old stuff:
