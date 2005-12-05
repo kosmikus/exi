@@ -48,7 +48,7 @@ parseMaskByLine f acc facc []                =  []
 
 
 readMaskFile :: FilePath -> IO [Masking]
-readMaskFile f = fmap (parseMask f) (strictReadFile f)
+readMaskFile f = fmap (parseMask f) (strictReadFileIfExists f)
 
 
 globalMask   ::  Config -> IO [Masking]
