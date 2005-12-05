@@ -124,41 +124,51 @@ data DepState =  DepState
                       labels    ::  Map PV NodeMap,
                       active    ::  Map PS PV,
                       counter   ::  Int,
-                      callback  ::  DepAtom -> NodeMap -> GG ()
+                      callback  ::  Callback
                    }
 
+type Callback = DepAtom -> NodeMap -> GG [Progress]
 type NodeMap = (Int,Int,Int)
 
 available, built, removed :: NodeMap -> Int
-available  (a,b,r) = a
-built      (a,b,r) = b
-removed    (a,b,r) = r
+available  (b,a,r) = a
+built      (b,a,r) = b
+removed    (b,a,r) = r
 
 top = 0
 bot = 1
 
 
-depend :: NodeMap -> DepAtom -> NodeMap -> GG ()
+depend :: NodeMap -> DepAtom -> NodeMap -> GG [Progress]
 depend source da target
     | blocking da =
-        modifyGraph (insEdges [  (built target,built source,Depend True da) ])
+        do
+            modifyGraph (insEdges [  (built target,built source,Depend True da) ])
+            return [AddEdge (built target) (built source) (Depend True da)]
     | otherwise =
-        modifyGraph (insEdges [  (built source,available target,Depend False da),
-                                 (removed target,built source,Depend True da) ])
+        do
+            modifyGraph (insEdges [  (built source,available target,Depend False da),
+                                     (removed target,built source,Depend True da) ])
+            return [AddEdge (built source) (available target) (Depend False da)]
 
-rdepend :: NodeMap -> DepAtom -> NodeMap -> GG ()
+rdepend :: NodeMap -> DepAtom -> NodeMap -> GG [Progress]
 rdepend source da target
     | blocking da =
-        modifyGraph (insEdges [  (built target,removed source,RDepend True da) ])
+        do
+           modifyGraph (insEdges [  (built target,removed source,RDepend True da) ])
+           return [AddEdge (built target) (removed source) (RDepend True da)]
     | otherwise =
-        modifyGraph (insEdges [  (available source,available target,RDepend False da),
-                                 (removed target,removed source,RDepend True da) ])
+        do
+           modifyGraph (insEdges [  (available source,available target,RDepend False da),
+                                    (removed target,removed source,RDepend True da) ])
+           return [AddEdge (available source) (available target) (RDepend False da)]
 
-pdepend :: NodeMap -> DepAtom -> NodeMap -> GG ()
+pdepend :: NodeMap -> DepAtom -> NodeMap -> GG [Progress]
 pdepend = rdepend
                                   
 
 data Progress =  LookAtEbuild  PV EbuildOrigin
+              |  AddEdge       Node Node DepType
               |  Message       String
   deriving (Eq,Show)
 
@@ -297,20 +307,39 @@ isInstalled pc da =
            Accept v  ->  True
            _         ->  False
 
+withLocUse :: [UseFlag] -> GG a -> GG a
+withLocUse luse' g =
+    do
+        luse <- gets dlocuse
+        modify (\s -> s { dlocuse = luse' })
+        r <- g
+        modify (\s -> s { dlocuse = luse })
+        return r
+
+withCallback :: Callback -> GG a -> GG a
+withCallback cb' g =
+    do
+        cb <- gets callback
+        modify (\s -> s { callback = cb' })
+        r <- g
+        modify (\s -> s { callback = cb })
+        return r
+
 buildGraphForDepAtom :: DepAtom -> GG [Progress]
 buildGraphForDepAtom da
     | blocking da =
         do  -- for blocking dependencies, we have to consider all matching versions
             pc  <-  gets pconfig
-            let  t  =  itree pc
+            let  s  =  strategy pc
+                 t  =  itree pc
             cb  <-  gets callback
             p   <-  mapM
                       (\v -> do
-                                 n <- insNewNode v True   -- TODO!
-                                 cb da n
-                                 return (LookAtEbuild (pv (meta v)) (origin (meta v))))
+                                 n <- insNewNode v (sstop s v)
+                                 p' <- cb da n
+                                 return (LookAtEbuild (pv (meta v)) (origin (meta v)) : p'))
                       (findVersions t (unblock da))
-            return ((Message $ "blocker " ++ show da) : p)
+            return ((Message $ "blocker " ++ show da) : concat p)
     | otherwise =
         do  pc  <-  gets pconfig
             g   <-  gets graph
@@ -331,22 +360,22 @@ buildGraphForDepAtom da
                                         pdeps    =  E.pdepend  e
                                         luse     =  mergeUse (use (config pc)) (locuse m)
                                    in   -- set new local USE context
-                                        withState (\s -> s { dlocuse = luse }) $
+                                        withLocUse luse $
                                         do
                                             -- insert nodes for v, and activate
                                             n <- insNewNode v stop
                                             activate v
                                             -- insert edges according to current state
                                             cb <- gets callback
-                                            cb da n
+                                            p0 <- cb da n
                                             if already || stop
-                                              then return [LookAtEbuild (pv (meta v)) (origin (meta v))]
+                                              then return ([LookAtEbuild (pv (meta v)) (origin (meta v))] ++ p0)
                                               else do
                                                        -- add deps to graph
-                                                       p1 <- withState (\s -> s { callback = depend n }) $ buildGraphForUDepString deps
+                                                       p1 <- withCallback (depend n) $ buildGraphForUDepString deps
                                                        -- add rdeps to graph
-                                                       p2 <- withState (\s -> s { callback = rdepend n }) $ buildGraphForUDepString rdeps
+                                                       p2 <- withCallback (rdepend n) $ buildGraphForUDepString rdeps
                                                        -- add pdeps to graph
-                                                       p3 <- withState (\s -> s { callback = pdepend n }) $ buildGraphForUDepString pdeps
-                                                       return ([LookAtEbuild (pv (meta v)) (origin (meta v))] ++ p1 ++ p2 ++ p3)
+                                                       p3 <- withCallback (pdepend n) $ buildGraphForUDepString pdeps
+                                                       return ([LookAtEbuild (pv (meta v)) (origin (meta v))] ++ p0 ++ p1 ++ p2 ++ p3)
 

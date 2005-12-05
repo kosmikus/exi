@@ -57,9 +57,11 @@ pretend' b v d =
         return gr
 
 showProgressLong (LookAtEbuild pv o) = showPV pv ++ " " ++ showOriginLong o
+showProgressLong (AddEdge n1 n2 d)   = "added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d
 showProgressLong (Message s)         = s
 
 showProgressShort (LookAtEbuild pv o) = showOriginShort o
+showProgressShort (AddEdge _ _ _)     = ""
 showProgressShort (Message s)         = ""
 
 showOriginLong FromCache         =  "(from cache)"
