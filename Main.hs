@@ -30,10 +30,11 @@ pretend' b v d =
                               {
                                  pconfig   =  x,
                                  dlocuse   =  [],
-                                 graph     =  insNode (0,Top) empty,
+                                 graph     =  insNodes [(top,Top),(bot,Bot)] empty,
                                  labels    =  M.empty,
-                                 counter   =  1,
-                                 dcontext  =  (rdepend 0) { source = 0 }
+                                 active    =  M.empty,
+                                 counter   =  max top bot + 1,
+                                 callback  =  rdepend (top,top,top)
                               }
         let fs = runState (buildGraphForUDepString (getDepString d)) initialState 
         putStr $ "Calculating dependencies: "
@@ -45,7 +46,7 @@ pretend' b v d =
         putStr $ unlines $ map show $ mergelist
         putStrLn $ "\nShort version: "
         putStr $ unlines  $  map (showAction (config x)) 
-                          $  filter (\ a -> case a of Build _ -> True; _ -> False) $ mergelist
+                          $  filter (\ a -> case a of Built _ -> True; _ -> False) $ mergelist
         -- preliminary; should be only on the graph reachable from Top:
         let sccs = scc $ gr
         let cycles = filter (\x -> length x > 1) sccs
@@ -73,10 +74,10 @@ showOriginShort EclassDummy      =  "E"
 showOriginShort FromInstalledDB  =  "i"
 showOriginShort IsProvided       =  "p"
 
-p   = pretend' False False
-up  = pretend' True  False
-pv  = pretend' False True
-upv = pretend' True  True
+ep   = pretend' False False
+eup  = pretend' True  False
+epv  = pretend' False True
+eupv = pretend' True  True
 
 
 -- expand function, too slow:

@@ -97,25 +97,34 @@ showAction c (Removed      v) = "D  " ++ showVariant c v
 showAction c Top              = "/"
 showAction c Bot              = "_"
 
-isAvailable :: Variant -> Map PS NodeInfo -> Bool
-isAvailable v m =  case M.lookup (extractPS . pvs $ v) m of
-                     Nothing  ->  False
-                     Just _   ->  True
+isActive :: Variant -> Map PS PV -> Bool
+isActive v m =  case M.lookup (extractPS . pvs $ v) m of
+                  Nothing   ->  False
+                  Just pv'  ->  (pv . meta $ v) == pv'
+
+activate :: Variant -> GG ()
+activate v = 
+    do  a   <-  gets active
+        ls  <-  gets labels
+        let ps' = extractPS . pvs $ v
+        case M.lookup (extractPS . pvs $ v) a of
+          Nothing   ->  do
+                            let pv' = pv . meta $ v
+                            modify (\s -> s { active = M.insert ps' pv' a })
+                            modifyGraph ( insEdge (top, available (ls M.! pv'), Meta) )
+          Just pv'
+            | pv' == (pv . meta $ v)  ->  return ()
+            | otherwise               ->  fail "depgraph slot conflict"
 
 data DepState =  DepState
                    {
                       pconfig   ::  PortageConfig,
                       dlocuse   ::  [UseFlag],
                       graph     ::  Graph,
-                      labels    ::  Map PS NodeInfo,
+                      labels    ::  Map PV NodeMap,
+                      active    ::  Map PS PV,
                       counter   ::  Int,
                       callback  ::  DepAtom -> NodeMap -> GG ()
-                   }
-
-data NodeInfo =  NodeInfo
-                   {  
-                      nodes    ::  NodeMap,
-                      npv      ::  PV
                    }
 
 type NodeMap = (Int,Int,Int)
@@ -176,13 +185,10 @@ newNode =
 insNewNode :: Variant -> Bool -> GG NodeMap
 insNewNode v a =
     do  ls <- gets labels
-        let ps' = extractPS (pvs v)
-        case M.lookup ps' ls of
+        case M.lookup (pv . meta $ v) ls of
           Nothing | a && (E.isAvailable . location $ meta v)  ->  insAvailableHistory v
                   | otherwise                                 ->  insInstallHistory v
-          Just (NodeInfo nm pv')
-                  | pv' == pv (meta v)  ->  return nm
-                  | otherwise           ->  fail "depgraph creation conflict" -- TODO, not fail here
+          Just nm -> return nm
 
 insAvailableHistory :: Variant -> GG NodeMap
 insAvailableHistory v =
@@ -192,10 +198,9 @@ insAvailableHistory v =
              ps'  =  extractPS (pvs v)
              pv'  =  pv . meta $ v
              nm   =  (a,a,r)
-        registerNode ps' nm pv'
+        registerNode pv' nm
         modifyGraph (  insEdges [ (r,a,Meta),
                                   (bot,a,Meta),
-                                  (top,a,Meta),  -- temporary
                                   (r,top,Meta) ] .
                        insNodes [ (a,Available v),
                                   (r,Removed v) ])
@@ -210,19 +215,18 @@ insInstallHistory v =
              ps'  =  extractPS (pvs v)
              pv'  =  pv . meta $ v
              nm   =  (b,a,r)
-        registerNode ps' nm pv'
+        registerNode pv' nm
         modifyGraph (  insEdges [ (r,a,Meta),
                                   (a,b,Meta),
                                   (b,bot,Meta),
-                                  (top,a,Meta),  -- temporary
                                   (r,top,Meta) ] .
                        insNodes [ (b,Built v),
                                   (a,Available v),
                                   (r,Removed v) ])
         return nm
 
-registerNode :: PS -> NodeMap -> PV -> GG ()
-registerNode ps nm pv = modify (\s -> s { labels = M.insert ps (NodeInfo nm pv) (labels s) })
+registerNode :: PV -> NodeMap -> GG ()
+registerNode pv nm = modify (\s -> s { labels = M.insert pv nm (labels s) })
 
 -- | Builds a graph for an uninterpreted dependency string,
 --   i.e., a dependency string containing USE flags.
@@ -294,23 +298,35 @@ isInstalled pc da =
            _         ->  False
 
 buildGraphForDepAtom :: DepAtom -> GG [Progress]
-buildGraphForDepAtom da =
-    do  pc  <-  gets pconfig
-        g   <-  gets graph
-        ls  <-  gets labels
-        let  s  =  strategy pc
-             t  =  itree pc
-             p  =  pFromDepAtom da
-        case sselect s p (findVersions t da) of
-          Reject f -> return []  -- fail (show f)
-          Accept v@(Variant m e)  ->  
-            let  avail      =  E.isAvailable (location m)  -- installed or provided?
-                 already    =  isAvailable v ls
-                 stop       =  avail && sstop s v 
-                                 -- if it's an installed ebuild, we can decide to stop here!
-            in   if already
-                   then  return []
-                   else            let  rdeps    =  E.rdepend  e
+buildGraphForDepAtom da
+    | blocking da =
+        do  -- for blocking dependencies, we have to consider all matching versions
+            pc  <-  gets pconfig
+            let  t  =  itree pc
+            cb  <-  gets callback
+            p   <-  mapM
+                      (\v -> do
+                                 n <- insNewNode v True   -- TODO!
+                                 cb da n
+                                 return (LookAtEbuild (pv (meta v)) (origin (meta v))))
+                      (findVersions t (unblock da))
+            return ((Message $ "blocker " ++ show da) : p)
+    | otherwise =
+        do  pc  <-  gets pconfig
+            g   <-  gets graph
+            ls  <-  gets labels
+            a   <-  gets active
+            let  s  =  strategy pc
+                 t  =  itree pc
+                 p  =  pFromDepAtom da
+            case sselect s p (findVersions t da) of
+              Reject f -> return []  -- fail (show f)
+              Accept v@(Variant m e)  ->  
+                let  avail      =  E.isAvailable (location m)  -- installed or provided?
+                     already    =  isActive v a
+                     stop       =  avail && sstop s v 
+                                     -- if it's an installed ebuild, we can decide to stop here!
+                in                 let  rdeps    =  E.rdepend  e
                                         deps     =  E.depend   e
                                         pdeps    =  E.pdepend  e
                                         luse     =  mergeUse (use (config pc)) (locuse m)
@@ -319,10 +335,11 @@ buildGraphForDepAtom da =
                                         do
                                             -- insert nodes for v, and activate
                                             n <- insNewNode v stop
+                                            activate v
                                             -- insert edges according to current state
                                             cb <- gets callback
                                             cb da n
-                                            if stop
+                                            if already || stop
                                               then return [LookAtEbuild (pv (meta v)) (origin (meta v))]
                                               else do
                                                        -- add deps to graph

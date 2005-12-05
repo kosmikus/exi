@@ -113,9 +113,9 @@ data Variant =  Variant
 filterMaskedVariants :: [Variant] -> [Variant]
 filterMaskedVariants = filter (\(Variant m _) -> null (masked m))
 
-getEbuild :: String -> Ebuild
-getEbuild e  |  length l <= 14  =  error "getEbuild: corrupted ebuild (too short)"
-             |  otherwise       =  Ebuild  
+getEbuild :: FilePath -> String -> Ebuild
+getEbuild f e  |  length l <= 14  =  error $ "getEbuild: corrupted ebuild cache " ++ f ++ " (too short by " ++ show (14 - length l) ++ " lines)"
+               |  otherwise       =  Ebuild  
                                            (getDepString dep)
                                            (getDepString rdep)
                                            slt
@@ -219,7 +219,7 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                               do
                                   putStrLn ("making eclass dummy for " ++ showPV pv)
                                   makePortageFile eclassesFile
-                                  c <- fmap getEbuild (strictReadFile cacheFile)
+                                  c <- fmap (getEbuild cacheFile) (strictReadFile cacheFile)
                                   let eclasses  =  inherited c
                                   let efiles    =  
                                         map  (\x -> eclassDir pt ./. (x ++ ".eclass"))
@@ -238,7 +238,7 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                                return (all (\(e,m) -> mtime (ecs M.! e) == m) eclasses)
         -- read this only once you know the cache is ok
         cacheContents  <-  unsafeInterleaveIO $
-                           fmap getEbuild (strictReadFile cacheFile)
+                           fmap (getEbuild cacheFile) (strictReadFile cacheFile)
         let refreshCache   =  do
                                   putStrLn ("cache refresh for " ++ showPV pv)
                                   makePortageFile cacheFile
