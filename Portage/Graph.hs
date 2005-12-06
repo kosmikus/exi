@@ -12,6 +12,7 @@ module Portage.Graph
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.List
+import Data.Maybe (fromJust)
 import Data.Graph.Inductive hiding (version, Graph(),NodeMap())
 import Control.Monad.Identity
 import Control.Monad.State
@@ -79,6 +80,12 @@ data Action  =  Available    Variant
              |  Removed      Variant  -- ^ mainly for the future, reverse deps
              |  Top
              |  Bot
+
+getVariant :: Action -> Maybe Variant
+getVariant (Available v)  =  Just v
+getVariant (Built v)      =  Just v
+getVariant (Removed v)    =  Just v
+getVariant _              =  Nothing
 
 -- | More efficient comparison for actions.
 instance Eq Action where
@@ -203,7 +210,10 @@ insNewNode v a =
     do  ls <- gets labels
         case M.lookup (pv . meta $ v) ls of
           Nothing | a && (E.isAvailable . location $ meta v)  ->  insAvailableHistory v
-                  | otherwise                                 ->  insInstallHistory v
+                  | otherwise                                 ->  
+                      case location . meta $ v of
+                        PortageTree _ (Linked v') -> insUpgradeHistory v' v
+                        _                         -> insInstallHistory v
           Just nm -> return nm
 
 insAvailableHistory :: Variant -> GG NodeMap
@@ -222,13 +232,38 @@ insAvailableHistory v =
                                   (r,Removed v) ])
         return nm
 
+-- | An upgrade history can also be a downgrade history, or even a recompilation
+--   history. The only common element is that one variant of one package is
+--   replaced by another variant of the same package.
+insUpgradeHistory :: Variant -> Variant -> GG NodeMap
+insUpgradeHistory v v' =
+    do  n <- stepCounter 4
+        let  a    =  n
+             b'   =  n + 1
+             r    =  b'
+             a'   =  n + 2
+             r'   =  n + 3
+             nm   =  (a,a,r)
+             nm'  =  (b',a',r')
+        registerNode (pv . meta $ v) nm
+        registerNode (pv . meta $ v') nm'
+        modifyGraph (  insEdges [ (r',a',Meta),
+                                  (a',b',Meta),
+                                  (r,a,Meta),
+                                  (bot,a,Meta),
+                                  (r',top,Meta) ] .
+                       insNodes [ (b',Built v'),
+                                  (a',Available v'),
+                                  (r',Removed v'),
+                                  (a,Available v) ])
+        return nm'
+
 insInstallHistory :: Variant -> GG NodeMap
 insInstallHistory v =
     do  n <- stepCounter 3
         let  b    =  n
              a    =  n + 1
              r    =  n + 2
-             ps'  =  extractPS (pvs v)
              pv'  =  pv . meta $ v
              nm   =  (b,a,r)
         registerNode pv' nm
@@ -384,4 +419,49 @@ buildGraphForDepAtom da
                                                        -- add pdeps to graph
                                                        p3 <- withCallback (pdepend n) $ buildGraphForUDepString pdeps
                                                        return ([LookAtEbuild (pv (meta v)) (origin (meta v))] ++ p0 ++ p1 ++ p2 ++ p3)
+
+
+-- Types of cycles:
+-- * PDEPEND cycle. All cycles that contain PDEPEND edges. We redirect PDEPEND
+--   edges to the Built state.
+resolveCycle :: [Node] -> GG [Progress]
+resolveCycle cnodes = 
+    do  g <- gets graph
+        let cedges = zipWith findEdge  (map (out g) cnodes)
+                                       (tail cnodes ++ [head cnodes])
+        (b,r) <- sumR $ map resolvePDependCycle (filter isPDepend cedges)
+        return r
+  where
+    resolvePDependCycle :: LEdge DepType -> GG (Bool,[Progress])
+    resolvePDependCycle (s,t,d) =
+        do
+            ls <- gets labels
+            g <- gets graph
+            case getVariant (fromJust (lab g t)) of
+              Nothing  ->  return (False,[])
+              Just v   ->  let  nm = ls M.! (pv . meta $ v)
+                           in   if t == available nm
+                                  then do  modifyGraph (  insEdge (s,built nm,d) .
+                                                          delEdge (s,t) )
+                                           return (True,[Message "resolved PDEPEND cycle"])
+                                  else return (False,[])
+
+(>>.) :: GG (Bool,[a]) -> GG (Bool,[a]) -> GG (Bool,[a])
+f >>. g = do  (b,r) <- f
+              if b  then return (b,r)
+                    else do  (c,r') <- g
+                             return (c, r ++ r')
+
+failR :: GG (Bool,[a])
+failR = return (False,[])
+
+sumR :: [GG (Bool,[a])] -> GG (Bool,[a])
+sumR = foldr (>>.) failR
+
+isPDepend :: LEdge DepType -> Bool
+isPDepend (_,_,PDepend _ _)  =  True
+isPDepend _                  =  False
+
+findEdge :: [LEdge b] -> Node -> LEdge b
+findEdge es n = fromJust $ find (\(_,t,_) -> n == t) es
 
