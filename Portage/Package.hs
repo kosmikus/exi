@@ -53,6 +53,9 @@ addSlot (PV c p v) s = PVS c p v s
 extractPS  ::  PVS -> PS
 extractPS (PVS c p v s) = PS c p s
 
+extractP   ::  PV -> P
+extractP (PV c p v) = P c p
+
 showPV     ::  PV -> String
 showP      ::  P -> String
 showPS     ::  PS -> String

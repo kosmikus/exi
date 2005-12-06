@@ -19,8 +19,9 @@ import Control.Monad.State
 import Portage.Tree
 import Portage.Match
 import Portage.Dependency
-import Portage.Ebuild (Variant(..), Ebuild(iuse), EbuildMeta(..), EbuildOrigin(..), TreeLocation(..), Mask(..), pvs)
+import Portage.Ebuild (Variant(..), Ebuild(iuse), EbuildMeta(..), EbuildOrigin(..), TreeLocation(..), Mask(..), Link(..), pvs)
 import qualified Portage.Ebuild as E
+import Portage.Version
 import Portage.Package
 import Portage.PortageConfig
 import Portage.Config
@@ -36,14 +37,19 @@ showVariant cfg (Variant m e)  =  showPV (pv m) ++ showSlot (E.slot e) ++ showLo
                                   ++ " " ++ concatMap hardMask (masked m) ++ unwords (diffUse (mergeUse (use cfg) (locuse m)) (iuse e))
 
 showLocation :: Config -> TreeLocation -> String
-showLocation c Installed        =  " (installed)"
-showLocation c (Provided f)     =  " (provided in " ++ f ++ ")"
-showLocation c (PortageTree t)  =  if portDir c == t then "" else " [" ++ t ++ "]"
+showLocation c Installed          =  " (installed)"
+showLocation c (Provided f)       =  " (provided in " ++ f ++ ")"
+showLocation c (PortageTree t l)  =  showLink l ++
+                                     if portDir c == t then "" else " [" ++ t ++ "]"
+
+showLink :: Link -> String
+showLink NoLink     = ""
+showLink (Linked v) = " [" ++ showVersion (verPV . pv . meta $ v) ++ "]"
 
 showTreeLocation :: TreeLocation -> String
-showTreeLocation Installed        =  "installed packages"
-showTreeLocation (Provided f)     =  "provided packages from " ++ f
-showTreeLocation (PortageTree t)  =  t
+showTreeLocation Installed          =  "installed packages"
+showTreeLocation (Provided f)       =  "provided packages from " ++ f
+showTreeLocation (PortageTree t _)  =  t
 
 hardMask :: Mask -> String
 hardMask (HardMasked f r) = unlines r

@@ -87,13 +87,20 @@ data EbuildOrigin = FromCache | CacheRegen | EclassDummy | FromInstalledDB | IsP
 
 data TreeLocation  =  Installed
                    |  Provided       FilePath               -- ^ in which file?
-                   |  PortageTree    FilePath
+                   |  PortageTree    FilePath Link
   deriving (Show,Eq)
 
 isAvailable :: TreeLocation -> Bool
 isAvailable Installed     =  True
 isAvailable (Provided _)  =  True
 isAvailable _             =  False
+
+-- | The 'Link' is used to link an uninstalled variant to an installed variant
+--   of the same slot. We can thus say whether selecting this variant would be
+--   an up- or a downgrade, and we can compare use flags.
+data Link          =  NoLink
+                   |  Linked  Variant     -- ^ installed variant
+  deriving (Show,Eq)
 
 data Mask          =  KeywordMasked  [UseFlag]              -- ^ reasoning
                    |  HardMasked     FilePath [String]      -- ^ filename and reason

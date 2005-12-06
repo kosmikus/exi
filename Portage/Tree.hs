@@ -28,9 +28,12 @@ import Portage.Shell
 
 data Tree =  Tree
                {
-                  eclasses  ::  Map Eclass EclassMeta,
-                  ebuilds   ::  Map Category (Map Package [Variant])
+                  eclasses  ::  Eclasses,
+                  ebuilds   ::  Ebuilds
                }
+
+type Eclasses  =  Map Eclass EclassMeta
+type Ebuilds   =  Map Category (Map Package [Variant])
 
 -- | Utility function for maps. Updates a map but uses a default if
 --   an updated key is not yet present.
@@ -82,7 +85,7 @@ createInstalledTree cfg =
 createTree  ::  Config                     -- ^ portage configuration
             ->  FilePath                   -- ^ the portage tree
             ->  [Category]                 -- ^ the list of categories
-            ->  Map Eclass EclassMeta      -- ^ final eclass map
+            ->  Eclasses                   -- ^ final eclass map
             ->  IO Tree
 createTree cfg pt cats ecs =  
     do
@@ -90,7 +93,7 @@ createTree cfg pt cats ecs =
         ebuilds' <- fmap M.fromList (mapM categoryEntries cats)
         return (Tree eclasses' ebuilds')
   where
-    getEclasses :: IO (Map Eclass EclassMeta)
+    getEclasses :: IO Eclasses
     getEclasses             =  do
                                    eclasses <- fmap  (  map (\x -> take (length x - 7) x) .
                                                         filter (".eclass" `isSuffixOf`))
@@ -135,7 +138,7 @@ createTree cfg pt cats ecs =
                                    let meta             =  EbuildMeta
                                                              {
                                                                pv        =  pv,
-                                                               location  =  PortageTree pt,
+                                                               location  =  PortageTree pt NoLink,
                                                                masked    =  [],
                                                                locuse    =  [],
                                                                lockey    =  [],
@@ -151,9 +154,7 @@ overlayTree (Tree ec1 eb1) (Tree ec2 eb2) =  Tree  (overlayEclasses  ec1  ec2)
 overlayEclasses :: Map Eclass EclassMeta -> Map Eclass EclassMeta -> Map Eclass EclassMeta
 overlayEclasses  =  M.unionWith (curry snd)
 
-overlayEbuilds ::  Map Category (Map Package [Variant]) ->
-                   Map Category (Map Package [Variant]) ->
-                   Map Category (Map Package [Variant])
+overlayEbuilds ::  Ebuilds -> Ebuilds -> Ebuilds
 overlayEbuilds   =  M.unionWith (M.unionWith shadowVariants)
   where
     shadowVariants :: [Variant] -> [Variant] -> [Variant]
@@ -167,13 +168,31 @@ overlayEbuilds   =  M.unionWith (M.unionWith shadowVariants)
 -- | Combine a tree with the tree of installed packages. Unlike 'overlayTree', the
 --   installed packages do not shadow other packages.
 overlayInstalledTree :: Tree -> Tree -> Tree
-overlayInstalledTree (Tree ec1 eb1) (Tree ec2 eb2) = 
+overlayInstalledTree t i@(Tree ec2 eb2) = 
                                              Tree  (overlayEclasses          ec1  ec2)
                                                    (overlayInstalledEbuilds  eb1  eb2)
+  where
+    (Tree ec1 eb1) = linkInstalledEbuilds t i
 
-overlayInstalledEbuilds ::  Map Category (Map Package [Variant]) ->
-                            Map Category (Map Package [Variant]) ->
-                            Map Category (Map Package [Variant])
+-- | Link variants to installed variants of the same package/slot combination.
+linkInstalledEbuilds :: Tree -> Tree -> Tree
+linkInstalledEbuilds t i = 
+    traverseTree  (\v -> v { meta = 
+                     let  m = meta v
+                     in   m { location =  let  l = location m
+                                          in   linkLocation l v } }) t
+  where
+    linkLocation :: TreeLocation -> Variant -> TreeLocation
+    linkLocation (PortageTree f _)  v  =
+      PortageTree f (findSlot v (i !? (extractP . pv . meta $ v)))
+    linkLocation x                  _  =  x
+
+    findSlot :: Variant -> [Variant] -> Link
+    findSlot v vs =  case find (\v' -> (slot . ebuild $ v) == (slot . ebuild $ v')) vs of
+                       Nothing   ->  NoLink
+                       Just v'   ->  Linked v'
+
+overlayInstalledEbuilds ::  Ebuilds -> Ebuilds -> Ebuilds
 overlayInstalledEbuilds = M.unionWith (M.unionWith (flip (++)))
 
 
@@ -219,8 +238,8 @@ findOverlayFile c f p mrg =
                        xs  ->  Just (foldl1 mrg xs)
 
 -- | Safe lookup function for trees.
-(!?) :: Tree -> (Category,Package) -> [Variant]
-t !? (cat,pkg) =  concat $
-                  do  p <- M.lookup cat (ebuilds t)
-                      M.lookup pkg p
+(!?) :: Tree -> P -> [Variant]
+t !? (P cat pkg) =  concat $
+                    do  p <- M.lookup cat (ebuilds t)
+                        M.lookup pkg p
 

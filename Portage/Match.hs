@@ -18,7 +18,7 @@ import Portage.Package
 -- | Matches a dependency atom against a tree.
 matchDepAtomTree :: DepAtom -> Tree -> [Variant]
 matchDepAtomTree d@(DepAtom _ _ _ cat pkg _) t =
-    let  candidates = t !? (cat,pkg)
+    let  candidates = t !? (P cat pkg)
     in   filter (matchDepAtomVariant d) candidates
 
 -- | Modifies a tree on all matches of a dependency atom.
