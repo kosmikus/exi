@@ -7,6 +7,7 @@ import Data.Maybe (fromJust)
 import Control.Monad.State
 
 import Portage.Graph
+import Portage.GraphUtils
 import Portage.Dependency
 import Portage.PortageConfig
 import Portage.Strategy
@@ -39,7 +40,7 @@ pretend' b v d =
         let fs = runState (buildGraphForUDepString (getDepString d)) initialState 
         putStr $ "Calculating dependencies: "
         when v $ putStrLn ""
-        putStr $ (if v then unlines . map showProgressLong else concatMap showProgressShort) $ fst fs
+        putStr $ concatMap (showProgress v) $ fst fs
         putStrLn $ "\nGraph complete: "
         let gr = graph $ snd $ fs
         let mergelist = postorderF $ dffWith lab' [0] $ gr
@@ -47,18 +48,24 @@ pretend' b v d =
         putStrLn $ "\nShort version: "
         putStr $ unlines  $  map (showAction (config x)) 
                           $  filter (\ a -> case a of Built _ -> True; _ -> False) $ mergelist
-        -- preliminary; should be only on the graph reachable from Top:
-        let sccs = scc $ gr
-        let cycles = filter (\x -> length x > 1) sccs
+        let cycles = cyclesFrom gr [top]
         when (not (null cycles)) $
             do
-                putStrLn "The graph has cycles:" 
-                putStr $ unlines $ map (unlines . map (show . fromJust . lab gr)) cycles
+                putStrLn "\nThe graph has cycles:" 
+                putStr $ unlines $ map (unlines . map (showNode v gr)) cycles
         return gr
 
-showProgressLong (LookAtEbuild pv o) = showPV pv ++ " " ++ showOriginLong o
-showProgressLong (AddEdge n1 n2 d)   = "added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d
-showProgressLong (Message s)         = s
+showNode :: Bool -> DGraph -> Int -> String
+showNode v gr n = (show . fromJust . lab gr $ n) ++ number
+  where number = if v then " [" ++ show n ++ "]" else ""
+
+showProgress :: Bool -> Progress -> String
+showProgress True = showProgressLong
+showProgress False = showProgressShort
+
+showProgressLong (LookAtEbuild pv o) = showPV pv ++ " " ++ showOriginLong o ++ "\n"
+showProgressLong (AddEdge n1 n2 d)   = "added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d ++ "\n"
+showProgressLong (Message s)         = s ++ "\n"
 
 showProgressShort (LookAtEbuild pv o) = showOriginShort o
 showProgressShort (AddEdge _ _ _)     = ""
