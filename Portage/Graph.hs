@@ -68,7 +68,7 @@ showMasked (Shadowed t) = "(shadowed by " ++ showTreeLocation t ++ ")"
 -- z :: Graph -> DepAtom -> Graph
 
 type DGraph = Graph
-type Graph = Gr Action DepType
+type Graph = Gr [Action] DepType
 data DepType = Depend        Bool DepAtom
              | RDepend       Bool DepAtom
              | PDepend       Bool DepAtom
@@ -228,8 +228,8 @@ insAvailableHistory v =
         modifyGraph (  insEdges [ (r,a,Meta),
                                   (bot,a,Meta),
                                   (r,top,Meta) ] .
-                       insNodes [ (a,Available v),
-                                  (r,Removed v) ])
+                       insNodes [ (a,[Available v]),
+                                  (r,[Removed v]) ])
         return nm
 
 -- | An upgrade history can also be a downgrade history, or even a recompilation
@@ -252,10 +252,10 @@ insUpgradeHistory v v' =
                                   (r,a,Meta),
                                   (bot,a,Meta),
                                   (r',top,Meta) ] .
-                       insNodes [ (b',Built v'),
-                                  (a',Available v'),
-                                  (r',Removed v'),
-                                  (a,Available v) ])
+                       insNodes [ (b',[Built v',Removed v]),
+                                  (a',[Available v']),
+                                  (r',[Removed v']),
+                                  (a,[Available v]) ])
         return nm'
 
 insInstallHistory :: Variant -> GG NodeMap
@@ -271,9 +271,9 @@ insInstallHistory v =
                                   (a,b,Meta),
                                   (b,bot,Meta),
                                   (r,top,Meta) ] .
-                       insNodes [ (b,Built v),
-                                  (a,Available v),
-                                  (r,Removed v) ])
+                       insNodes [ (b,[Built v]),
+                                  (a,[Available v]),
+                                  (r,[Removed v]) ])
         return nm
 
 registerNode :: PV -> NodeMap -> GG ()
@@ -422,8 +422,9 @@ buildGraphForDepAtom da
 
 
 -- Types of cycles:
--- * PDEPEND cycle. All cycles that contain PDEPEND edges. We redirect PDEPEND
---   edges to the Built state.
+-- * PDEPEND cycle. All cycles that contain PDEPEND edges. For an Available-type node
+--   with an outgoing PDEPEND, we redirect incoming DEPENDs and RDEPENDs from within 
+--   the cycle to the Built state.
 resolveCycle :: [Node] -> GG [Progress]
 resolveCycle cnodes = 
     do  g <- gets graph
@@ -437,7 +438,7 @@ resolveCycle cnodes =
         do
             ls <- gets labels
             g <- gets graph
-            case getVariant (fromJust (lab g t)) of
+            case getVariant (head $ fromJust (lab g t)) of
               Nothing  ->  failR
               Just v   ->  let  nm = ls M.! (pv . meta $ v)
                            in   if t == available nm
