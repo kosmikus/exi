@@ -438,19 +438,22 @@ resolveCycle cnodes =
             ls <- gets labels
             g <- gets graph
             case getVariant (fromJust (lab g t)) of
-              Nothing  ->  return (False,[])
+              Nothing  ->  failR
               Just v   ->  let  nm = ls M.! (pv . meta $ v)
                            in   if t == available nm
                                   then do  modifyGraph (  insEdge (s,built nm,d) .
                                                           delEdge (s,t) )
-                                           return (True,[Message "resolved PDEPEND cycle"])
-                                  else return (False,[])
+                                           succeedR [Message "resolved PDEPEND cycle"]
+                                  else failR
 
 (>>.) :: GG (Bool,[a]) -> GG (Bool,[a]) -> GG (Bool,[a])
 f >>. g = do  (b,r) <- f
               if b  then return (b,r)
                     else do  (c,r') <- g
                              return (c, r ++ r')
+
+succeedR :: [a] -> GG (Bool,[a])
+succeedR ps = return (True,ps)
 
 failR :: GG (Bool,[a])
 failR = return (False,[])
