@@ -421,6 +421,14 @@ buildGraphForDepAtom da
                                                        return ([LookAtEbuild (pv (meta v)) (origin (meta v))] ++ p0 ++ p1 ++ p2 ++ p3)
 
 
+isAvailable :: Action -> Bool
+isAvailable (Available _)  =  True
+isAvailable _              =  False
+
+isAvailableNode :: [Action] -> Bool
+isAvailableNode = any isAvailable
+
+
 -- Types of cycles:
 -- * PDEPEND cycle. All cycles that contain PDEPEND edges. For an Available-type node
 --   with an outgoing PDEPEND, we redirect incoming DEPENDs and RDEPENDs from within 
