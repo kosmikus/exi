@@ -421,12 +421,12 @@ buildGraphForDepAtom da
                                                        return ([LookAtEbuild (pv (meta v)) (origin (meta v))] ++ p0 ++ p1 ++ p2 ++ p3)
 
 
-isAvailable :: Action -> Bool
-isAvailable (Available _)  =  True
-isAvailable _              =  False
+isAvailable :: Action -> Maybe Variant
+isAvailable (Available v)  =  Just v
+isAvailable _              =  Nothing
 
-isAvailableNode :: [Action] -> Bool
-isAvailableNode = any isAvailable
+isAvailableNode :: [Action] -> Maybe Variant
+isAvailableNode = msum . map isAvailable
 
 
 -- Types of cycles:
@@ -438,7 +438,7 @@ resolveCycle cnodes =
     do  g <- gets graph
         let cedges = zipWith findEdge  (map (out g) cnodes)
                                        (tail cnodes ++ [head cnodes])
-        (b,r) <- sumR $ map resolvePDependCycle (filter isPDepend cedges)
+        (b,r) <- sumR $ map resolvePDependCycle (filter isPDependEdge cedges)
         return r
   where
     resolvePDependCycle :: LEdge DepType -> GG (Bool,[Progress])
@@ -446,14 +446,16 @@ resolveCycle cnodes =
         do
             ls <- gets labels
             g <- gets graph
-            case getVariant (head $ fromJust (lab g t)) of
+            case isAvailableNode (fromJust . lab g $ s) of
               Nothing  ->  failR
-              Just v   ->  let  nm = ls M.! (pv . meta $ v)
-                           in   if t == available nm
-                                  then do  modifyGraph (  insEdge (s,built nm,d) .
-                                                          delEdge (s,t) )
-                                           succeedR [Message "resolved PDEPEND cycle"]
-                                  else failR
+              Just v   ->  do  let incoming = 
+                                     filter  (\e@(s',_,_) ->  s' `elem` cnodes &&
+                                                              (isDependEdge e || isRDependEdge e))
+                                             (inn g s)
+                               let nm = ls M.! (pv . meta $ v)
+                               modifyGraph (  insEdges (map (\(s',_,d') -> (s',built nm,d')) incoming) .
+                                              delEdges (map (\(s',t',_) -> (s',t')) incoming) )
+                               succeedR [Message "resolved PDEPEND cycle"]
 
 (>>.) :: GG (Bool,[a]) -> GG (Bool,[a]) -> GG (Bool,[a])
 f >>. g = do  (b,r) <- f
@@ -470,9 +472,17 @@ failR = return (False,[])
 sumR :: [GG (Bool,[a])] -> GG (Bool,[a])
 sumR = foldr (>>.) failR
 
-isPDepend :: LEdge DepType -> Bool
-isPDepend (_,_,PDepend _ _)  =  True
-isPDepend _                  =  False
+isPDependEdge :: LEdge DepType -> Bool
+isPDependEdge  (_,_,PDepend _ _)  =  True
+isPDependEdge  _                  =  False
+
+isDependEdge :: LEdge DepType -> Bool
+isDependEdge   (_,_,Depend _ _)   =  True
+isDependEdge   _                  =  False
+
+isRDependEdge :: LEdge DepType -> Bool
+isRDependEdge  (_,_,RDepend _ _)  =  True
+isRDependEdge  _                  =  False
 
 findEdge :: [LEdge b] -> Node -> LEdge b
 findEdge es n = fromJust $ find (\(_,t,_) -> n == t) es
