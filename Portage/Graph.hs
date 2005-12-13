@@ -434,11 +434,16 @@ isAvailable :: Action -> Maybe Variant
 isAvailable (Available v)  =  Just v
 isAvailable _              =  Nothing
 
-isAvailableNode :: [Action] -> Maybe Variant
-isAvailableNode = msum . map isAvailable
+isAvailableNode :: Graph -> Int -> Maybe Variant
+isAvailableNode g = msum . map isAvailable . fromJust . lab g
 
 
 -- Types of cycles:
+-- * Bootstrap cycle. A cycle which wants to recursively update itself, but a
+--   version is already installed (happens if an upgrade strategy always selects
+--   the most recent version). If we have an Upgrade-history, and incoming dependencies
+--   on the newer version from within the cycle, we can redirect these dependencies
+--   to the old version.
 -- * PDEPEND cycle. All cycles that contain PDEPEND edges. For an Available-type node
 --   with an outgoing PDEPEND, we redirect incoming DEPENDs and RDEPENDs from within 
 --   the cycle to the Built state.
@@ -447,14 +452,38 @@ resolveCycle cnodes =
     do  g <- gets graph
         let cedges = zipWith findEdge  (map (out g) cnodes)
                                        (tail cnodes ++ [head cnodes])
-        sumR $ map resolvePDependCycle (filter isPDependEdge cedges)
+        sumR $ (case detectBootstrapCycle g cedges of
+                  Just (a',a)  ->  [resolveBootstrapCycle a' a]
+                  Nothing      ->  [])
+               ++ map resolvePDependCycle (filter isPDependEdge cedges)
   where
+    detectBootstrapCycle :: Graph -> [LEdge DepType] -> Maybe (Node,Node)
+    detectBootstrapCycle g es  |  length es <= 2  =  Nothing
+                               |  otherwise       =  dc (es ++ take 2 es)
+      where dc ((a',_,Meta):r@((_,a,Meta):_))  =
+                case (isAvailableNode g a',isAvailableNode g a) of
+                  (Just v',Just v)  ->  Just (a',a)
+                  otherwise         ->  dc r
+            dc _                               =  Nothing
+
+    resolveBootstrapCycle :: Node -> Node -> GG (Bool,[Progress])
+    resolveBootstrapCycle a' a =
+        do
+            g <- gets graph
+            let incoming  =  filter  (\e@(s',_,_) ->  s' `elem` cnodes &&
+                                                      (isDependEdge e || isRDependEdge e))
+                                     (inn g a')
+            modifyGraph (  insEdges (map (\(s',_,d') -> (s',a,d')) incoming) .
+                           delEdges (map (\(s',t',_) -> (s',t')) incoming) )
+            succeedR [Message $ "Resolved bootstrap cycle at "  ++ (showPV . pv . meta . fromJust . isAvailableNode g $ a')
+                                                                ++ " (redirected " ++ show incoming ++ ")" ]
+ 
     resolvePDependCycle :: LEdge DepType -> GG (Bool,[Progress])
     resolvePDependCycle (s,t,d) =
         do
             ls <- gets labels
             g <- gets graph
-            case isAvailableNode (fromJust . lab g $ s) of
+            case isAvailableNode g s of
               Nothing  ->  failR []
               Just v   ->  do  let incoming = 
                                      filter  (\e@(s',_,_) ->  s' `elem` cnodes &&
