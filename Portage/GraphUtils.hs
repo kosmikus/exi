@@ -26,5 +26,5 @@ cycles :: [Tree a] -> [[a]]
 cycles = map cycle
 
 cycle :: Tree a -> [a]
-cycle (Node v ts) = v : let r = (cycles ts) in case r of [] -> []; (x:_) -> x
+cycle (Node v ts) = v : let r = reverse (cycles ts) in case r of [] -> []; (x:_) -> x
 

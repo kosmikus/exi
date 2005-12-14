@@ -45,7 +45,7 @@ pretend s d =
         let fs = runState (do  p1 <- buildGraphForUDepString (getDepString d)
                                gr <- gets graph
                                let cycles = cyclesFrom gr [top]
-                               p2 <- if (null cycles)
+                               p2 <- if True -- (null cycles)
                                        then  return []
                                        else  do  let p21 = [Message "Graph complete, removing cycles."]
                                                  let loop cs = do (b,ps1) <- allR (map resolveCycle cs)

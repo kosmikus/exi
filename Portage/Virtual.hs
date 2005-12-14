@@ -70,7 +70,7 @@ computeVirtuals vs t =
       -- note that there can still be duplicates in the map, but we avoid doing a nub on the whole thing for
       -- efficiency reasons
     in
-      \d ->  fmap  (\cp -> (if blocking d then And else Or) (map (Plain . mergeWithTemplate d) cp))
+      \d ->  fmap  (\cp -> (if blocking d then And else Or) (map (Plain . (if blocking d then block else id) . mergeWithTemplate d) cp))
                    (M.lookup (pFromDepAtom d) vm)
 
 -- | The first atom is the virtual. It serves as a template w.r.t. modifiers,

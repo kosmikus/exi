@@ -12,14 +12,14 @@ module Portage.Graph
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.List
-import Data.Maybe (fromJust)
-import Data.Graph.Inductive hiding (version, Graph(),NodeMap())
+import Data.Maybe (fromJust, isJust, listToMaybe, maybeToList)
+import Data.Graph.Inductive hiding (version, Graph(), NodeMap())
 import Control.Monad.Identity
 import Control.Monad.State
 
 import Portage.Tree
 import Portage.Match
-import Portage.Dependency
+import Portage.Dependency hiding (getDepAtom)
 import Portage.Ebuild (Variant(..), Ebuild(iuse), EbuildMeta(..), EbuildOrigin(..), TreeLocation(..), Mask(..), Link(..), pvs)
 import qualified Portage.Ebuild as E
 import Portage.Version
@@ -86,6 +86,12 @@ getVariant (Available v)  =  Just v
 getVariant (Built v)      =  Just v
 getVariant (Removed v)    =  Just v
 getVariant _              =  Nothing
+
+getDepAtom :: DepType -> Maybe DepAtom
+getDepAtom (Depend _ a)   =  Just a
+getDepAtom (RDepend _ a)  =  Just a
+getDepAtom (PDepend _ a)  =  Just a
+getDepAtom _              =  Nothing
 
 -- | More efficient comparison for actions.
 instance Eq Action where
@@ -437,6 +443,14 @@ isAvailable _              =  Nothing
 isAvailableNode :: Graph -> Int -> Maybe Variant
 isAvailableNode g = msum . map isAvailable . fromJust . lab g
 
+getVariantsNode :: Graph -> Int -> [Variant]
+getVariantsNode g = concatMap (maybeToList . getVariant) . fromJust . lab g
+
+isUpgradeNode :: Graph -> Node -> Maybe (Node,Variant,Node,Variant)
+isUpgradeNode g n =  listToMaybe $
+                     [ (n,v',a,v) |  let va' = isAvailableNode g n, isJust va', let (Just v') = va',
+                                     (_,t,Meta) <- out g n, (_,a,Meta) <- out g t,
+                                     let va = isAvailableNode g a, isJust va, let (Just v) = va ]
 
 -- Types of cycles:
 -- * Bootstrap cycle. A cycle which wants to recursively update itself, but a
@@ -447,36 +461,48 @@ isAvailableNode g = msum . map isAvailable . fromJust . lab g
 -- * PDEPEND cycle. All cycles that contain PDEPEND edges. For an Available-type node
 --   with an outgoing PDEPEND, we redirect incoming DEPENDs and RDEPENDs from within 
 --   the cycle to the Built state.
+-- * Self-blockers. We just drop them, but with a headache.
 resolveCycle :: [Node] -> GG (Bool,[Progress])
 resolveCycle cnodes = 
     do  g <- gets graph
         let cedges = zipWith findEdge  (map (out g) cnodes)
                                        (tail cnodes ++ [head cnodes])
-        sumR $ (case detectBootstrapCycle g cedges of
-                  Just (a',a)  ->  [resolveBootstrapCycle a' a]
-                  Nothing      ->  [])
-               ++ map resolvePDependCycle (filter isPDependEdge cedges)
+        sumR $ (case detectBootstrapCycle g cnodes of
+                  Just (a',v',a,v)  ->  [resolveBootstrapCycle a' v' a v]
+                  Nothing           ->  [])
+               ++  map resolveSelfBlockCycle (filter (\x -> isBlockingDependEdge x || isBlockingRDependEdge x) cedges)
+               ++  map resolvePDependCycle (filter isPDependEdge cedges)
   where
-    detectBootstrapCycle :: Graph -> [LEdge DepType] -> Maybe (Node,Node)
-    detectBootstrapCycle g es  |  length es <= 2  =  Nothing
-                               |  otherwise       =  dc (es ++ take 2 es)
-      where dc ((a',_,Meta):r@((_,a,Meta):_))  =
-                case (isAvailableNode g a',isAvailableNode g a) of
-                  (Just v',Just v)  ->  Just (a',a)
-                  otherwise         ->  dc r
-            dc _                               =  Nothing
+    detectBootstrapCycle :: Graph -> [Node] -> Maybe (Node,Variant,Node,Variant)
+    detectBootstrapCycle g ns = msum (map (isUpgradeNode g) ns)
 
-    resolveBootstrapCycle :: Node -> Node -> GG (Bool,[Progress])
-    resolveBootstrapCycle a' a =
+    resolveBootstrapCycle :: Node -> Variant -> Node -> Variant -> GG (Bool,[Progress])
+    resolveBootstrapCycle a' v' a v =
         do
             g <- gets graph
-            let incoming  =  filter  (\e@(s',_,_) ->  s' `elem` cnodes &&
-                                                      (isDependEdge e || isRDependEdge e))
+            let incoming  =  filter  (\e@(s',_,d') ->  s' `elem` cnodes &&
+                                                       (isJust . getDepAtom $ d') &&
+                                                       matchDepAtomVariant (fromJust . getDepAtom $ d') v &&
+                                                       (isDependEdge e || isRDependEdge e))
                                      (inn g a')
-            modifyGraph (  insEdges (map (\(s',_,d') -> (s',a,d')) incoming) .
-                           delEdges (map (\(s',t',_) -> (s',t')) incoming) )
-            succeedR [Message $ "Resolved bootstrap cycle at "  ++ (showPV . pv . meta . fromJust . isAvailableNode g $ a')
-                                                                ++ " (redirected " ++ show incoming ++ ")" ]
+            if null incoming
+              then failR []
+              else do  modifyGraph (  insEdges (map (\(s',_,d') -> (s',a,d')) incoming) .
+                                      delEdges (map (\(s',t',_) -> (s',t')) incoming) )
+                       succeedR [Message $ "Resolved bootstrap cycle at "  ++ (showPV . pv . meta $ v')
+                                                                           ++ " (redirected " ++ show incoming ++ ")"]
+
+    resolveSelfBlockCycle :: LEdge DepType -> GG (Bool,[Progress])
+    resolveSelfBlockCycle (s,t,d) =
+        do
+            g <- gets graph
+            case (getVariantsNode g s,getVariantsNode g t) of
+              (vs,vs')     ->  let  vsi = intersect (map (pv . meta) vs) (map (pv . meta) vs')
+                               in   if not . null $ vsi
+                                      then  do  modifyGraph (delEdge (s,t))
+                                                succeedR [Message $ "Resolved self-block cycle at " ++ (showPV $ head vsi)
+                                                                                                    ++ " (redirected " ++ show (s,t,d) ++ ")"]
+                                      else  failR []
  
     resolvePDependCycle :: LEdge DepType -> GG (Bool,[Progress])
     resolvePDependCycle (s,t,d) =
@@ -489,11 +515,13 @@ resolveCycle cnodes =
                                      filter  (\e@(s',_,_) ->  s' `elem` cnodes &&
                                                               (isDependEdge e || isRDependEdge e))
                                              (inn g s)
-                               let pv'  =  pv . meta $ v
-                               let nm   =  ls M.! pv'
-                               modifyGraph (  insEdges (map (\(s',_,d') -> (s',built nm,d')) incoming) .
-                                              delEdges (map (\(s',t',_) -> (s',t')) incoming) )
-                               succeedR [Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ show incoming ++ ")" ]
+                               if null incoming
+                                 then failR []
+                                 else do  let pv'  =  pv . meta $ v
+                                          let nm   =  ls M.! pv'
+                                          modifyGraph (  insEdges (map (\(s',_,d') -> (s',built nm,d')) incoming) .
+                                                         delEdges (map (\(s',t',_) -> (s',t')) incoming) )
+                                          succeedR [Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ show incoming ++ ")" ]
 
 (||.) :: GG (Bool,[a]) -> GG (Bool,[a]) -> GG (Bool,[a])
 f ||. g = do  (b,r) <- f
@@ -519,16 +547,24 @@ allR :: [GG (Bool,[a])] -> GG (Bool,[a])
 allR = foldr (&&.) (failR [])
 
 isPDependEdge :: LEdge DepType -> Bool
-isPDependEdge  (_,_,PDepend _ _)  =  True
-isPDependEdge  _                  =  False
+isPDependEdge  (_,_,PDepend False _)  =  True
+isPDependEdge  _                      =  False
 
 isDependEdge :: LEdge DepType -> Bool
-isDependEdge   (_,_,Depend _ _)   =  True
-isDependEdge   _                  =  False
+isDependEdge   (_,_,Depend False _)   =  True
+isDependEdge   _                      =  False
 
 isRDependEdge :: LEdge DepType -> Bool
-isRDependEdge  (_,_,RDepend _ _)  =  True
-isRDependEdge  _                  =  False
+isRDependEdge  (_,_,RDepend False _)  =  True
+isRDependEdge  _                      =  False
+
+isBlockingDependEdge :: LEdge DepType -> Bool
+isBlockingDependEdge   (_,_,Depend True da)   =  blocking da
+isBlockingDependEdge   _                      =  False
+
+isBlockingRDependEdge :: LEdge DepType -> Bool
+isBlockingRDependEdge  (_,_,RDepend True da)  =  blocking da
+isBlockingRDependEdge  _                      =  False
 
 findEdge :: [LEdge b] -> Node -> LEdge b
 findEdge es n = fromJust $ find (\(_,t,_) -> n == t) es

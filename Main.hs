@@ -3,7 +3,7 @@ module Main where
 import System.Environment
 import qualified Data.Map as M
 
-import Portage.Graph
+import Portage.Graph hiding (getDepAtom)
 import Portage.Dependency
 import Portage.PortageConfig
 import Portage.Package

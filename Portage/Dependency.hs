@@ -37,6 +37,9 @@ blocking (DepAtom b _ _ _ _ _) = b
 unblock :: DepAtom -> DepAtom
 unblock (DepAtom b r m c p v) = DepAtom False r m c p v
 
+block :: DepAtom -> DepAtom
+block (DepAtom b r m c p v) = DepAtom True r m c p v
+
 pFromDepAtom :: DepAtom -> P
 pFromDepAtom (DepAtom _ _ _ cat pkg _) = P cat pkg
 
