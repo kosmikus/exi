@@ -126,14 +126,15 @@ activate v =
     do  a   <-  gets active
         ls  <-  gets labels
         let ps' = extractPS . pvs $ v
+        let pv' = pv . meta $ v
         case M.lookup (extractPS . pvs $ v) a of
           Nothing   ->  do
                             let pv' = pv . meta $ v
                             modify (\s -> s { active = M.insert ps' pv' a })
                             modifyGraph ( insEdge (top, available (ls M.! pv'), Meta) )
-          Just pv'
-            | pv' == (pv . meta $ v)  ->  return ()
-            | otherwise               ->  fail "depgraph slot conflict"
+          Just pv''
+            | pv'' == pv'  ->  return ()
+            | otherwise    ->  fail $ "Depgraph slot conflict: " ++ showPVS (pvs v) ++ " vs. " ++ showPV pv''
 
 data DepState =  DepState
                    {

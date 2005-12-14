@@ -14,6 +14,7 @@ import Control.Monad.State
 import Data.Graph.Inductive hiding (Graph())
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
+import System.IO
 
 import Portage.Dependency
 import Portage.Ebuild hiding (rdepend)
@@ -61,12 +62,14 @@ pretend s d =
                           ) initialState 
         putStr $ "Calculating dependencies: "
         when (mverbose s) $ putStrLn ""
-        putStr $ concatMap (showProgress (mverbose s)) $ fst fs
+        (if (not . mverbose $ s) then withoutBuffering else id) $ do
+          putStr $ concatMap (showProgress (mverbose s)) $ fst fs
         putStrLn $ "\n"
         let gr = graph $ snd $ fs
         let mergelist = concat $ postorderF $ dffWith lab' [0] $ gr
-        putStr $ unlines $ map show $ mergelist
-        putStrLn $ "\nShort version: "
+        when (mverbose s) $ do
+          putStr $ unlines $ map show $ mergelist
+          putStrLn $ "\nShort version: "
         putStr $ unlines  $  map (showAction (config x)) 
                           $  filter (\ a -> case a of Built _ -> True; _ -> False) $ mergelist
         let cycles = cyclesFrom gr [top]
@@ -75,6 +78,17 @@ pretend s d =
                 putStrLn "\nThe graph has cycles:" 
                 putStr $ unlines $ map (unlines . map (showNode (mverbose s) gr)) cycles
         return gr
+
+-- | Temporarily disables buffering on stdout. Should probably depend on
+--   whether the output is a terminal of a file.
+withoutBuffering :: IO a -> IO a
+withoutBuffering x =
+    do
+        b <- hGetBuffering stdout
+        hSetBuffering stdout NoBuffering
+        r <- x
+        hSetBuffering stdout b
+        return r
 
 doMerge :: MergeState -> [String] -> IO ()
 doMerge s ds = pretend s (unwords ds) >> return ()
