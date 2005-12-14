@@ -499,10 +499,10 @@ resolveCycle cnodes =
         do
             g <- gets graph
             case (getVariantsNode g s,getVariantsNode g t) of
-              (vs,vs')     ->  let  vsi = intersect (map (pv . meta) vs) (map (pv . meta) vs')
+              (vs,vs')     ->  let  vsi = intersect (map (extractPS . pvs) vs) (map (extractPS . pvs) vs')
                                in   if not . null $ vsi
                                       then  do  modifyGraph (delEdge (s,t))
-                                                succeedR [Message $ "Resolved self-block cycle at " ++ (showPV $ head vsi)
+                                                succeedR [Message $ "Resolved self-block cycle for " ++ (showPS $ head vsi)
                                                                                                     ++ " (redirected " ++ show (s,t,d) ++ ")"]
                                       else  failR []
  
