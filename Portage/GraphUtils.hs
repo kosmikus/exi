@@ -20,11 +20,15 @@ sccf g = rdff (topsort g) g
 cyclesFrom :: Graph gr => gr a b -> [Node] -> [[Node]]
 cyclesFrom g n = filter ((`elem` r) . head) all
   where  r    =  concatMap (flip reachable g) n
-         all  =  map reverse $ filter (\x -> length x > 1) . cycles $ sccf g
+         all  =  map reverse $ cycles g $ sccf g
 
-cycles :: [Tree a] -> [[a]]
-cycles = map cycle
+cycles :: Graph gr => gr a b -> [Tree Node] -> [[Node]]
+cycles g = concatMap (cycle g)
 
-cycle :: Tree a -> [a]
-cycle (Node v ts) = v : let r = reverse (cycles ts) in case r of [] -> []; (x:_) -> x
-
+cycle :: Graph gr => gr a b -> Tree Node -> [[Node]]
+cycle g (Node v ts) = take 1 (map (v:) (cycle' ts))
+  where  ps = suc g v
+         cycle' :: [Tree Node] -> [[Node]]
+         cycle' (Node v' ts':ts'') | v' `elem` ps  =  [[v']]
+                                   | otherwise     =  map (v':) (cycle' ts') ++ cycle' ts''
+         cycle' []                                 =  []

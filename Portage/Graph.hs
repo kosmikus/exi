@@ -462,16 +462,18 @@ isUpgradeNode g n =  listToMaybe $
 --   with an outgoing PDEPEND, we redirect incoming DEPENDs and RDEPENDs from within 
 --   the cycle to the Built state.
 -- * Self-blockers. We just drop them, but with a headache.
+-- This is currently very fragile w.r.t. ordering of the resolutions.
 resolveCycle :: [Node] -> GG (Bool,[Progress])
 resolveCycle cnodes = 
     do  g <- gets graph
         let cedges = zipWith findEdge  (map (out g) cnodes)
                                        (tail cnodes ++ [head cnodes])
-        sumR $ (case detectBootstrapCycle g cnodes of
-                  Just (a',v',a,v)  ->  [resolveBootstrapCycle a' v' a v]
-                  Nothing           ->  [])
+        sumR $ 
+                   map resolvePDependCycle (filter isPDependEdge cedges)
                ++  map resolveSelfBlockCycle (filter (\x -> isBlockingDependEdge x || isBlockingRDependEdge x) cedges)
-               ++  map resolvePDependCycle (filter isPDependEdge cedges)
+               ++ (case detectBootstrapCycle g cnodes of
+                    Just (a',v',a,v)  ->  [resolveBootstrapCycle a' v' a v]
+                    Nothing           ->  [])
   where
     detectBootstrapCycle :: Graph -> [Node] -> Maybe (Node,Variant,Node,Variant)
     detectBootstrapCycle g ns = msum (map (isUpgradeNode g) ns)
