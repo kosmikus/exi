@@ -17,6 +17,7 @@ import Portage.Keyword
 import Portage.Use
 import Portage.UseDefaults
 import Portage.Mask
+import Portage.Package
 import Portage.PackageKeywords
 import Portage.PackageUse
 import Portage.PackageProvided
@@ -31,6 +32,7 @@ data PortageConfig =  PortageConfig
                            inst      ::  Tree,
                            itree     ::  Tree,
                            virtuals  ::  DepAtom -> Maybe DepTerm,
+                           expand    ::  Package -> [Category],
                            strategy  ::  Strategy
                         }
 
@@ -95,5 +97,5 @@ portageConfig =
         -- preparing the results
         let itree     =  overlayInstalledTree tree inst
         let virtuals  =  computeVirtuals pvirt inst
-        return (PortageConfig cfg tree inst itree virtuals defaultStrategy)
+        return (PortageConfig cfg tree inst itree virtuals (const []) defaultStrategy)
 
