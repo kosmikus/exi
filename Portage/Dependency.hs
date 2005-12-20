@@ -44,6 +44,10 @@ block (DepAtom b r m c p v) = DepAtom True r m c p v
 pFromDepAtom :: DepAtom -> P
 pFromDepAtom (DepAtom _ _ _ cat pkg _) = P cat pkg
 
+pFromDepTerm :: DepTerm -> P
+pFromDepTerm (Plain d) = pFromDepAtom d
+-- add additional cases?
+
 data DepVer   =  NoVer
               |  DepVer Version DepAst
   deriving (Show,Eq,Ord)
@@ -146,15 +150,19 @@ getDepAtom' expand da =
 
 getDepAtom = getDepAtom' (const [])
 
-getMaybeDepAtom' expand da =
-  case parseMaybeDepAtom expand da of
-    Left   _  ->  error $ "getMaybeDepAtom: depatom parse error '" ++ da ++ "'"
+getDepAtoms' expand da =
+  case parseDepAtoms expand da of
+    Left   _  ->  error $ "getDepAtoms: depatom parse error '" ++ da ++ "'"
     Right  x  ->  x
 
-getMaybeDepAtom = getMaybeDepAtom' (const [])
+getDepAtoms = getDepAtoms' (const [])
 
-parseDepAtom expand       =  parse (readDepAtom expand) "<depatom>"
-parseMaybeDepAtom expand  =  parse (option Nothing (liftM Just (readDepAtom expand))) "<depatom>"
+parseDepAtom   expand  =  parse  (readDepAtom expand) "<depatom>"
+parseDepAtoms  expand  =  parse  (do  white
+                                      many (do  d <- readDepAtom expand
+                                                white
+                                                return d))
+                                 "<depatoms>"
 
 readDepAtom expand
              =  do  neg         <-  optchar '!'

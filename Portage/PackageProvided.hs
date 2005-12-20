@@ -59,6 +59,6 @@ addProvided (f,pv@(PV cat pkg ver)) t =
                     []
                     []
                     []
-                    Nothing
+                    []
     providedVar = Variant meta ebuild
 

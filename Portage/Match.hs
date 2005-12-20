@@ -29,8 +29,14 @@ modifyTreeForDepAtom d@(DepAtom _ _ _ cat pkg _) f =
 
 -- | Variant of 'matchDepAtomTree' that only checks if
 --   any unmasked variant is present.
-isInTree :: DepAtom -> Tree -> Bool
-isInTree d t = not . null . filterMaskedVariants $ matchDepAtomTree d t
+isInTree :: Tree -> DepAtom -> Bool
+isInTree t d = not . null . filterMaskedVariants $ matchDepAtomTree d t
+
+-- | Same as 'isInTree', but for a dependency term.
+isInTreeTerm :: Tree -> DepTerm -> Bool
+isInTreeTerm t (Or ds)    =  any (isInTreeTerm t) ds
+isInTreeTerm t (And ds)   =  all (isInTreeTerm t) ds
+isInTreeTerm t (Plain d)  =  isInTree t d
 
 matchDepAtomVariant :: DepAtom -> Variant -> Bool
 matchDepAtomVariant d (Variant m _) = matchDepAtomVersion d (verPV . pv $ m)

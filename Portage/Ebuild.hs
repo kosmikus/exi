@@ -62,7 +62,7 @@ data Ebuild = Ebuild  {
                          iuse         ::  [UseFlag],
                          cdepend      ::  DepString,
                          pdepend      ::  DepString,
-                         provide      ::  Maybe DepAtom 
+                         provide      ::  DepString 
                       }
   deriving (Show,Eq)
 
@@ -136,7 +136,7 @@ getEbuild f e  |  length l <= 14  =  error $ "getEbuild: corrupted ebuild cache 
                                            (splitUse use)
                                            (getDepString cdep)
                                            (getDepString pdep)
-                                           (getMaybeDepAtom prov)
+                                           (getDepString prov)
   where  l = lines e
          (dep:rdep:slt:src:restr:home:lic:des:key:inh:use:cdep:pdep:prov:_) = l
 
@@ -185,7 +185,7 @@ getInstalledVariantFromDisk cfg pv@(PV cat pkg ver) =
                     iuse
                     (getDepString cdep)
                     (getDepString pdep)
-                    (getMaybeDepAtom prov)
+                    (interpretDepString use . getDepString $ prov)
         return (Variant m e)
 
 -- | Reads an ebuild from disk. Reads the cache entry if that is sufficient,

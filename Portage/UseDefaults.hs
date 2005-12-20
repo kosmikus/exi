@@ -35,13 +35,14 @@ getUseDefault l =  let  (u:ds) = words l
                    in   (u,map getDepAtom ds)
 
 
-computeUseDefaults  ::  Tree            -- ^ the tree of installed packages
-                    ->  IO [UseFlag]    -- ^ resulting USE flags
-computeUseDefaults t = 
+computeUseDefaults  ::  Tree                        -- ^ the tree of installed packages
+                    ->  (DepAtom -> Maybe DepTerm)  -- ^ virtuals
+                    ->  IO [UseFlag]                -- ^ resulting USE flags
+computeUseDefaults t virtuals = 
     do
         ls <- fmap concat (readProfileFile  useDefaults
                                             (\x -> fmap getUseDefaults (strictReadFile x)))
         return [ u | l@(u,_) <- ls, checkUse l ]
   where
     checkUse :: (UseFlag,[DepAtom]) -> Bool
-    checkUse (u,ds) = all (`isInTree` t) ds
+    checkUse (u,ds) = all (isInTreeTerm t) $ map (\d -> maybe (Plain d) id (virtuals d)) ds

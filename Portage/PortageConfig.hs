@@ -54,8 +54,12 @@ portageConfig =
         -- read installed tree, because that's required to determine USE data
         inst      <-  createInstalledTree cfg
         uprov     <-  profileProvided
+        -- virtuals
+        pvirt     <-  profileVirtuals
+        virtuals  <-  return $ computeVirtuals pvirt inst
+
         inst      <-  return $ foldl (flip addProvided) inst uprov
-        ud        <-  computeUseDefaults inst
+        ud        <-  computeUseDefaults inst virtuals
         -- normalize keywords and USE flags; environment config overrides use.defaults
         cfg       <-  return $ cfg  {  
                                        acceptedKeywords = mergeKeywords [] (acceptedKeywords cfg),
@@ -92,12 +96,9 @@ portageConfig =
         tree      <-  return $ foldl (flip performUseFlags)  tree uuse
         -- keyword masking
         tree      <-  return $ traverseTree (keywordMask cfg) tree
-        -- virtuals
-        pvirt     <-  profileVirtuals
 
         -- preparing the results
         let itree     =  overlayInstalledTree tree inst
-        let virtuals  =  computeVirtuals pvirt inst
         let exp       =  let m = categoryExpand itree in \x -> maybe [] id (M.lookup x m)
 
         return (PortageConfig cfg tree inst itree virtuals exp defaultStrategy)
