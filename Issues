@@ -1,0 +1,26 @@
+[1] Self-blockers.
+
+    I don't like that a package X providing virtual Y can depend on
+    !Y, but doesn't block itself.
+
+[2] USE-flags in PROVIDE lines.
+
+    Doesn't seem to make sense, or at least introduces a cycle.
+    In use.defaults, some USE flags are enabled based on virtuals.
+    If PROVIDE in turn depends on the state of USE flags, no
+    proper resolution is possible.
+
+    At the very least, the USE flags should be stored in the
+    installed db in resolved state.
+
+    Indeed, here's what we do: we use the USE entries of the
+    installed db for this particular package to resolve the
+    PROVIDE line. It doesn't seem to make sense to me that a
+    package can dynamically stop to provide certain functionality
+    if we change a USE flag.
+
+    Ah, now I understand. It makes actually sense. If certain
+    functionality is only installed if a USE flag is set, then
+    a conditional PROVIDE is the right thing to do. Resolving 
+    with the locally saved USE flags makes sense in this
+    scenario.
