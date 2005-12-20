@@ -27,7 +27,9 @@ eupv = pretend $ MergeState True  True
 
 
 -- expand function, too slow:
+{-
 expand :: Package -> Tree -> [P]
 expand p t =  M.foldWithKey 
               (\c m r ->  if p `elem` M.keys m 
                           then (P c p : r) else r) [] (ebuilds t)
+-}

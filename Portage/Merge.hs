@@ -43,7 +43,7 @@ pretend s d =
                                  counter   =  max top bot + 1,
                                  callback  =  rdepend (top,top,top)
                               }
-        let fs = runState (do  p1 <- buildGraphForUDepString (getDepString d)
+        let fs = runState (do  p1 <- buildGraphForUDepString (getDepString' (expand x) d)
                                gr <- gets graph
                                let cycles = cyclesFrom gr [top]
                                p2 <- if null cycles

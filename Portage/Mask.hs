@@ -111,7 +111,7 @@ parseProfilePackage   =  parse readProfilePackage "<-*depatom>"
 
 readProfilePackage    =  do  neg  <-  optchar '-'
                              sys  <-  optchar '*'
-                             d    <-  readDepAtom
+                             d    <-  readDepAtom (const [])
                              return $ ProfilePackage neg sys d
 
 -- | Merges profile packages; the first list is assumed to be okay

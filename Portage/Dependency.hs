@@ -14,6 +14,7 @@ import Control.Monad
 import Text.ParserCombinators.Parsec as P
 import Text.ParserCombinators.Parsec.Token
 
+import Portage.Package
 import Portage.Version
 import Portage.Package
 import Portage.Use
@@ -116,40 +117,59 @@ showDepVer NoVer             =  ""
 showDepVer (DepVer ver ast)  =  showVersion ver ++ if ast then "*" else ""
 
 
--- | Parse a dependency string.
-getDepString  ::  [Char] -> DepString
+-- | Parse a dependency string. Takes an 'expand' function.
+getDepString'  ::  (Package -> [Category]) -> [Char] -> DepString
 
--- | Parse a dependency atom.
-getDepAtom    ::  [Char] -> DepAtom
+-- | Parse a dependency string. No 'expand' function.
+getDepString   ::  [Char] -> DepString
+
+-- | Parse a dependency atom. Takes an 'expand' function.
+getDepAtom'    ::  (Package -> [Category]) -> [Char] -> DepAtom
+
+-- | Parse a dependency atom. No 'expand' function.
+getDepAtom     ::  [Char] -> DepAtom
 
 
-getDepString da  =  case parseDepString da of
-                      Left   e ->
-                        error $ "getDepString: depstring parse error " ++ da ++ "\n" ++ show e
-                      Right  x -> x
+getDepString' expand da =
+  case parseDepString expand da of
+    Left   e  ->  error $ "getDepString: depstring parse error " ++ da ++ "\n" ++ show e
+    Right  x  ->  x
 
-parseDepString   =  parse readDepString "<depstring>"
+getDepString = getDepString' (const [])
 
-getDepAtom da    =  case parseDepAtom da of
-                      Left   _ ->
-                        error $ "getDepAtom: depatom parse error " ++ da
-                      Right  x -> x
+parseDepString expand = parse (readDepString expand) "<depstring>"
 
-getMaybeDepAtom da
-                 =  case parseMaybeDepAtom da of
-                      Left   _ ->
-                        error $ "getMaybeDepAtom: depatom parse error '" ++ da ++ "'"
-                      Right  x -> x
+getDepAtom' expand da =
+  case parseDepAtom expand da of
+    Left   _  ->  error $ "getDepAtom: depatom parse error " ++ da
+    Right  x  ->  x
 
-parseDepAtom       =  parse readDepAtom "<depatom>"
-parseMaybeDepAtom  =  parse (option Nothing (liftM Just readDepAtom)) "<depatom>"
+getDepAtom = getDepAtom' (const [])
 
-readDepAtom  =  do  neg         <-  optchar '!'
+getMaybeDepAtom' expand da =
+  case parseMaybeDepAtom expand da of
+    Left   _  ->  error $ "getMaybeDepAtom: depatom parse error '" ++ da ++ "'"
+    Right  x  ->  x
+
+getMaybeDepAtom = getMaybeDepAtom' (const [])
+
+parseDepAtom expand       =  parse (readDepAtom expand) "<depatom>"
+parseMaybeDepAtom expand  =  parse (option Nothing (liftM Just (readDepAtom expand))) "<depatom>"
+
+readDepAtom expand
+             =  do  neg         <-  optchar '!'
                     rev         <-  optchar '~'
                     mod         <-  readDepMod
-                    cat         <-  readCat
-                    char '/'
+                    mcat        <-  option Nothing $ try $ do  cat <- readCat
+                                                               char '/'
+                                                               return (Just cat)
                     (pkg,mver)  <-  readPkgAndVer
+                    cat <-  case mcat of
+                              Nothing -> case expand pkg of
+                                           [cat]  ->  return cat
+                                           []     ->  fail $ "unknown package: " ++ pkg
+                                           cats   ->  fail $ "ambiguous name " ++ pkg ++ ", possible matches: " ++ unwords (map (\c -> c ++ "/" ++ pkg) cats)
+                              Just cat -> return cat
                     dver        <-  case mver of
                                       Nothing   ->  case (rev,mod) of
                                                       (False,DNONE) -> return NoVer
@@ -171,54 +191,55 @@ optchar c = option False (liftM (const True) (char c))
 
 
 -- | Read a depstring.
-readDepString :: CharParser st DepString
-readDepString = 
+readDepString :: (Package -> [Category]) -> CharParser st DepString
+readDepString expand = 
     do
-        ds <- many $ readDepTerm
+        ds <- many $ (readDepTerm expand)
         return ds
 
 -- | Reads a depterm.
-readDepTerm :: CharParser st DepTerm
-readDepTerm = choice [P.try (readUseDep),readGroup,readAtom]
+readDepTerm :: (Package -> [Category]) -> CharParser st DepTerm
+readDepTerm expand =
+  choice [P.try (readUseDep expand),readGroup expand,readAtom expand]
 
 -- | Read a depstring and handle initial whitespace.
-readCompleteDepString =
+readCompleteDepString expand =
     do
         white
-        d <- readDepString
+        d <- readDepString expand
         eof
         return d
 
 
 -- | Read a group or an @||@-dependency.
-readGroup =
+readGroup expand =
     do
         c  <-  option And (fmap (const Or) chc)
-        d  <-  pars readDepString
+        d  <-  pars (readDepString expand)
         return (c d)
 
 -- | Read a dependency qualified with a use flag.
-readUseDep =
+readUseDep expand =
     do
         neg <- option False (liftM (const True) excl)
         use <- ident
         qmark
-        thenf  <-  readDepTerm
+        thenf  <-  readDepTerm expand
         elsef  <-  option Nothing $
                      do
                          col
-                         fmap Just readDepTerm
+                         fmap Just (readDepTerm expand)
         case elsef of
           Nothing     ->  return (Use neg use thenf)
           Just elsef  ->  return (And [Use neg use thenf, Use (not neg) use elsef])
 
 -- an atom can also be a parenthesized depstring, which is flattened
 
-readAtom =
+readAtom expand =
     do
         neg  <-  option "" (liftM (const "!") excl)
         dep  <-  ident
-        case parse readDepAtom "" (neg ++ dep) of
+        case parse (readDepAtom expand) "" (neg ++ dep) of
           Left error  ->  fail (show error)
           Right x     ->  return (Plain x)
 

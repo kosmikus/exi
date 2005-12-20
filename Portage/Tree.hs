@@ -221,6 +221,13 @@ modifyTree cat pkg f t = t  {  ebuilds =
                                            cat (ebuilds t)
                             }
 
+-- | Returns a mapping of package names to categories.
+categoryExpand :: Tree -> Map Package [Category]
+categoryExpand t =
+  M.foldWithKey  (\cat m r -> foldr  (\pkg s -> M.insertWith (++) pkg [cat] s) 
+                                     r (M.keys m))
+                 M.empty (ebuilds t)
+
 -- | Finds and parses a file in a list of overlays.
 findOverlayFile  ::  Config                     -- ^ portage configuration
                  ->  (FilePath -> FilePath)     -- ^ the filename (modulo portage tree)
