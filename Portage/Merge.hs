@@ -14,6 +14,7 @@ import Control.Monad.State
 import Data.Graph.Inductive hiding (Graph())
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
+import Data.IORef
 import System.IO
 
 import Portage.Dependency
@@ -30,9 +31,9 @@ data MergeState =  MergeState
                        mverbose  ::  Bool
                      }
 
-pretend :: MergeState -> String -> IO Graph
-pretend s d = 
-    do  x <- fmap (if mupdate s then (\x -> x { strategy = updateStrategy }) else id ) portageConfig
+pretend :: PortageConfig -> MergeState -> String -> IO Graph
+pretend pc s d = 
+    do  x <- return $ if mupdate s then pc { strategy = updateStrategy } else pc
         let initialState =  DepState
                               {
                                  pconfig   =  x,
@@ -90,8 +91,8 @@ withoutBuffering x =
         hSetBuffering stdout b
         return r
 
-doMerge :: MergeState -> [String] -> IO ()
-doMerge s ds = pretend s (unwords ds) >> return ()
+doMerge :: IORef PortageConfig -> MergeState -> [String] -> IO ()
+doMerge r s ds = readIORef r >>= \pc -> pretend pc s (unwords ds) >> return ()
 
 showNode :: Bool -> DGraph -> Int -> String
 showNode v gr n = (show . fromJust . lab gr $ n) ++ number

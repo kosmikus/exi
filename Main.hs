@@ -13,17 +13,12 @@ import Portage.Interface
 
 main = do  args <- getArgs
            handleArgs args
+
+interactive = handleArgs . words
            
 main' d = 
     do  x <- portageConfig
         putStr $ unlines $ map (showVariant (config x)) $ findVersions (itree x) (getDepAtom d)
-
-
-
-ep   = pretend $ MergeState False False
-eup  = pretend $ MergeState True  False
-epv  = pretend $ MergeState False True
-eupv = pretend $ MergeState True  True
 
 
 -- expand function, too slow:

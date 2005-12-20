@@ -11,9 +11,11 @@
 module Portage.Interface
   where
 
+import Data.IORef
 import System.Console.GetOpt
 
 import Portage.Merge
+import Portage.PortageConfig
 
 data Command a =  Command
                     {
@@ -21,7 +23,7 @@ data Command a =  Command
                       description  ::  String,
                       state        ::  a,
                       options      ::  [OptDescr (a -> a)],
-                      handler      ::  a -> [String] -> IO ()
+                      handler      ::  IORef PortageConfig -> a -> [String] -> IO ()
                     }
 
 data Command' = forall a. Command' (Command a)
@@ -48,9 +50,11 @@ handleArgs :: [String] -> IO ()
 handleArgs []      =  printGlobalHelp
 handleArgs [a]
   | isHelp a       =  printGlobalHelp
-handleArgs (x:xs)  =  case findCommand x of
-                        Nothing -> handleCommand  (Command' mergeCmd)  (x:xs)
-                        Just c  -> handleCommand  c                    xs
+handleArgs (x:xs)  =  do
+                          r <- portageConfig >>= newIORef
+                          case findCommand x of
+                            Nothing -> handleCommand  r  (Command' mergeCmd)  (x:xs)
+                            Just c  -> handleCommand  r  c                    xs
 
 isHelp :: String -> Bool
 isHelp "-?"      =  True
@@ -63,9 +67,9 @@ findCommand x = lookup x [ (n,c') | c'@(Command' c) <- commands, n <- command c 
 
 printGlobalHelp = putStrLn "<global help>"
 
-handleCommand :: Command' -> [String] -> IO ()
-handleCommand (Command' c) args =  
+handleCommand :: IORef PortageConfig -> Command' -> [String] -> IO ()
+handleCommand r (Command' c) args =  
     let (fs,n,es)  =  getOpt Permute (options c) args
     in  case es of
-          []  ->  handler c (foldl (flip ($)) (state c) fs) n
+          []  ->  handler c r (foldl (flip ($)) (state c) fs) n
           _   ->  putStrLn (unlines es) >> putStrLn (usageInfo "" . options $ c)
