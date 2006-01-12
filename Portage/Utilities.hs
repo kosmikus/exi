@@ -11,6 +11,8 @@ module Portage.Utilities
 
 import System.Directory
 import Data.List
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 -- | Variant of |words| that accepts a custom separator.
 split :: Char -> String -> [String]
@@ -51,6 +53,14 @@ stripComments = unlines . filter (not . null) . map (fst . break (=='#')) . line
 -- | Strip newline characters.
 stripNewlines :: String -> String
 stripNewlines = filter (/='\n')
+
+-- | Reads a string into a map from strings to strings.
+readStringMap :: String -> Map String String
+readStringMap = Map.fromList . map ((\ (x,y) -> (x,tail y)) . break (=='=')) . lines
+
+-- | Writes a map from strings to strings into a collapsed string.
+writeStringMap :: Map String String -> String
+writeStringMap = unlines . map (\ (x,y) -> x ++ "=" ++ y) . Map.toList
 
 -- | The function 'splitPath' is a reimplementation of the Python
 --   function @os.path.split@.
