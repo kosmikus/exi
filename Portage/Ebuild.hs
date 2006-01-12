@@ -62,7 +62,8 @@ data Ebuild = Ebuild  {
                          iuse         ::  [UseFlag],
                          cdepend      ::  DepString,
                          pdepend      ::  DepString,
-                         provide      ::  DepString 
+                         provide      ::  DepString,
+                         eapi         ::  String
                       }
   deriving (Show,Eq)
 
@@ -121,7 +122,7 @@ filterMaskedVariants :: [Variant] -> [Variant]
 filterMaskedVariants = filter (\(Variant m _) -> null (masked m))
 
 getEbuild :: FilePath -> String -> Ebuild
-getEbuild f e  |  length l <= 14  =  error $ "getEbuild: corrupted ebuild cache " ++ f ++ " (too short by " ++ show (14 - length l) ++ " lines)"
+getEbuild f e  |  length l <= 15  =  error $ "getEbuild: corrupted ebuild cache " ++ f ++ " (too short by " ++ show (15 - length l) ++ " lines)"
                |  otherwise       =  Ebuild  
                                            (getDepString dep)
                                            (getDepString rdep)
@@ -137,8 +138,9 @@ getEbuild f e  |  length l <= 14  =  error $ "getEbuild: corrupted ebuild cache 
                                            (getDepString cdep)
                                            (getDepString pdep)
                                            (getDepString prov)
+                                           (if null eapi then "0" else eapi)
   where  l = lines e
-         (dep:rdep:slt:src:restr:home:lic:des:key:inh:use:cdep:pdep:prov:_) = l
+         (dep:rdep:slt:src:restr:home:lic:des:key:inh:use:cdep:pdep:prov:eapi:_) = l
 
 -- | Reads the ebuild of an installed package from disk.
 --   This is very different than for uninstalled ebuilds, because installed
@@ -186,6 +188,7 @@ getInstalledVariantFromDisk cfg pv@(PV cat pkg ver) =
                     (getDepString cdep)
                     (getDepString pdep)
                     (interpretDepString use . getDepString $ prov)
+                    "0"  -- does EAPI make sense for installed ebuilds?
         return (Variant m e)
 
 -- | Reads an ebuild from disk. Reads the cache entry if that is sufficient,
