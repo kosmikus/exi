@@ -233,7 +233,7 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                                              eclasses
                                   mtimes <- mapM getMTime efiles
                                   writeEclassesFile  eclassesFile
-                                                     (zip eclasses mtimes)
+                                                     (zip3 eclasses (repeat $ eclassDir pt) mtimes)
         oed <- if (cacheExists && cacheNewer && cacheOriginal && not eclassesExist) 
                  then eclassesDummy >> return True
                  else return False
@@ -242,7 +242,8 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
         eclassesOK     <-  unsafeInterleaveIO $
                            do
                                eclasses <- readEclassesFile eclassesFile
-                               return (all (\(e,m) -> mtime (ecs M.! e) == m) eclasses)
+                               return (all (\(e,l,m) -> Portage.Eclass.location (ecs M.! e) == l
+                                                        && mtime (ecs M.! e) == m) eclasses)
         -- read this only once you know the cache is ok
         cacheContents  <-  unsafeInterleaveIO $
                            fmap (getEbuild cacheFile) (strictReadFile cacheFile)
@@ -252,11 +253,12 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                                   makeCacheEntry cfg pt pv
                                   -- the cache is refreshed, now update eclasses
                                   makePortageFile eclassesFile
-                                  let eclasses  =  inherited cacheContents
-                                  let mtimes    =
-                                        map (\e -> mtime (ecs M.! e)) eclasses
-                                  writeEclassesFile  eclassesFile
-                                                     (zip eclasses mtimes)
+                                  let eclasses   =  inherited cacheContents
+                                  let eclasses'  =
+                                        map  (\e -> (e, Portage.Eclass.location (ecs M.! e), mtime (ecs M.! e)))
+                                             eclasses
+                                  writeEclassesFile  eclassesFile eclasses'
+                                                     
         orc <- if (not (cacheExists && cacheNewer && eclassesExist && eclassesOK))
                  then refreshCache >> return True
                  else return False

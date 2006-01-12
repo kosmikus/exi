@@ -36,17 +36,17 @@ splitEclasses :: String -> [Eclass]
 splitEclasses = words
 
 -- | Reads a file associating eclasses with mtimes.
-readEclassesFile :: FilePath -> IO [(Eclass,MTime)]
+readEclassesFile :: FilePath -> IO [(Eclass,FilePath,MTime)]
 readEclassesFile f =  do
                           c <- strictReadFile f
                           return $
-                            map  ((\(x,y) -> (tail y,read x)) . break (==' '))
+                            map  ((\[x,y,z] -> (x,y,read z)) . split '\t')
                                  (filter (not . null) (lines c))
 
 -- | Writes a file associating eclasses with mtimes.
-writeEclassesFile :: FilePath -> [(Eclass,MTime)] -> IO ()
+writeEclassesFile :: FilePath -> [(Eclass,FilePath,MTime)] -> IO ()
 writeEclassesFile f c =  do
-                             let out  =  map  (\(e,m) -> show m ++ " " ++ e) c
+                             let out  =  map  (\(e,l,m) -> e ++ " " ++ l ++ " " ++ show m) c
                              h <- openFile f WriteMode
                              hPutStr h (unlines out)
                              hClose h
