@@ -30,8 +30,9 @@ findCacheFile c =
   catch
     (  do
            subdirs  <-  fmap (filter (not . isPrefixOf ".")) (getDirectoryContents c)
-           files    <-  mapM  (\x -> catch  (fmap (map (\f -> c ./. x ./. f)) (unsafeInterleaveIO $ getDirectoryContents (c ./. x)))
-                                            (const $ return []))
+           files    <-  mapM  (\x -> (fmap (map (\f -> c ./. x ./. f)) 
+                                           (unsafeInterleaveIO $
+                                              catch (getDirectoryContents (c ./. x)) (const $ return []))))
                               subdirs
            return . listToMaybe . filter (not . isPrefixOf "." . basename) . concat $ files)
     (const $ return Nothing)
