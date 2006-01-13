@@ -16,7 +16,6 @@ import Control.Exception
 import System.Directory
 import System.IO.Unsafe
 
-import Portage.Constants
 import Portage.Utilities
 
 data CacheFormat = FlatHash | FlatList
@@ -40,6 +39,9 @@ findCacheFile c =
 detectFileFormat :: Maybe FilePath -> IO CacheFormat
 detectFileFormat Nothing   =  return FlatHash  -- assume new format
 detectFileFormat (Just f)  =
-  do
-      s <- readFile f
-      return (if length (lines s) == 22 then FlatList else FlatHash)
+  catch
+    (  do
+           s <- readFile f
+           return (if length (lines s) == 22 then FlatList else FlatHash))
+    (const $ return FlatHash)
+    
