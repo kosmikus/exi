@@ -48,8 +48,8 @@ portageConfig =
         user      <-  getUserConfig
         env       <-  getEnvironmentConfig
         merged    <-  return $ foldl1 mergeEnvMap (global : profiles ++ [user,env])
-        cfg       <-  return $ getConfig merged
-        envcfg    <-  return $ getConfig env
+        cfg       <-  getConfig merged
+        envcfg    <-  getConfig env
 
         -- read installed tree, because that's required to determine USE data
         inst      <-  createInstalledTree cfg

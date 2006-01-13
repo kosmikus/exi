@@ -21,6 +21,7 @@ import Portage.Keyword
 import Portage.Use
 import Portage.Shell
 import Portage.Profile
+import Portage.Cache
 
 type EnvMap = Map String String  -- ^ untyped environment map
 
@@ -33,6 +34,7 @@ data Config = Config  {
   --                     distDir           ::  FilePath,
   --                     pkgDir            ::  FilePath,
   --                     logDir            ::  FilePath,
+                         cacheFormat       ::  CacheFormat,
                          overlays          ::  [FilePath],
                          features          ::  [String],
                          useExpand         ::  [(String,String)]
@@ -43,9 +45,12 @@ data Config = Config  {
 trees :: Config -> [FilePath]
 trees c = portDir c : overlays c
 
-getConfig :: EnvMap -> Config
-getConfig c  =  Config
-                  arch
+getConfig :: EnvMap -> IO Config
+getConfig c  =  
+    do
+        cf <- detectCacheFormat . cacheDir $ pd
+        return $
+          Config  arch
                   (splitKeywords key)     -- unprocessed for now
                   (splitUse use)          -- unprocessed for now
                   pd
@@ -53,6 +58,7 @@ getConfig c  =  Config
   --              distd
   --              pkgd
   --              logd
+                  cf
                   (nub (words overlays))  -- space as separator seems strange to me, but apparently that's the current rule
                   (nub (words features))
                   (zip expand expandvars)
