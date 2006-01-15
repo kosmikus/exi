@@ -16,6 +16,7 @@ import System.Console.GetOpt
 
 import Portage.Merge
 import Portage.PortageConfig
+import Portage.ProgramVersion
 
 data Command a =  Command
                     {
@@ -29,7 +30,7 @@ data Command a =  Command
 data Command' = forall a. Command' (Command a)
 
 commands :: [Command']
-commands =  [Command' mergeCmd]
+commands =  [Command' mergeCmd, Command' nullCmd]
 
 mergeCmd :: Command MergeState
 mergeCmd =  Command
@@ -45,6 +46,19 @@ mergeOpts :: [OptDescr (MergeState -> MergeState)]
 mergeOpts = [Option "u" ["update"] (NoArg (\s -> s { mupdate = True })) "update variants",
              Option "p" ["pretend"] (NoArg id) "calculate dependencies only",
              Option "v" ["verbose"] (NoArg (\s -> s { mverbose = True })) "be verbose"]
+
+-- | The 'nullCmd' is only for debuggin purposes. It does nothing (except initialization)
+--   and therefore should be really fast.
+
+nullCmd :: Command ()
+nullCmd =  Command
+             {
+                command = ["null"],
+                description = "do nothing",
+                state = (),
+                options = [],
+                handler = \_ _ _ -> return ()
+             }
 
 handleArgs :: [String] -> IO ()
 handleArgs []      =  printGlobalHelp
@@ -65,7 +79,10 @@ isHelp _         =  False
 findCommand :: String -> Maybe Command'
 findCommand x = lookup x [ (n,c') | c'@(Command' c) <- commands, n <- command c ] 
 
-printGlobalHelp = putStrLn "<global help>"
+printGlobalHelp = putStrLn $ header
+
+header =
+  "exi version " ++ programVersion ++ "\n(c) 2005-2006 Andres Loeh <exi@andres-loeh.de>"
 
 handleCommand :: IORef PortageConfig -> Command' -> [String] -> IO ()
 handleCommand r (Command' c) args =  
