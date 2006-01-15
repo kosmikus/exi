@@ -15,6 +15,7 @@ import Data.IORef
 import System.Console.GetOpt
 
 import Portage.Merge
+import Portage.Info
 import Portage.PortageConfig
 import Portage.ProgramVersion
 
@@ -30,7 +31,7 @@ data Command a =  Command
 data Command' = forall a. Command' (Command a)
 
 commands :: [Command']
-commands =  [Command' mergeCmd, Command' nullCmd]
+commands =  [Command' mergeCmd, Command' nullCmd, Command' showInstCmd]
 
 mergeCmd :: Command MergeState
 mergeCmd =  Command
@@ -47,7 +48,7 @@ mergeOpts = [Option "u" ["update"] (NoArg (\s -> s { mupdate = True })) "update 
              Option "p" ["pretend"] (NoArg id) "calculate dependencies only",
              Option "v" ["verbose"] (NoArg (\s -> s { mverbose = True })) "be verbose"]
 
--- | The 'nullCmd' is only for debuggin purposes. It does nothing (except initialization)
+-- | The 'nullCmd' is only for debugging purposes. It does nothing (except initialization)
 --   and therefore should be really fast.
 
 nullCmd :: Command ()
@@ -59,6 +60,18 @@ nullCmd =  Command
                 options = [],
                 handler = \_ _ _ -> return ()
              }
+
+-- | Shows the installed versions of one or more atoms.
+
+showInstCmd :: Command ()
+showInstCmd =  Command
+                 {
+                    command = ["showinst"],
+                    description = "show installed versions",
+                    state = (),
+                    options = [],
+                    handler = \cr _ atoms -> doShowInst cr atoms
+                 }
 
 handleArgs :: [String] -> IO ()
 handleArgs []      =  printGlobalHelp
