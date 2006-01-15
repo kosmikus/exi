@@ -39,9 +39,14 @@ findCacheFile c =
 detectFileFormat :: Maybe FilePath -> IO CacheFormat
 detectFileFormat Nothing   =  return FlatHash  -- assume new format
 detectFileFormat (Just f)  =
-  catch
-    (  do
-           s <- readFile f
-           return (if length (lines s) == 22 then FlatList else FlatHash))
-    (const $ return FlatHash)
-    
+    catch
+      (do
+          s <- fmap lines . readFile $ f
+          return (  if length s == 22
+                    then scan s
+                    else FlatHash))
+      (const $ return FlatHash)
+  where  -- we test the RESTRICT line for an occurrence of an '='
+         scan (_:_:_:_:x:_)  =  if elem '=' x then FlatHash else FlatList
+         scan _              =  FlatHash
+                           
