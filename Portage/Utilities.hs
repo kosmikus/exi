@@ -21,6 +21,9 @@ split c s = case dropWhile (==c) s of
               s'  ->  w : split c s''
                         where (w, s'') = break (==c) s'
 
+-- | Group a number of elements.
+groupnr :: Int -> [a] -> [[a]]
+groupnr n = map (take n) . takeWhile (not . null) . iterate (drop n)
 
 -- | Split a list at the last occurrence of an element.
 splitAtLast :: (Eq a) => a -> [a] -> ([a],[a])
@@ -60,7 +63,11 @@ readStringMap = Map.fromList . map ((\ (x,y) -> (x,tail y)) . break (=='=')) . l
 
 -- | Writes a map from strings to strings into a collapsed string.
 writeStringMap :: Map String String -> String
-writeStringMap = unlines . map (\ (x,y) -> x ++ "=" ++ y) . Map.toList
+writeStringMap = unlines . sortBy underscoreFirst . map (\ (x,y) -> x ++ "=" ++ y) . Map.toList
+  where  underscoreFirst ('_':_)  ('_':_)  =  EQ
+         underscoreFirst ('_':_)  _        =  LT
+         underscoreFirst _        ('_':_)  =  GT
+         underscoreFirst _        _        =  EQ
 
 -- | The function 'splitPath' is a reimplementation of the Python
 --   function @os.path.split@.

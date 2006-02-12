@@ -11,10 +11,12 @@ module Portage.Ebuild
 
 import System.Environment
 import System.IO.Unsafe
+import System.IO
 import System.Directory
+import System.Exit
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.List (isPrefixOf)
+import Data.List (isPrefixOf, intersperse)
 import Control.Monad
 import Control.Exception
 import Prelude hiding (catch)
@@ -30,6 +32,7 @@ import Portage.Constants
 import Portage.Utilities
 import Portage.Shell
 import Portage.Profile
+import Portage.Cache
 
 -- The ebuild cache format (as created by calling @ebuild depend@) is as follows:
 -- DEPEND
@@ -121,24 +124,90 @@ data Variant =  Variant
 filterMaskedVariants :: [Variant] -> [Variant]
 filterMaskedVariants = filter (\(Variant m _) -> null (masked m))
 
-getEbuild :: FilePath -> String -> Ebuild
-getEbuild f e  |  length l <= 15  =  error $ "getEbuild: corrupted ebuild cache " ++ f ++ " (too short by " ++ show (15 - length l) ++ " lines)"
-               |  otherwise       =  Ebuild  
-                                           (getDepString dep)
-                                           (getDepString rdep)
-                                           slt
-                                           src
-                                           (words restr)
-                                           home
-                                           lic
-                                           des
-                                           (splitKeywords key)
-                                           (splitEclasses inh)
-                                           (splitUse use)
-                                           (getDepString cdep)
-                                           (getDepString pdep)
-                                           (getDepString prov)
-                                           (if null eapi then "0" else eapi)
+putEbuildFlatHash :: FilePath -> Ebuild -> [(Eclass,FilePath,MTime)] -> IO ()
+putEbuildFlatHash f ebuild eclasses  =
+    do
+        let  em  =  M.fromList $
+                    [ ("_eclasses_", concat . intersperse "\t" . concatMap (\ (x,y,z) -> [x,y,show z]) $ eclasses),
+                      ("DEPEND",show $ depend ebuild),
+                      ("RDEPEND",show $ rdepend ebuild),
+                      ("SLOT",slot ebuild),
+                      ("SRC_URI",src_uri ebuild),
+                      ("RESTRICT",unwords $ restrict ebuild),
+                      ("HOMEPAGE",homepage ebuild),
+                      ("LICENSE",license ebuild),
+                      ("DESCRIPTION",description ebuild),
+                      ("KEYWORDS",unwords $ keywords ebuild),
+                      ("IUSE",unwords $ iuse ebuild),
+                      ("CDEPEND",show $ cdepend ebuild),
+                      ("PDEPEND",show $ pdepend ebuild),
+                      ("PROVIDE",show $ provide ebuild),
+                      ("EAPI",eapi ebuild) ]
+        h <- openFile f WriteMode
+        hPutStr h (writeStringMap em)
+        hClose h
+
+getEbuild :: CacheFormat -> FilePath -> String -> Ebuild
+getEbuild FlatList f e  =  getEbuildFlatList f e
+getEbuild FlatHash f e  =  snd (getEbuildFlatHash f e)
+
+getEbuildFlatHash :: FilePath -> String -> ([(Eclass,FilePath,MTime)],Ebuild)
+getEbuildFlatHash f e  =  let  em      =  readStringMap e
+                               f !. k  =  case M.lookup k f of
+                                            Nothing  ->  ""
+                                            Just x   ->  x
+                               dep     =  em !. "DEPEND"
+                               rdep    =  em !. "RDEPEND"
+                               slt     =  em !. "SLOT"
+                               src     =  em !. "SRC_URI"
+                               restr   =  em !. "RESTRICT"
+                               home    =  em !. "HOMEPAGE"
+                               lic     =  em !. "LICENSE"
+                               des     =  em !. "DESCRIPTION"
+                               key     =  em !. "KEYWORDS"
+                               ecl     =  map (\[x,y,z] -> (x,y,read z)) $ groupnr 3 $ split '\t' $ em !. "_eclasses_"
+                               inh     =  map (\(x,y,z) -> x) ecl
+                               use     =  em !. "IUSE"
+                               pdep    =  em !. "PDEPEND"
+                               prov    =  em !. "PROVIDE"
+                               eapi    =  em !. "EAPI"
+                               ebuild  =  Ebuild
+                                            (getDepString dep)
+                                            (getDepString rdep)
+                                            slt
+                                            src
+                                            (words restr)
+                                            home
+                                            lic
+                                            des
+                                            (splitKeywords key)
+                                            inh
+                                            (splitUse use)
+                                            (getDepString "")
+                                            (getDepString pdep)
+                                            (getDepString prov)
+                                            (if null eapi then "0" else eapi)
+                          in   (ecl,ebuild)
+
+getEbuildFlatList :: FilePath -> String -> Ebuild
+getEbuildFlatList f e
+  |  length l <= 15  =  error $ "getEbuild: corrupted ebuild cache " ++ f ++ " (too short by " ++ show (15 - length l) ++ " lines)"
+  |  otherwise       =  Ebuild  
+                          (getDepString dep)
+                          (getDepString rdep)
+                          slt
+                          src
+                          (words restr)
+                          home
+                          lic
+                          des
+                          (splitKeywords key)
+                          (splitEclasses inh)
+                          (splitUse use)
+                          (getDepString cdep)
+                          (getDepString pdep)
+                          (getDepString prov)
+                          (if null eapi then "0" else eapi)
   where  l = lines e
          (dep:rdep:slt:src:restr:home:lic:des:key:inh:use:cdep:pdep:prov:eapi:_) = l
 
@@ -224,12 +293,14 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                                           return (cacheMTime == metaMTime)
                                  else return False
         eclassesExist  <-  unsafeInterleaveIO $ doesFileExist eclassesFile
-        let eclassesDummy  =  -- If no eclasses mtime file is present, we assume
+        cacheFormat    <-  unsafeInterleaveIO $ detectFileFormat (Just cacheFile)
+        let eclassesDummy  =  -- Only used for FlatList cache format:
+                              -- If no eclasses mtime file is present, we assume
                               -- the current tree
                               do
                                   putStrLn ("making eclass dummy for " ++ showPV pv)
                                   makePortageFile eclassesFile
-                                  c <- fmap (getEbuild cacheFile) (strictReadFile cacheFile)
+                                  c <- fmap (getEbuild cacheFormat cacheFile) (strictReadFile cacheFile)
                                   let eclasses  =  inherited c
                                   let efiles    =  
                                         map  (\x -> eclassDir pt ./. (x ++ ".eclass"))
@@ -237,38 +308,49 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                                   mtimes <- mapM getMTime efiles
                                   writeEclassesFile  eclassesFile
                                                      (zip3 eclasses (repeat $ eclassDir pt) mtimes)
-        oed <- if (cacheExists && cacheNewer && cacheOriginal && not eclassesExist) 
+        oed <- if (cacheExists && cacheNewer && cacheOriginal && not eclassesExist && not (cacheFormat == FlatHash))
                  then eclassesDummy >> return True
                  else return False
         -- eclasses could exist now, therefore we check again
-        eclassesExist  <-  unsafeInterleaveIO $ doesFileExist eclassesFile
-        eclassesOK     <-  unsafeInterleaveIO $
-                           do
-                               eclasses <- readEclassesFile eclassesFile
-                               return (all (\(e,l,m) -> Portage.Eclass.location (ecs M.! e) == l
-                                                        && mtime (ecs M.! e) == m) eclasses)
-        -- read this only once you know the cache is ok
-        cacheContents  <-  unsafeInterleaveIO $
-                           fmap (getEbuild cacheFile) (strictReadFile cacheFile)
+        eclassesExist  <-  unsafeInterleaveIO $ case cacheFormat of
+                                                  FlatList  ->  doesFileExist eclassesFile
+                                                  FlatHash  ->  return True
+        -- read cacheContents only once you know the cache is ok
+        ~(eclasses,cacheContents) <- getEbuildAndEclasses cacheFormat eclassesFile cacheFile
+        let eclassesOK     =  all (\(e,l,m) ->  Portage.Eclass.location (ecs M.! e) == l
+                                                && mtime (ecs M.! e) == m) eclasses
         let refreshCache   =  do
                                   putStrLn ("cache refresh for " ++ showPV pv)
                                   makePortageFile cacheFile
                                   makeCacheEntry cfg pt pv
-                                  -- the cache is refreshed, now update eclasses
-                                  makePortageFile eclassesFile
-                                  let eclasses   =  inherited cacheContents
+                                  ebuild <- fmap (getEbuildFlatList cacheFile) (strictReadFile cacheFile)
+                                  let eclasses   =  inherited ebuild
                                   let eclasses'  =
                                         map  (\e -> (e, Portage.Eclass.location (ecs M.! e), mtime (ecs M.! e)))
                                              eclasses
-                                  writeEclassesFile  eclassesFile eclasses'
-                                                     
-        orc <- if (not (cacheExists && cacheNewer && eclassesExist && eclassesOK))
-                 then refreshCache >> return True
-                 else return False
+                                  if cacheFormat == FlatHash
+                                    then  do  -- update cache format
+                                              putEbuildFlatHash cacheFile ebuild eclasses'
+                                    else  do  -- the cache is refreshed, now update eclasses
+                                              makePortageFile eclassesFile
+                                              writeEclassesFile  eclassesFile eclasses'
+                                  return ebuild
+        (orc,cacheContents) <- if (not (cacheExists && cacheNewer && eclassesExist && eclassesOK))
+                               then refreshCache >>= \ebuild -> return (True,ebuild)
+                               else return (False,cacheContents)
         let origin | orc        =  CacheRegen
                    | oed        =  EclassDummy
                    | otherwise  =  FromCache
         return (cacheContents,origin)
+
+getEbuildAndEclasses :: CacheFormat -> FilePath -> FilePath -> IO ([(Eclass,FilePath,MTime)],Ebuild)
+getEbuildAndEclasses FlatList eclassesFile cacheFile =
+    do
+        ecc  <-  unsafeInterleaveIO $ readEclassesFile eclassesFile
+        ebc  <-  unsafeInterleaveIO $ fmap (getEbuildFlatList cacheFile) (strictReadFile cacheFile)
+        return (ecc,ebc)
+getEbuildAndEclasses FlatHash _ cacheFile =
+    unsafeInterleaveIO $ fmap (getEbuildFlatHash cacheFile) (strictReadFile cacheFile)
 
 -- | This code is following the code in @doebuild@ from @portage.py@.
 makeCacheEntry :: Config -> FilePath -> PV -> IO ()

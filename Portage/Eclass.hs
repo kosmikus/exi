@@ -21,7 +21,7 @@ type Eclass  =  String
 --   an eclass. We use modification time and tree location.
 data EclassMeta =  EclassMeta
                      {
-                        location  ::  FilePath, -- use 'TreeLocation' instead?
+                        location  ::  FilePath, -- only the portage tree path including eclass; use 'TreeLocation' instead?
                         mtime     ::  MTime
                      }
   deriving (Show,Eq)

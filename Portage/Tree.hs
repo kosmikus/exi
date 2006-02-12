@@ -104,7 +104,7 @@ createTree cfg pt cats ecs =
     eclassEntries eclass    =  do
                                    mtime <-  unsafeInterleaveIO $ 
                                              getMTime (eclassDir pt ./. (eclass ++ ".eclass"))
-                                   return (eclass, EclassMeta pt mtime)
+                                   return (eclass, EclassMeta (eclassDir pt) mtime)
 
     categoryEntries :: Category -> IO (Category, Map Package [Variant])
     categoryEntries cat     =  do  

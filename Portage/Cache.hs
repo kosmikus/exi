@@ -41,7 +41,7 @@ detectFileFormat Nothing   =  return FlatHash  -- assume new format
 detectFileFormat (Just f)  =
     catch
       (do
-          s <- fmap lines . readFile $ f
+          s <- fmap lines . strictReadFile $ f
           return (  if length s == 22
                     then scan s
                     else FlatHash))
