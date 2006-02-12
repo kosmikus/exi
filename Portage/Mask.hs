@@ -72,6 +72,13 @@ userUnMask      =  unsafeInterleaveIO $
                    readMaskFile (localConfigDir ./. packageUnMask)
 
 
+performProfilePackage :: ProfilePackage -> Tree -> Tree
+performProfilePackage m@(ProfilePackage { pnegate = False, pdepatom = d }) =
+    modifyTreeForNegDepAtom d (\v -> v { meta =  case meta v of
+                                                  me -> me { masked = NotInProfile : masked me } })
+performProfilePackage m@(ProfilePackage { pnegate = True }) =
+    error "performProfilePackage: illegal negated profile package"
+
 performMask :: Masking -> Tree -> Tree
 performMask m@(Masking { mdepatom = d }) = 
     modifyTreeForDepAtom d (\v -> v { meta =  case meta v of
@@ -127,8 +134,9 @@ mergeProfilePackages xs ys  =  S.elems $
                                       ys
 
 profilePackages :: IO [ProfilePackage]
-profilePackages = fmap  (foldl1 mergeProfilePackages)
-                        (readProfileFile packages readPackages)
+profilePackages =  unsafeInterleaveIO $
+                   fmap  (foldl1 mergeProfilePackages)
+                         (readProfileFile packages readPackages)
 
 
 -- | Tree traversal that performs keyword-based masking. To be used with

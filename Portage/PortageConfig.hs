@@ -34,6 +34,7 @@ data PortageConfig =  PortageConfig
                            itree     ::  Tree,
                            virtuals  ::  DepAtom -> Maybe DepTerm,
                            expand    ::  Package -> [Category],
+                           system    ::  DepString,                 -- ^ system target
                            strategy  ::  Strategy
                         }
 
@@ -75,12 +76,14 @@ portageConfig =
                                         return $ foldl overlayTree pt po)
 
         -- hardmasking (not on the installed tree!)
+        ppkgs     <-  profilePackages
         gmask     <-  globalMask cfg
         pmask     <-  profileMask
         umask     <-  userMask
         uunmask   <-  userUnMask
-        tree      <-  return $ foldl (flip performMask)      tree (concat [gmask, pmask, umask])
-        tree      <-  return $ foldl (flip performUnMask)    tree uunmask
+        tree      <-  return $ foldl (flip performProfilePackage)  tree ppkgs
+        tree      <-  return $ foldl (flip performMask)            tree (concat [gmask, pmask, umask])
+        tree      <-  return $ foldl (flip performUnMask)          tree uunmask
 
         -- keyword distribution (also not on the installed tree)
         -- Portage allows the environment to override package-specific keywords.
@@ -100,6 +103,7 @@ portageConfig =
         -- preparing the results
         let itree     =  overlayInstalledTree tree inst
         let exp       =  let m = categoryExpand itree in \x -> maybe [] id (M.lookup x m)
+        let system    =  [ Plain (pdepatom p) | p <- ppkgs, psystem p ]
 
-        return (PortageConfig cfg tree inst itree virtuals exp defaultStrategy)
+        return (PortageConfig cfg tree inst itree virtuals exp system defaultStrategy)
 

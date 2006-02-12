@@ -44,7 +44,9 @@ pretend pc s d =
                                  counter   =  max top bot + 1,
                                  callback  =  rdepend (top,top,top)
                               }
-        let fs = runState (do  p1 <- buildGraphForUDepString (getDepString' (expand x) d)
+        let d' | d == "system"  =  system x
+               | otherwise      =  getDepString' (expand x) d
+        let fs = runState (do  p1 <- buildGraphForUDepString d'
                                gr <- gets graph
                                let cycles = cyclesFrom gr [top]
                                p2 <- if null cycles

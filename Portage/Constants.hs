@@ -50,6 +50,8 @@ useDefaults      =  "use.defaults"
 localUseFlagsFile    =  localConfigDir ./. "package.use"
 localKeywordsFile    =  localConfigDir ./. "package.keywords"
 
+worldFile        =  "/var/lib/portage/world"
+
 -- original portage code
 portageBasePath  =  "/usr/lib/portage"
 portageBinPath   =  portageBasePath ./. "bin"

@@ -27,6 +27,12 @@ modifyTreeForDepAtom d@(DepAtom _ _ _ cat pkg _) f =
     modifyTree  cat pkg
                 (\v -> if matchDepAtomVariant d v then f v else v)
 
+-- | Modifies a tree on all non-matches of a dependency atom.
+modifyTreeForNegDepAtom :: DepAtom -> (Variant -> Variant) -> Tree -> Tree
+modifyTreeForNegDepAtom d@(DepAtom _ _ _ cat pkg _) f =
+    modifyTree  cat pkg
+                (\v -> if matchDepAtomVariant d v then v else f v)
+
 -- | Variant of 'matchDepAtomTree' that only checks if
 --   any unmasked variant is present.
 isInTree :: Tree -> DepAtom -> Bool

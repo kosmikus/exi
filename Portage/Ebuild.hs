@@ -109,6 +109,7 @@ data Link          =  NoLink
 data Mask          =  KeywordMasked  [UseFlag]              -- ^ reasoning
                    |  HardMasked     FilePath [String]      -- ^ filename and reason
                    |  ProfileMasked  FilePath               -- ^ in which file?
+                   |  NotInProfile                          -- ^ without further reason
                    |  Shadowed       TreeLocation           -- ^ by which tree?
   deriving (Show,Eq)
 
