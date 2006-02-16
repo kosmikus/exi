@@ -45,6 +45,7 @@ pretend pc s d =
                                  callback  =  rdepend (top,top,top)
                               }
         let d' | d == "system"  =  system x
+               | d == "world"   =  world x
                | otherwise      =  getDepString' (expand x) d
         let fs = runState (do  p1 <- buildGraphForUDepString d'
                                gr <- gets graph

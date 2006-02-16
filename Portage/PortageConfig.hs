@@ -25,6 +25,7 @@ import Portage.PackageProvided
 import Portage.Dependency
 import Portage.Virtual
 import Portage.Strategy
+import Portage.World
 
 data PortageConfig =  PortageConfig
                         {
@@ -35,6 +36,7 @@ data PortageConfig =  PortageConfig
                            virtuals  ::  DepAtom -> Maybe DepTerm,
                            expand    ::  Package -> [Category],
                            system    ::  DepString,                 -- ^ system target
+                           world     ::  DepString,                 -- ^ world target
                            strategy  ::  Strategy
                         }
 
@@ -100,10 +102,13 @@ portageConfig =
         -- keyword masking
         tree      <-  return $ traverseTree (keywordMask cfg) tree
 
+        -- system and world target
+        let system    =  [ Plain (pdepatom p) | p <- ppkgs, psystem p ]
+        world     <-  fmap (map Plain) worldTarget
+
         -- preparing the results
         let itree     =  overlayInstalledTree tree inst
         let exp       =  let m = categoryExpand itree in \x -> maybe [] id (M.lookup x m)
-        let system    =  [ Plain (pdepatom p) | p <- ppkgs, psystem p ]
 
-        return (PortageConfig cfg tree inst itree virtuals exp system defaultStrategy)
+        return (PortageConfig cfg tree inst itree virtuals exp system world defaultStrategy)
 
