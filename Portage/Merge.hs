@@ -74,8 +74,10 @@ pretend pc s d =
         when (mverbose s) $ do
           putStr $ unlines $ map show $ mergelist
           putStrLn $ "\nShort version: "
-        putStr $ unlines  $  map (showAction (config x)) 
-                          $  filter (\ a -> case a of Built _ -> True; _ -> False) $ mergelist
+        putStr $ unlines $ 
+          concatMap (\ a ->  case a of
+                               Built v  ->  [showStatus v ++ " " ++ showVariant (config x) v]
+                               _        ->  []) $ mergelist
         let cycles = cyclesFrom gr [top]
         when (not (null cycles)) $
             do

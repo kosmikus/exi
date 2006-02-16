@@ -72,7 +72,6 @@ showAction c (Removed      v) = "D  " ++ E.showVariant c v
 showAction c Top              = "/"
 showAction c Bot              = "_"
 
-
 data DepState =  DepState
                    {
                       pconfig   ::  PortageConfig,

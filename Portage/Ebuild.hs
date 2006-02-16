@@ -152,6 +152,22 @@ showVariant cfg (Variant m e)  =  showPV (pv m) ++ showSlot (slot e) ++ showLoca
                                   ++ " " ++ unwords (map showMasked (masked m))
                                   ++ " " ++ concatMap hardMask (masked m) ++ unwords (diffUse (mergeUse (use cfg) (locuse m)) (iuse e))
 
+showStatus :: Variant -> String
+showStatus (Variant m e)  = f ++ s
+    where  f  =  case Portage.Ebuild.location m of
+                   Installed                 ->  "R"
+                   Provided _xo                ->  "P"
+                   PortageTree t NoLink      ->  "N"
+                   PortageTree t (Linked v)  ->
+                     let  lver   =  verPV . pv . meta $ v
+                          ver    =  verPV . pv $ m
+                     in   case () of
+                            _ | lver > ver  ->  "D"
+                              | lver < ver  ->  "U"
+                              | otherwise   ->  "R"
+           s  =  case slot e of
+                   ['0'] -> " "
+                   _     -> "S"
 
 filterMaskedVariants :: [Variant] -> [Variant]
 filterMaskedVariants = filter (\(Variant m _) -> null (masked m))
