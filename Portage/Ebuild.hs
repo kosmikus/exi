@@ -94,6 +94,17 @@ data TreeLocation  =  Installed
                    |  PortageTree    FilePath Link
   deriving (Show,Eq)
 
+showLocation :: Config -> TreeLocation -> String
+showLocation c Installed          =  " (installed)"
+showLocation c (Provided f)       =  " (provided in " ++ f ++ ")"
+showLocation c (PortageTree t l)  =  showLink l ++
+                                     if portDir c == t then "" else " [" ++ t ++ "]"
+
+showTreeLocation :: TreeLocation -> String
+showTreeLocation Installed          =  "installed packages"
+showTreeLocation (Provided f)       =  "provided packages from " ++ f
+showTreeLocation (PortageTree t _)  =  t
+
 isAvailable :: TreeLocation -> Bool
 isAvailable Installed     =  True
 isAvailable (Provided _)  =  True
@@ -106,12 +117,26 @@ data Link          =  NoLink
                    |  Linked  Variant     -- ^ installed variant
   deriving (Show,Eq)
 
+showLink :: Link -> String
+showLink NoLink     = ""
+showLink (Linked v) = " [" ++ showVersion (verPV . pv . meta $ v) ++ "]"
+
 data Mask          =  KeywordMasked  [UseFlag]              -- ^ reasoning
                    |  HardMasked     FilePath [String]      -- ^ filename and reason
                    |  ProfileMasked  FilePath               -- ^ in which file?
                    |  NotInProfile                          -- ^ without further reason
                    |  Shadowed       TreeLocation           -- ^ by which tree?
   deriving (Show,Eq)
+
+hardMask :: Mask -> String
+hardMask (HardMasked f r) = unlines r
+hardMask _                = ""
+
+showMasked :: Mask -> String
+showMasked (KeywordMasked xs) = "(masked by keyword: " ++ show xs ++ ")"
+showMasked (HardMasked f r) = "(hardmasked in " ++ f ++ ")"
+showMasked (ProfileMasked f) = "(excluded from profile in " ++ f ++")"
+showMasked (Shadowed t) = "(shadowed by " ++ showTreeLocation t ++ ")"
 
 -- | A variant is everything that makes a specific instance of an ebuild.
 --   It's supposed to be more than this datatype currently encodes.
@@ -121,6 +146,12 @@ data Variant =  Variant
                      ebuild  ::  Ebuild
                   }
   deriving (Show,Eq)
+
+showVariant :: Config -> Variant -> String
+showVariant cfg (Variant m e)  =  showPV (pv m) ++ showSlot (slot e) ++ showLocation cfg (Portage.Ebuild.location m) 
+                                  ++ " " ++ unwords (map showMasked (masked m))
+                                  ++ " " ++ concatMap hardMask (masked m) ++ unwords (diffUse (mergeUse (use cfg) (locuse m)) (iuse e))
+
 
 filterMaskedVariants :: [Variant] -> [Variant]
 filterMaskedVariants = filter (\(Variant m _) -> null (masked m))
