@@ -15,6 +15,7 @@ import Data.Maybe (fromJust, isJust, listToMaybe, maybeToList)
 import Data.Graph.Inductive hiding (version, Graph(), NodeMap())
 import Data.Map (Map)
 import qualified Data.Map as M
+import Control.Monad
 
 import Portage.PortageConfig
 import Portage.Config
@@ -42,7 +43,7 @@ findVersions = flip matchDepAtomTree
 
 -- | Builds a graph for an uninterpreted dependency string,
 --   i.e., a dependency string containing USE flags.
-buildGraphForUDepString :: DepString -> GG [Progress]
+buildGraphForUDepString :: DepString -> GG ()
 buildGraphForUDepString ds =
     do
         luse  <-  gets dlocuse
@@ -52,8 +53,8 @@ buildGraphForUDepString ds =
 --   by processing each term separately.
 --   Precondition: dependency string must be interpreted,
 --   without USE flags.
-buildGraphForDepString :: DepString -> GG [Progress]
-buildGraphForDepString ds = fmap concat (mapM buildGraphForDepTerm ds)
+buildGraphForDepString :: DepString -> GG ()
+buildGraphForDepString ds = mapM_ buildGraphForDepTerm ds
 
 -- | Builds a graph for a single term.
 --   Precondition: dependency string must be interpreted,
@@ -61,7 +62,7 @@ buildGraphForDepString ds = fmap concat (mapM buildGraphForDepTerm ds)
 --   If it is an atom, just delegate.
 --   If it is a use-qualified thing, check the USE flag and delegate.
 --   If it is an or-dependency, ...
-buildGraphForDepTerm :: DepTerm -> GG [Progress]
+buildGraphForDepTerm :: DepTerm -> GG ()
 buildGraphForDepTerm dt =
     do  
         pc    <-  gets pconfig
@@ -74,17 +75,17 @@ resolveVirtuals :: PortageConfig -> DepTerm -> DepTerm
 resolveVirtuals pc (Plain d)  =  maybe (Plain d) id (virtuals pc d)
 resolveVirtuals _  dt         =  dt
 
-buildGraphForOr :: DepString -> GG [Progress]
-buildGraphForOr []         =  return []  -- strange case, empty OR, but ok
+buildGraphForOr :: DepString -> GG ()
+buildGraphForOr []         =  return ()  -- strange case, empty OR, but ok
 buildGraphForOr ds@(dt:_)  =
     do
         pc    <-  gets pconfig
         case findInstalled pc ds of
-          Nothing   ->  do  p <- buildGraphForDepTerm dt  -- default
-                            return $ [Message $ "|| (" ++ show ds ++ ")) resolved to default"] ++ p
+          Nothing   ->  do  buildGraphForDepTerm dt  -- default
+                            progress (Message $ "|| (" ++ show ds ++ ")) resolved to default")
           Just dt'  ->  do  
-                            p <- buildGraphForDepTerm dt'  -- installed
-                            return $ [Message $ "|| (" ++ show ds ++ ")) resolved to available: " ++ show dt'] ++ p
+                            buildGraphForDepTerm dt'  -- installed
+                            progress (Message $ "|| (" ++ show ds ++ ")) resolved to available: " ++ show dt')
   where
     findInstalled :: PortageConfig -> DepString -> Maybe DepTerm
     findInstalled pc = find (isInstalledTerm . resolveVirtuals pc)
@@ -127,7 +128,7 @@ withCallback cb' g =
         modify (\s -> s { callback = cb })
         return r
 
-buildGraphForDepAtom :: DepAtom -> GG [Progress]
+buildGraphForDepAtom :: DepAtom -> GG ()
 buildGraphForDepAtom da
     | blocking da =
         do  -- for blocking dependencies, we have to consider all matching versions
@@ -135,13 +136,12 @@ buildGraphForDepAtom da
             let  s  =  strategy pc
                  t  =  itree pc
             cb  <-  gets callback
-            p   <-  mapM
-                      (\v -> do
-                                 n <- insNewNode v (sstop s v)
-                                 p' <- cb da n
-                                 return (LookAtEbuild (pv (meta v)) (origin (meta v)) : p'))
-                      (findVersions t (unblock da))
-            return ((Message $ "blocker " ++ show da) : concat p)
+            mapM_ (\v -> do
+                             progress (LookAtEbuild (pv (meta v)) (origin (meta v)))
+                             n <- insNewNode v (sstop s v)
+                             cb da n)
+                  (findVersions t (unblock da))
+            progress (Message $ "blocker " ++ show da)
     | otherwise =
         do  pc  <-  gets pconfig
             g   <-  gets graph
@@ -151,7 +151,7 @@ buildGraphForDepAtom da
                  t  =  itree pc
                  p  =  pFromDepAtom da
             case sselect s p (findVersions t da) of
-              Reject f -> return []  -- fail (show f)
+              Reject f -> return ()  -- fail (show f)
               Accept v@(Variant m e)  ->  
                 let  avail      =  E.isAvailable (location m)  -- installed or provided?
                      already    =  isActive v a
@@ -164,22 +164,22 @@ buildGraphForDepAtom da
                                    in   -- set new local USE context
                                         withLocUse luse $
                                         do
+                                            progress (LookAtEbuild (pv (meta v)) (origin (meta v)))
                                             -- insert nodes for v, and activate
                                             n <- insNewNode v stop
                                             activate v
                                             -- insert edges according to current state
                                             cb <- gets callback
-                                            p0 <- cb da n
+                                            cb da n
                                             if already || stop
-                                              then return ([LookAtEbuild (pv (meta v)) (origin (meta v))] ++ p0)
+                                              then return ()
                                               else do
                                                        -- add deps to graph
-                                                       p1 <- withCallback (depend n) $ buildGraphForUDepString deps
+                                                       withCallback (depend n) $ buildGraphForUDepString deps
                                                        -- add rdeps to graph
-                                                       p2 <- withCallback (rdepend n) $ buildGraphForUDepString rdeps
+                                                       withCallback (rdepend n) $ buildGraphForUDepString rdeps
                                                        -- add pdeps to graph
-                                                       p3 <- withCallback (pdepend n) $ buildGraphForUDepString pdeps
-                                                       return ([LookAtEbuild (pv (meta v)) (origin (meta v))] ++ p0 ++ p1 ++ p2 ++ p3)
+                                                       withCallback (pdepend n) $ buildGraphForUDepString pdeps
 
 
 isAvailable :: Action -> Maybe Variant
@@ -209,7 +209,7 @@ isUpgradeNode g n =  listToMaybe $
 --   the cycle to the Built state.
 -- * Self-blockers. We just drop them, but with a headache.
 -- This is currently very fragile w.r.t. ordering of the resolutions.
-resolveCycle :: [Node] -> GG (Bool,[Progress])
+resolveCycle :: [Node] -> GG Bool
 resolveCycle cnodes = 
     do  g <- gets graph
         let cedges = zipWith findEdge  (map (out g) cnodes)
@@ -224,7 +224,7 @@ resolveCycle cnodes =
     detectBootstrapCycle :: Graph -> [Node] -> Maybe (Node,Variant,Node,Variant)
     detectBootstrapCycle g ns = msum (map (isUpgradeNode g) ns)
 
-    resolveBootstrapCycle :: Node -> Variant -> Node -> Variant -> GG (Bool,[Progress])
+    resolveBootstrapCycle :: Node -> Variant -> Node -> Variant -> GG Bool
     resolveBootstrapCycle a' v' a v =
         do
             g <- gets graph
@@ -234,13 +234,14 @@ resolveCycle cnodes =
                                                        (isDependEdge e || isRDependEdge e))
                                      (inn g a')
             if null incoming
-              then failR []
+              then return False
               else do  modifyGraph (  insEdges (map (\(s',_,d') -> (s',a,d')) incoming) .
                                       delEdges (map (\(s',t',_) -> (s',t')) incoming) )
-                       succeedR [Message $ "Resolved bootstrap cycle at "  ++ (showPV . pv . meta $ v')
-                                                                           ++ " (redirected " ++ show incoming ++ ")"]
+                       progress (Message $ "Resolved bootstrap cycle at "  ++ (showPV . pv . meta $ v')
+                                                                           ++ " (redirected " ++ show incoming ++ ")")
+                       return True
 
-    resolveSelfBlockCycle :: LEdge DepType -> GG (Bool,[Progress])
+    resolveSelfBlockCycle :: LEdge DepType -> GG Bool
     resolveSelfBlockCycle (s,t,d) =
         do
             g <- gets graph
@@ -248,29 +249,32 @@ resolveCycle cnodes =
               (vs,vs')     ->  let  vsi = intersect (map (extractPS . pvs) vs) (map (extractPS . pvs) vs')
                                in   if not . null $ vsi
                                       then  do  modifyGraph (delEdge (s,t))
-                                                succeedR [Message $ "Resolved self-block cycle for " ++ (showPS $ head vsi)
-                                                                                                    ++ " (redirected " ++ show (s,t,d) ++ ")"]
-                                      else  failR []
+                                                progress (Message $ "Resolved self-block cycle for " ++ (showPS $ head vsi)
+                                                                                                    ++ " (redirected " ++ show (s,t,d) ++ ")")
+                                                return True
+                                      else  return False
  
-    resolvePDependCycle :: LEdge DepType -> GG (Bool,[Progress])
+    resolvePDependCycle :: LEdge DepType -> GG Bool
     resolvePDependCycle (s,t,d) =
         do
             ls <- gets labels
             g <- gets graph
             case isAvailableNode g s of
-              Nothing  ->  failR []
+              Nothing  ->  return False
               Just v   ->  do  let incoming = 
                                      filter  (\e@(s',_,_) ->  s' `elem` cnodes &&
                                                               (isDependEdge e || isRDependEdge e))
                                              (inn g s)
                                if null incoming
-                                 then failR []
+                                 then return False
                                  else do  let pv'  =  pv . meta $ v
                                           let nm   =  ls M.! pv'
                                           modifyGraph (  insEdges (map (\(s',_,d') -> (s',built nm,d')) incoming) .
                                                          delEdges (map (\(s',t',_) -> (s',t')) incoming) )
-                                          succeedR [Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ show incoming ++ ")" ]
+                                          progress (Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ show incoming ++ ")" )
+                                          return True
 
+{-
 (||.) :: GG (Bool,[a]) -> GG (Bool,[a]) -> GG (Bool,[a])
 f ||. g = do  (b,r) <- f
               if b  then return (b,r)
@@ -281,18 +285,13 @@ f ||. g = do  (b,r) <- f
 f &&. g = do  (b1,r1) <- f
               (b2,r2) <- g
               return (b1 || b2, r1 ++ r2)
+-}
 
-succeedR :: [a] -> GG (Bool,[a])
-succeedR ps = return (True,ps)
+sumR :: [GG Bool] -> GG Bool
+sumR = foldr (liftM2 (||)) (return False)
 
-failR :: [a] -> GG (Bool,[a])
-failR ps = return (False,ps)
-
-sumR :: [GG (Bool,[a])] -> GG (Bool,[a])
-sumR = foldr (||.) (failR [])
-
-allR :: [GG (Bool,[a])] -> GG (Bool,[a])
-allR = foldr (&&.) (failR [])
+allR :: [GG Bool] -> GG Bool
+allR = foldr (liftM2 (&&)) (return True)
 
 isPDependEdge :: LEdge DepType -> Bool
 isPDependEdge  (_,_,PDepend False _)  =  True

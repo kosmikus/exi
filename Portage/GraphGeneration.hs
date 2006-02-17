@@ -7,13 +7,12 @@
 -}
 
 module Portage.GraphGeneration 
-  (module Control.Monad.State, module Portage.GraphGeneration)
+  (module Portage.GraphGeneration)
   where
 
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Graph.Inductive hiding (version, Graph(), NodeMap())
-import Control.Monad.State
 
 import Portage.PortageConfig
 import Portage.Config
@@ -79,7 +78,7 @@ data DepState =  DepState
                       graph     ::  Graph,
                       labels    ::  Map PV NodeMap,
                       active    ::  Map PS PV,
-                      counter   ::  Int,
+                      counter   ::  !Int,
                       callback  ::  Callback
                    }
 
@@ -100,8 +99,50 @@ data Progress =  LookAtEbuild  PV EbuildOrigin
   deriving (Eq,Show)
 
 -- | Graph generation monad.
-type GG = State DepState
+newtype GG a = GG { runGG :: DepState -> [Either Progress (a,DepState)] }
 
+returnGG :: a -> GG a
+returnGG x = GG (\s -> [Right (x,s)])
+
+bindGG :: GG a -> (a -> GG b) -> GG b
+bindGG (GG a) f = 
+  GG (\s0 -> [ y |
+               x <- a s0,
+               y <- case x of  Right (t,s1)  ->  runGG (f t) s1
+                               Left p        ->  [Left p] ])
+
+fmapGG :: (a -> b) -> GG a -> GG b
+fmapGG f (GG a) =
+    GG (\s -> map  (\x -> case x of { Right (x,s) -> Right (f x,s); Left x -> Left x })
+                   (a s))
+
+combine :: Either Progress (a,DepState) -> Either Progress (b,DepState)
+                                        -> Either Progress (b,DepState)
+combine (Left p)    _            =  Left p
+combine _           p@(Left _)   =  p
+combine (Right _)   p@(Right _)  =  p
+
+instance Monad GG where
+  return = returnGG
+  (>>=) = bindGG
+
+instance Functor GG where
+  fmap = fmapGG
+
+get :: GG DepState
+get = GG (\s -> [Right (s,s)])
+
+put :: DepState -> GG ()
+put s = GG (\_ -> [Right ((),s)])
+
+gets :: (DepState -> a) -> GG a
+gets f = GG (\s -> [Right (f s,s)])
+
+modify :: (DepState -> DepState) -> GG ()
+modify f = GG (\s -> [Right ((),f s)])
+
+progress :: Progress -> GG ()
+progress p = GG (\s -> [Left p,Right ((),s)])
 
 isActive :: Variant -> Map PS PV -> Bool
 isActive v m =  case M.lookup (extractPS . pvs $ v) m of
@@ -253,3 +294,8 @@ registerNode :: PV -> NodeMap -> GG ()
 registerNode pv nm = modify (\s -> s { labels = M.insert pv nm (labels s) })
 
 
+runGGWith :: DepState -> GG a -> ([Progress],DepState)
+runGGWith s cmp = proc (runGG cmp s)
+  where  proc []               =  ([],error "no solution found")
+         proc (Right (_,s):_)  =  ([],s)
+         proc (Left p:xs)      =  (\ ~(x,y) -> (p:x,y)) (proc xs)

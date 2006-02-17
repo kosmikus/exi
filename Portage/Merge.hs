@@ -10,7 +10,6 @@ module Portage.Merge
   where
 
 import Control.Monad (when)
-import Control.Monad.State
 import Data.Graph.Inductive hiding (Graph())
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
@@ -47,23 +46,20 @@ pretend pc s d =
         let d' | d == "system"  =  system x
                | d == "world"   =  world x
                | otherwise      =  getDepString' (expand x) d
-        let fs = runState (do  p1 <- buildGraphForUDepString d'
+        let fs = runGGWith initialState $ 
+                           do  buildGraphForUDepString d'
                                gr <- gets graph
                                let cycles = cyclesFrom gr [top]
-                               p2 <- if null cycles
-                                       then  return []
-                                       else  do  let p21 = [Message "Graph complete, removing cycles."]
-                                                 let loop cs = do (b,ps1) <- allR (map resolveCycle cs)
+                               if null cycles
+                                       then  return ()
+                                       else  do  progress (Message "Graph complete, removing cycles.")
+                                                 let loop cs = do b <- allR (map resolveCycle cs)
                                                                   gr <- gets graph
                                                                   let ncs = cyclesFrom gr [top]
                                                                   if b && not (null ncs)
-                                                                    then do  ps2 <- loop ncs 
-                                                                             return $ ps1 ++ ps2
-                                                                    else return ps1
-                                                 p22 <- loop cycles
-                                                 return $ p21 ++ p22
-                               return $ p1 ++ p2
-                          ) initialState 
+                                                                    then loop ncs 
+                                                                    else return ()
+                                                 loop cycles
         putStr $ "Calculating dependencies: "
         when (mverbose s) $ putStrLn ""
         (if (not . mverbose $ s) then withoutBuffering else id) $ do
