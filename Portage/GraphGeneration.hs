@@ -82,7 +82,7 @@ data DepState =  DepState
                       callback  ::  Callback
                    }
 
-type Callback = DepAtom -> NodeMap -> GG [Progress]
+type Callback = DepAtom -> NodeMap -> GG ()
 type NodeMap = (Int,Int,Int)
 
 available, built, removed :: NodeMap -> Int
@@ -145,13 +145,12 @@ isActive v m =  case M.lookup (extractPS . pvs $ v) m of
 
 activate :: Variant -> GG ()
 activate v = 
-    do  a   <-  gets active
-        ls  <-  gets labels
-        let ps' = extractPS . pvs $ v
+    do  let ps' = extractPS . pvs $ v
         let pv' = pv . meta $ v
-        case M.lookup (extractPS . pvs $ v) a of
+        a <- gets active
+        case M.lookup ps' a of
           Nothing   ->  do
-                            let pv' = pv . meta $ v
+                            ls  <-  gets labels
                             modify (\s -> s { active = M.insert ps' pv' a })
                             modifyGraph ( insEdge (top, available (ls M.! pv'), Meta) )
           Just pv''
@@ -159,42 +158,53 @@ activate v =
             | otherwise    ->  fail $ "Depgraph slot conflict: " ++ showPVS (pvs v) ++ " vs. " ++ showPV pv''
 
 
-depend :: NodeMap -> DepAtom -> NodeMap -> GG [Progress]
+depend :: NodeMap -> DepAtom -> NodeMap -> GG ()
 depend source da target
     | blocking da =
         do
-            modifyGraph (insEdges [  (built target,built source,Depend True da) ])
-            return [AddEdge (built target) (built source) (Depend True da)]
+            let bt = built target
+                bs = built source
+                d  = Depend True da
+            modifyGraph (insEdges [ (bt,bs,d) ])
+            progress (AddEdge bt bs d)
     | otherwise =
         do
-            modifyGraph (insEdges [  (built source,available target,Depend False da),
-                                     (removed target,built source,Depend True da) ])
-            return [AddEdge (built source) (available target) (Depend False da)]
+            let bs = built source
+                at = available target
+                d1 = Depend False da
+                rt = removed target
+                bt = built source
+                d2 = Depend True da
+            modifyGraph (insEdges [  (bs,at,d1),
+                                     (rt,bs,d2) ])
+            progress (AddEdge bs at d1)
+            progress (AddEdge rt bs d2)
 
-rdepend :: NodeMap -> DepAtom -> NodeMap -> GG [Progress]
-rdepend source da target
+rdepend, pdepend :: NodeMap -> DepAtom -> NodeMap -> GG ()
+rdepend = rpdepend RDepend
+pdepend = rpdepend PDepend
+
+rpdepend :: (Bool -> DepAtom -> DepType) -> NodeMap -> DepAtom -> NodeMap -> GG ()
+rpdepend rpd source da target
     | blocking da =
         do
-           modifyGraph (insEdges [  (built target,removed source,RDepend True da) ])
-           return [AddEdge (built target) (removed source) (RDepend True da)]
+           let bt = built target
+               rs = removed source
+               d  = rpd True da
+           modifyGraph (insEdges [  (bt,rs,d) ])
+           progress (AddEdge bt rs d)
     | otherwise =
         do
-           modifyGraph (insEdges [  (available source,available target,RDepend False da),
-                                    (removed target,removed source,RDepend True da) ])
-           return [AddEdge (available source) (available target) (RDepend False da)]
-
--- | Like 'rdepend' really, except for the 'DepType'. Could be unified.
-pdepend :: NodeMap -> DepAtom -> NodeMap -> GG [Progress]
-pdepend source da target
-    | blocking da =
-        do
-           modifyGraph (insEdges [  (built target,removed source,PDepend True da) ])
-           return [AddEdge (built target) (removed source) (PDepend True da)]
-    | otherwise =
-        do
-           modifyGraph (insEdges [  (available source,available target,PDepend False da),
-                                    (removed target,removed source,PDepend True da) ])
-           return [AddEdge (available source) (available target) (PDepend False da)]
+           let as = available source
+               at = available target
+               d1 = rpd False da
+               rt = removed target
+               rs = removed source
+               d2 = rpd True da
+           modifyGraph (insEdges [  (as,at,d1),
+                                    (rt,rs,d2) ])
+           progress (AddEdge as at d1)
+           progress (AddEdge rt rs d2)
 
 -- | Modify the graph within the monad.
 modifyGraph :: (Graph -> Graph) -> GG ()
