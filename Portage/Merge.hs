@@ -49,10 +49,11 @@ pretend pc s d =
         let fs = runGGWith initialState $ 
                            do  buildGraphForUDepString d'
                                gr <- gets graph
+                               progress (Message "Graph complete, checking for cycles.")
                                let cycles = cyclesFrom gr [top]
                                if null cycles
                                        then  return ()
-                                       else  do  progress (Message "Graph complete, removing cycles.")
+                                       else  do  progress (Message "Removing cycles.")
                                                  let loop cs = do b <- allR (map resolveCycle cs)
                                                                   gr <- gets graph
                                                                   let ncs = cyclesFrom gr [top]

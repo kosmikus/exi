@@ -106,21 +106,15 @@ returnGG x = GG (\s -> [Right (x,s)])
 
 bindGG :: GG a -> (a -> GG b) -> GG b
 bindGG (GG a) f = 
-  GG (\s0 -> [ y |
-               x <- a s0,
-               y <- case x of  Right (t,s1)  ->  runGG (f t) s1
-                               Left p        ->  [Left p] ])
+  GG (\s -> concatMap  (\x -> case x of
+                                Right (t,s')  ->  runGG (f t) s'
+                                Left p        ->  [Left p])
+                       (a s))
 
 fmapGG :: (a -> b) -> GG a -> GG b
 fmapGG f (GG a) =
-    GG (\s -> map  (\x -> case x of { Right (x,s) -> Right (f x,s); Left x -> Left x })
+    GG (\s -> map  (\x -> case x of { Right (y,s') -> Right (f y,s'); Left x -> Left x })
                    (a s))
-
-combine :: Either Progress (a,DepState) -> Either Progress (b,DepState)
-                                        -> Either Progress (b,DepState)
-combine (Left p)    _            =  Left p
-combine _           p@(Left _)   =  p
-combine (Right _)   p@(Right _)  =  p
 
 instance Monad GG where
   return = returnGG
@@ -296,6 +290,6 @@ registerNode pv nm = modify (\s -> s { labels = M.insert pv nm (labels s) })
 
 runGGWith :: DepState -> GG a -> ([Progress],DepState)
 runGGWith s cmp = proc (runGG cmp s)
-  where  proc []               =  ([],error "no solution found")
-         proc (Right (_,s):_)  =  ([],s)
-         proc (Left p:xs)      =  (\ ~(x,y) -> (p:x,y)) (proc xs)
+  where  proc []                =  ([],error "no solution found")
+         proc (Right ~(_,s):_)  =  ([],s)
+         proc (Left p:xs)       =  (\ ~(x,y) -> (p:x,y)) (proc xs)
