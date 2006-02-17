@@ -42,10 +42,13 @@ detectFileFormat (Just f)  =
     catch
       (do
           s <- fmap lines . strictReadFile $ f
-          return (  if length s == 22
-                    then scan s
-                    else FlatHash))
+          return (detectStringFormat s))
       (const $ return FlatHash)
+
+detectStringFormat :: [String] -> CacheFormat
+detectStringFormat s
+  | length s == 2  =  scan s
+  | otherwise      =  FlatHash
   where  -- we test the RESTRICT line for an occurrence of an '='
          scan (_:_:_:_:x:_)  =  if elem '=' x then FlatHash else FlatList
          scan _              =  FlatHash

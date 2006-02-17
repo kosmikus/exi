@@ -58,12 +58,12 @@ stripNewlines :: String -> String
 stripNewlines = filter (/='\n')
 
 -- | Reads a string into a map from strings to strings.
-readStringMap :: String -> Map String String
-readStringMap = Map.fromList . map ((\ (x,y) -> (x,tail y)) . break (=='=')) . lines
+readStringMap :: [String] -> Map String String
+readStringMap = Map.fromList . map ((\ (x,y) -> (x,tail y)) . break (=='='))
 
 -- | Writes a map from strings to strings into a collapsed string.
-writeStringMap :: Map String String -> String
-writeStringMap = unlines . sortBy underscoreFirst . map (\ (x,y) -> x ++ "=" ++ y) . Map.toList
+writeStringMap :: Map String String -> [String]
+writeStringMap = sortBy underscoreFirst . map (\ (x,y) -> x ++ "=" ++ y) . Map.toList
   where  underscoreFirst ('_':_)  ('_':_)  =  EQ
          underscoreFirst ('_':_)  _        =  LT
          underscoreFirst _        ('_':_)  =  GT

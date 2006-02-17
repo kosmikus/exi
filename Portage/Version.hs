@@ -111,7 +111,8 @@ readRev      ::  CharParser st (Int,            String)
 
 readVer      =  liftM ((\(x,y) -> (x, concat . intersperse "." $ y)) . unzip) (sepBy1 readNum (char '.'))
 readNum      =  do  ds <- many1 digit
-                    return (read ds, ds)
+                    case read ds of
+                      n -> return (n,ds)
 readC        =  option (Nothing,  "")  (liftM (\x -> (Just x, [x])) letter)
 readSuf      =  option (Normal,   "")  (  do  char '_'
                                               (f,sr)  <-  readSufType

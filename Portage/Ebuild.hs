@@ -192,14 +192,14 @@ putEbuildFlatHash f ebuild eclasses  =
                       ("PROVIDE",show $ provide ebuild),
                       ("EAPI",eapi ebuild) ]
         h <- openFile f WriteMode
-        hPutStr h (writeStringMap em)
+        hPutStr h (unlines . writeStringMap $ em)
         hClose h
 
-getEbuild :: CacheFormat -> FilePath -> String -> Ebuild
+getEbuild :: CacheFormat -> FilePath -> [String] -> Ebuild
 getEbuild FlatList f e  =  getEbuildFlatList f e
 getEbuild FlatHash f e  =  snd (getEbuildFlatHash f e)
 
-getEbuildFlatHash :: FilePath -> String -> ([(Eclass,FilePath,MTime)],Ebuild)
+getEbuildFlatHash :: FilePath -> [String] -> ([(Eclass,FilePath,MTime)],Ebuild)
 getEbuildFlatHash f e  =  let  em      =  readStringMap e
                                f !. k  =  case M.lookup k f of
                                             Nothing  ->  ""
@@ -237,9 +237,9 @@ getEbuildFlatHash f e  =  let  em      =  readStringMap e
                                             (if null eapi then "0" else eapi)
                           in   (ecl,ebuild)
 
-getEbuildFlatList :: FilePath -> String -> Ebuild
+getEbuildFlatList :: FilePath -> [String] -> Ebuild
 getEbuildFlatList f e
-  |  length l <= 15  =  error $ "getEbuild: corrupted ebuild cache " ++ f ++ " (too short by " ++ show (15 - length l) ++ " lines)"
+  |  length e <= 15  =  error $ "getEbuild: corrupted ebuild cache " ++ f ++ " (too short by " ++ show (15 - length e) ++ " lines)"
   |  otherwise       =  Ebuild  
                           (getDepString dep)
                           (getDepString rdep)
@@ -256,8 +256,7 @@ getEbuildFlatList f e
                           (getDepString pdep)
                           (getDepString prov)
                           (if null eapi then "0" else eapi)
-  where  l = lines e
-         (dep:rdep:slt:src:restr:home:lic:des:key:inh:use:cdep:pdep:prov:eapi:_) = l
+  where  (dep:rdep:slt:src:restr:home:lic:des:key:inh:use:cdep:pdep:prov:eapi:_) = e
 
 -- | Reads the ebuild of an installed package from disk.
 --   This is very different than for uninstalled ebuilds, because installed
@@ -341,14 +340,15 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                                           return (cacheMTime == metaMTime)
                                  else return False
         eclassesExist  <-  unsafeInterleaveIO $ doesFileExist eclassesFile
-        cacheFormat    <-  unsafeInterleaveIO $ detectFileFormat (Just cacheFile)
+        origCache      <-  unsafeInterleaveIO $ fmap lines (strictReadFile cacheFile)
+        let cacheFormat    =  if cacheExists then detectStringFormat origCache else FlatHash
         let eclassesDummy  =  -- Only used for FlatList cache format:
                               -- If no eclasses mtime file is present, we assume
                               -- the current tree
                               do
                                   putStrLn ("making eclass dummy for " ++ showPV pv)
                                   makePortageFile eclassesFile
-                                  c <- fmap (getEbuild cacheFormat cacheFile) (strictReadFile cacheFile)
+                                  let c         =  getEbuild cacheFormat cacheFile origCache
                                   let eclasses  =  inherited c
                                   let efiles    =  
                                         map  (\x -> eclassDir pt ./. (x ++ ".eclass"))
@@ -363,15 +363,14 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
         eclassesExist  <-  unsafeInterleaveIO $ case cacheFormat of
                                                   FlatList  ->  doesFileExist eclassesFile
                                                   FlatHash  ->  return True
-        -- read cacheContents only once you know the cache is ok
-        ~(eclasses,cacheContents) <- getEbuildAndEclasses cacheFormat eclassesFile cacheFile
+        ~(eclasses,cacheContents) <- unsafeInterleaveIO $ getEbuildAndEclasses cacheFormat eclassesFile cacheFile origCache
         let eclassesOK     =  all (\(e,l,m) ->  Portage.Eclass.location (ecs M.! e) == l
                                                 && mtime (ecs M.! e) == m) eclasses
         let refreshCache   =  do
                                   putStrLn ("cache refresh for " ++ showPV pv)
                                   makePortageFile cacheFile
                                   makeCacheEntry cfg pt pv
-                                  ebuild <- fmap (getEbuildFlatList cacheFile) (strictReadFile cacheFile)
+                                  ebuild <- fmap (getEbuildFlatList cacheFile) (fmap lines (strictReadFile cacheFile))
                                   let eclasses   =  inherited ebuild
                                   let eclasses'  =
                                         map  (\e -> (e, Portage.Eclass.location (ecs M.! e), mtime (ecs M.! e)))
@@ -391,14 +390,14 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                    | otherwise  =  FromCache
         return (cacheContents,origin)
 
-getEbuildAndEclasses :: CacheFormat -> FilePath -> FilePath -> IO ([(Eclass,FilePath,MTime)],Ebuild)
-getEbuildAndEclasses FlatList eclassesFile cacheFile =
+getEbuildAndEclasses :: CacheFormat -> FilePath -> FilePath -> [String] -> IO ([(Eclass,FilePath,MTime)],Ebuild)
+getEbuildAndEclasses FlatList eclassesFile cacheFile cache =
     do
         ecc  <-  unsafeInterleaveIO $ readEclassesFile eclassesFile
-        ebc  <-  unsafeInterleaveIO $ fmap (getEbuildFlatList cacheFile) (strictReadFile cacheFile)
+        let ebc  =  getEbuildFlatList cacheFile cache
         return (ecc,ebc)
-getEbuildAndEclasses FlatHash _ cacheFile =
-    unsafeInterleaveIO $ fmap (getEbuildFlatHash cacheFile) (strictReadFile cacheFile)
+getEbuildAndEclasses FlatHash _ cacheFile cache =
+    return $ getEbuildFlatHash cacheFile cache
 
 -- | This code is following the code in @doebuild@ from @portage.py@.
 makeCacheEntry :: Config -> FilePath -> PV -> IO ()
