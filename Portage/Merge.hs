@@ -41,7 +41,7 @@ pretend pc s d =
                                  labels    =  M.empty,
                                  active    =  M.empty,
                                  counter   =  max top bot + 1,
-                                 callback  =  rdepend (top,top,top)
+                                 callback  =  rdepend (NodeMap top top top)
                               }
         let d' | d == "system"  =  system x
                | d == "world"   =  world x
@@ -64,8 +64,8 @@ pretend pc s d =
         putStr $ "Calculating dependencies: "
         when (mverbose s) $ putStrLn ""
         (if (not . mverbose $ s) then withoutBuffering else id) $ do
-          putStr $ concatMap (showProgress (mverbose s)) $ fst fs
-        putStrLn $ "\n"
+          sequence_ $ foldr (showProgress (mverbose s)) [] (fst fs)
+          putStrLn $ "\n"
         let gr = graph $ snd $ fs
         let mergelist = concat $ postorderF $ dffWith lab' [0] $ gr
         when (mverbose s) $ do
@@ -100,17 +100,21 @@ showNode :: Bool -> DGraph -> Int -> String
 showNode v gr n = (show . fromJust . lab gr $ n) ++ number
   where number = if v then " [" ++ show n ++ "]" else ""
 
-showProgress :: Bool -> Progress -> String
-showProgress True = showProgressLong
-showProgress False = showProgressShort
+showProgress :: Bool -> Progress -> [IO ()] -> [IO ()]
+showProgress True   =  showProgressLong
+showProgress False  =  showProgressShort
 
-showProgressLong (LookAtEbuild pv o) = showPV pv ++ " " ++ showOriginLong o ++ "\n"
-showProgressLong (AddEdge n1 n2 d)   = "added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d ++ "\n"
-showProgressLong (Message s)         = s ++ "\n"
+showProgressLong (LookAtEbuild pv o)  r   =  putStrLn (showPV pv ++ " " ++ showOriginLong o) : r
+showProgressLong (AddEdge n1 n2 d)    r   =  putStrLn ("added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d) : r
+showProgressLong (Message s)          r   =  putStrLn s : r
+showProgressLong (Backtrack True _)   r   =  putStrLn "Backtracking" : r
+showProgressLong (Backtrack False _)  r   =  putStrLn "Backtracking" : []
 
-showProgressShort (LookAtEbuild pv o) = showOriginShort o
-showProgressShort (AddEdge _ _ _)     = ""
-showProgressShort (Message s)         = ""
+showProgressShort (LookAtEbuild pv o)  r  = putStr (showOriginShort o) : r
+showProgressShort (AddEdge _ _ _)      r  = r
+showProgressShort (Message s)          r  = r
+showProgressShort (Backtrack True _)   r  = putStr "B" : r
+showProgressShort (Backtrack False _)  r  = putStr "B" : []
 
 showOriginLong FromCache         =  "(from cache)"
 showOriginLong CacheRegen        =  "(regenerated cache entry)"

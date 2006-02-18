@@ -21,6 +21,7 @@ import Portage.Dependency hiding (getDepAtom)
 import Portage.Package
 import Portage.Ebuild (Variant(..), Ebuild(iuse), EbuildMeta(..), EbuildOrigin(..), TreeLocation(..), Mask(..), Link(..), pvs)
 import qualified Portage.Ebuild as E
+import Portage.Strategy
 
 type DGraph = Graph
 type Graph = Gr [Action] DepType
@@ -76,24 +77,26 @@ data DepState =  DepState
                       pconfig   ::  PortageConfig,
                       dlocuse   ::  [UseFlag],
                       graph     ::  Graph,
-                      labels    ::  Map PV NodeMap,
-                      active    ::  Map PS PV,
+                      labels    ::  Map Variant NodeMap,
+                      active    ::  Map P (Map Slot Variant),
                       counter   ::  !Int,
                       callback  ::  Callback
                    }
 
 type Callback = DepAtom -> NodeMap -> GG ()
-type NodeMap = (Int,Int,Int)
 
-available, built, removed :: NodeMap -> Int
-available  (b,a,r) = a
-built      (b,a,r) = b
-removed    (b,a,r) = r
+data NodeMap = NodeMap
+                 {
+                    available  ::  !Int,
+                    built      ::  !Int,
+                    removed    ::  !Int
+                 }
 
 top = 0
 bot = 1
 
 data Progress =  LookAtEbuild  PV EbuildOrigin
+              |  Backtrack     Bool Failure
               |  AddEdge       Node Node DepType
               |  Message       String
   deriving (Eq,Show)
@@ -138,24 +141,47 @@ modify f = GG (\s -> [Right ((),f s)])
 progress :: Progress -> GG ()
 progress p = GG (\s -> [Left p,Right ((),s)])
 
-isActive :: Variant -> Map PS PV -> Bool
-isActive v m =  case M.lookup (extractPS . pvs $ v) m of
-                  Nothing   ->  False
-                  Just pv'  ->  (pv . meta $ v) == pv'
+choice :: [a] -> GG a
+choice cs = GG (\s -> [Right (c,s) | c <- cs])
 
-activate :: Variant -> GG ()
+backtrack :: GG a
+backtrack = GG (\_ -> [])
+
+lookupPS :: PS -> Map P (Map Slot a) -> Maybe a
+lookupPS (PS cat pkg slot) m = M.lookup (P cat pkg) m >>= M.lookup slot
+
+insertPS :: PS -> a -> Map P (Map Slot a) -> Map P (Map Slot a)
+insertPS (PS cat pkg slot) v m = 
+   M.insertWith  (\ m _ -> M.insert slot v m) 
+                 (P cat pkg) (M.singleton slot v) m
+
+getActives :: P -> Map P (Map Slot a) -> [a]
+getActives p m = M.elems (M.findWithDefault M.empty p m)
+
+isActive :: Variant -> Map P (Map Slot Variant) -> Bool
+isActive v m =  case lookupPS (extractPS . pvs $ v) m of
+                  Nothing   ->  False
+                  Just v'   ->  v == v'
+
+-- | Activates a variant. Returns whether the package does already exist.
+activate :: Variant -> GG Bool
 activate v = 
     do  let ps' = extractPS . pvs $ v
-        let pv' = pv . meta $ v
         a <- gets active
-        case M.lookup ps' a of
-          Nothing   ->  do
-                            ls  <-  gets labels
-                            modify (\s -> s { active = M.insert ps' pv' a })
-                            modifyGraph ( insEdge (top, available (ls M.! pv'), Meta) )
-          Just pv''
-            | pv'' == pv'  ->  return ()
-            | otherwise    ->  fail $ "Depgraph slot conflict: " ++ showPVS (pvs v) ++ " vs. " ++ showPV pv''
+        case lookupPS ps' a of
+          Nothing          ->  do
+                                   ls  <-  gets labels
+                                   modify (\s -> s { active = insertPS ps' v a })
+                                   modifyGraph ( insEdge (top, available (ls M.! v), Meta) )
+                                   return False
+          Just v'
+            | v == v'      ->  return True
+            | otherwise    ->  do
+                                   s <- gets (strategy . pconfig)
+                                   let  f  =  SlotConflict v v'
+                                        b  =  sbacktrack s f
+                                   progress (Backtrack b f)
+                                   backtrack
 
 
 depend :: NodeMap -> DepAtom -> NodeMap -> GG ()
@@ -226,7 +252,7 @@ newNode =
 insNewNode :: Variant -> Bool -> GG NodeMap
 insNewNode v a =
     do  ls <- gets labels
-        case M.lookup (pv . meta $ v) ls of
+        case M.lookup v ls of
           Nothing | a && (E.isAvailable . location $ meta v)  ->  insAvailableHistory v
                   | otherwise                                 ->  
                       case location . meta $ v of
@@ -239,10 +265,8 @@ insAvailableHistory v =
     do  n <- stepCounter 2
         let  a    =  n
              r    =  n + 1
-             ps'  =  extractPS (pvs v)
-             pv'  =  pv . meta $ v
-             nm   =  (a,a,r)
-        registerNode pv' nm
+             nm   =  NodeMap a a r
+        registerNode v nm
         modifyGraph (  insEdges [ (r,a,Meta),
                                   (bot,a,Meta),
                                   (r,top,Meta) ] .
@@ -261,10 +285,10 @@ insUpgradeHistory v v' =
              r    =  b'
              a'   =  n + 2
              r'   =  n + 3
-             nm   =  (a,a,r)
-             nm'  =  (b',a',r')
-        registerNode (pv . meta $ v) nm
-        registerNode (pv . meta $ v') nm'
+             nm   =  NodeMap a a r
+             nm'  =  NodeMap b' a' r'
+        registerNode v   nm
+        registerNode v'  nm'
         modifyGraph (  insEdges [ (r',a',Meta),
                                   (a',b',Meta),
                                   (r,a,Meta),
@@ -282,9 +306,8 @@ insInstallHistory v =
         let  b    =  n
              a    =  n + 1
              r    =  n + 2
-             pv'  =  pv . meta $ v
-             nm   =  (b,a,r)
-        registerNode pv' nm
+             nm   =  NodeMap b a r
+        registerNode v nm
         modifyGraph (  insEdges [ (r,a,Meta),
                                   (a,b,Meta),
                                   (b,bot,Meta),
@@ -294,8 +317,8 @@ insInstallHistory v =
                                   (r,[Removed v]) ])
         return nm
 
-registerNode :: PV -> NodeMap -> GG ()
-registerNode pv nm = modify (\s -> s { labels = M.insert pv nm (labels s) })
+registerNode :: Variant -> NodeMap -> GG ()
+registerNode v nm = modify (\s -> s { labels = M.insert v nm (labels s) })
 
 
 runGGWith :: DepState -> GG a -> ([Progress],DepState)

@@ -14,6 +14,7 @@ import System.IO.Unsafe
 import System.IO
 import System.Directory
 import System.Exit
+import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.List (isPrefixOf, intersperse)
@@ -27,7 +28,8 @@ import Portage.Use
 import Portage.Keyword
 import Portage.Version
 import Portage.Package
-import Portage.Eclass
+import Portage.Eclass hiding (location)
+import qualified Portage.Eclass as E
 import Portage.Constants
 import Portage.Utilities
 import Portage.Shell
@@ -81,7 +83,15 @@ data EbuildMeta =  EbuildMeta
                          lockey       ::  [Keyword],        -- ^ local ACCEPT_KEYWORDS
                          origin       ::  EbuildOrigin      -- ^ where did we get this data from?
                       }
-  deriving (Show,Eq)
+  deriving (Show)
+
+instance Eq EbuildMeta where
+  EbuildMeta { pv = pv1, location = loc1 } == EbuildMeta { pv = pv2, location = loc2 } =
+     pv1 == pv2 && loc1 == loc2
+
+instance Ord EbuildMeta where
+  compare (EbuildMeta { pv = pv1, location = loc1 }) (EbuildMeta { pv = pv2, location = loc2 }) =
+     compare pv1 pv2 `mappend` compare loc1 loc2
 
 pvs :: Variant -> PVS
 pvs v = addSlot (pv . meta $ v) (slot . ebuild $ v)
@@ -92,7 +102,22 @@ data EbuildOrigin = FromCache | CacheRegen | EclassDummy | FromInstalledDB | IsP
 data TreeLocation  =  Installed
                    |  Provided       FilePath               -- ^ in which file?
                    |  PortageTree    FilePath Link
-  deriving (Show,Eq)
+  deriving (Show)
+
+instance Eq TreeLocation where
+  Installed        ==  Installed        =  True
+  Provided _       ==  Provided _       =  True
+  PortageTree x _  ==  PortageTree y _  =  x == y 
+  _                ==  _                =  False
+
+instance Ord TreeLocation where
+  compare Installed Installed                  =  EQ
+  compare Installed _                          =  LT
+  compare (Provided _) Installed               =  GT
+  compare (Provided _) (Provided _)            =  EQ
+  compare (Provided _) _                       =  LT
+  compare (PortageTree x _) (PortageTree y _)  =  compare x y
+  compare (PortageTree _ _) _                  =  GT
 
 showLocation :: Config -> TreeLocation -> String
 showLocation c Installed          =  " (installed)"
@@ -145,16 +170,25 @@ data Variant =  Variant
                      meta    ::  EbuildMeta,
                      ebuild  ::  Ebuild
                   }
-  deriving (Show,Eq)
+  deriving (Show)
+
+instance Eq Variant where
+  Variant { meta = m1 } == Variant { meta = m2 } = m1 == m2
+
+instance Ord Variant where
+  compare (Variant { meta = m1 }) (Variant { meta = m2 }) = compare m1 m2  
 
 showVariant :: Config -> Variant -> String
-showVariant cfg (Variant m e)  =  showPV (pv m) ++ showSlot (slot e) ++ showLocation cfg (Portage.Ebuild.location m) 
-                                  ++ " " ++ unwords (map showMasked (masked m))
-                                  ++ " " ++ concatMap hardMask (masked m) ++ unwords (diffUse (mergeUse (use cfg) (locuse m)) (iuse e))
+showVariant cfg v@(Variant m e)  =  showVariant' cfg v
+                                    ++ " " ++ unwords (map showMasked (masked m))
+                                    ++ " " ++ concatMap hardMask (masked m) ++ unwords (diffUse (mergeUse (use cfg) (locuse m)) (iuse e))
+
+showVariant' :: Config -> Variant -> String
+showVariant' cfg (Variant m e)  =  showPV (pv m) ++ showSlot (slot e) ++ showLocation cfg (location m) 
 
 showStatus :: Variant -> String
 showStatus (Variant m e)  = f ++ s
-    where  f  =  case Portage.Ebuild.location m of
+    where  f  =  case location m of
                    Installed                 ->  "R"
                    Provided _xo                ->  "P"
                    PortageTree t NoLink      ->  "N"
@@ -364,7 +398,7 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                                                   FlatList  ->  doesFileExist eclassesFile
                                                   FlatHash  ->  return True
         ~(eclasses,cacheContents) <- unsafeInterleaveIO $ getEbuildAndEclasses cacheFormat eclassesFile cacheFile origCache
-        let eclassesOK     =  all (\(e,l,m) ->  Portage.Eclass.location (ecs M.! e) == l
+        let eclassesOK     =  all (\(e,l,m) ->  E.location (ecs M.! e) == l
                                                 && mtime (ecs M.! e) == m) eclasses
         let refreshCache   =  do
                                   putStrLn ("cache refresh for " ++ showPV pv)
@@ -373,7 +407,7 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                                   ebuild <- fmap (getEbuildFlatList cacheFile) (fmap lines (strictReadFile cacheFile))
                                   let eclasses   =  inherited ebuild
                                   let eclasses'  =
-                                        map  (\e -> (e, Portage.Eclass.location (ecs M.! e), mtime (ecs M.! e)))
+                                        map  (\e -> (e, E.location (ecs M.! e), mtime (ecs M.! e)))
                                              eclasses
                                   if cacheFormat == FlatHash
                                     then  do  -- update cache format

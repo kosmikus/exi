@@ -128,6 +128,9 @@ withCallback cb' g =
         modify (\s -> s { callback = cb })
         return r
 
+eliminateSlots :: [Variant] -> [Variant] -> [Variant]
+eliminateSlots rs xs = filter (\x -> not ((E.slot . ebuild) x `elem` map (E.slot . ebuild) rs)) xs
+
 buildGraphForDepAtom :: DepAtom -> GG ()
 buildGraphForDepAtom da
     | blocking da =
@@ -144,17 +147,22 @@ buildGraphForDepAtom da
             progress (Message $ "blocker " ++ show da)
     | otherwise =
         do  pc  <-  gets pconfig
-            g   <-  gets graph
-            ls  <-  gets labels
+            -- g   <-  gets graph
+            -- ls  <-  gets labels
             a   <-  gets active
-            let  s  =  strategy pc
-                 t  =  itree pc
-                 p  =  pFromDepAtom da
-            case sselect s p (findVersions t da) of
-              Reject f -> return ()  -- fail (show f)
-              Accept v@(Variant m e)  ->  
+            let  s     =  strategy pc
+                 t     =  itree pc
+                 p     =  pFromDepAtom da
+                 acts  =  getActives p a
+                 vs    =  acts ++ {- eliminateSlots acts -} (findVersions t da)
+            case sselect s p vs of
+              Reject f  ->  do  
+                                progress (Backtrack (sbacktrack s f) f)
+                                backtrack
+              Accept vs ->  choice vs >>= 
+                            \ (v@(Variant m e))  ->  
+                            progress (Message $ "CHOOSING: " ++ E.showVariant' (config pc) v ++ " (out of " ++ show (length vs) ++ ")") >>
                 let  avail      =  E.isAvailable (location m)  -- installed or provided?
-                     already    =  isActive v a
                      stop       =  avail && sstop s v 
                                      -- if it's an installed ebuild, we can decide to stop here!
                 in                 let  rdeps    =  E.rdepend  e
@@ -167,7 +175,7 @@ buildGraphForDepAtom da
                                             progress (LookAtEbuild (pv (meta v)) (origin (meta v)))
                                             -- insert nodes for v, and activate
                                             n <- insNewNode v stop
-                                            activate v
+                                            already <- activate v
                                             -- insert edges according to current state
                                             cb <- gets callback
                                             cb da n
@@ -257,8 +265,7 @@ resolveCycle cnodes =
     resolvePDependCycle :: LEdge DepType -> GG Bool
     resolvePDependCycle (s,t,d) =
         do
-            ls <- gets labels
-            g <- gets graph
+            g   <-  gets graph
             case isAvailableNode g s of
               Nothing  ->  return False
               Just v   ->  do  let incoming = 
@@ -268,7 +275,8 @@ resolveCycle cnodes =
                                if null incoming
                                  then return False
                                  else do  let pv'  =  pv . meta $ v
-                                          let nm   =  ls M.! pv'
+                                          ls  <-  gets labels
+                                          let nm   =  ls M.! v
                                           modifyGraph (  insEdges (map (\(s',_,d') -> (s',built nm,d')) incoming) .
                                                          delEdges (map (\(s',t',_) -> (s',t')) incoming) )
                                           progress (Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ show incoming ++ ")" )
