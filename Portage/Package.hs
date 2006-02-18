@@ -17,6 +17,7 @@ import Portage.Utilities
 
 type Category  =  String
 type Package   =  String
+type Slot      =  String
 
 data P         =  P
                     {
@@ -35,7 +36,7 @@ data PS        =  PS
                     {
                        catPS    ::  Category,
                        pkgPS    ::  Package,
-                       slotPS   ::  String
+                       slotPS   ::  Slot
                     }
   deriving (Show,Eq,Ord)
 data PVS       =  PVS
@@ -43,11 +44,11 @@ data PVS       =  PVS
                        catPVS   ::  Category,
                        pkgPVS   ::  Package,
                        verPVS   ::  Version,
-                       slotPVS  ::  String
+                       slotPVS  ::  Slot
                     }
   deriving (Show,Eq,Ord)
 
-addSlot    ::  PV -> String -> PVS
+addSlot    ::  PV -> Slot -> PVS
 addSlot (PV c p v) s = PVS c p v s
 
 extractPS  ::  PVS -> PS
@@ -72,7 +73,7 @@ showPS        (PS cat pkg slot) =
 showPVS       (PVS cat pkg ver slot) =
     cat ++ "/" ++ pkg ++ "-" ++ showVersion ver ++ showSlot slot
 
-showSlot   ::  String -> String
+showSlot   ::  Slot -> String
 showSlot ['0'] = ""
 showSlot slot = "{" ++ slot ++ "}"
 
