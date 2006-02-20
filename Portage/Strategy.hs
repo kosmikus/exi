@@ -11,6 +11,7 @@ module Portage.Strategy
 
 import Data.List (sortBy)
 
+import Portage.Dependency
 import Portage.Package
 import Portage.Ebuild
 
@@ -20,15 +21,15 @@ data Selection  =  Accept   [Variant]
 data Strategy =  Strategy
                    {
                       -- | Select the best variant for a given package.
-                      sselect     ::  P -> [Variant] -> Selection,
+                      sselect     ::  DepAtom -> [Variant] -> Selection,
                       -- | Decide whether to stop on an already available variant.
                       sstop       ::  Variant -> Bool,
                       -- | Decide whether to backtrack on a certain type of failure.
                       sbacktrack  ::  Failure -> Bool
                    }
 
-data Failure  =  AllMasked P [Variant]
-              |  NoneInstalled P [Variant]
+data Failure  =  AllMasked DepAtom [Variant]
+              |  NoneInstalled DepAtom [Variant]
               |  SlotConflict Variant Variant
               |  Other String
   deriving (Eq,Show)
@@ -42,10 +43,10 @@ makeStrategy order =
          sbacktrack  =  standardBacktrack
       }
 
-select :: (Variant -> Variant -> Ordering) -> P -> [Variant] -> Selection
-select order p vs =
+select :: (Variant -> Variant -> Ordering) -> DepAtom -> [Variant] -> Selection
+select order da vs =
   case sortBy order . filterMaskedVariants $ vs of
-    []     ->  Reject (AllMasked p vs)
+    []     ->  Reject (AllMasked da vs)
     v      ->  Accept v
 
 updateOrder :: Variant -> Variant -> Ordering
@@ -56,10 +57,10 @@ defaultOrder (Variant { meta = m1 }) (Variant { meta = m2 }) =
     compare  (isAvailable (location m2), verPV (pv m2))
              (isAvailable (location m1), verPV (pv m1))
 
-selectInstalled :: P -> [Variant] -> Selection
-selectInstalled p vs =
+selectInstalled :: DepAtom -> [Variant] -> Selection
+selectInstalled da vs =
   case sortBy updateOrder . filter (isAvailable . location . meta) . filterMaskedVariants $ vs of
-    []     ->  Reject (NoneInstalled p vs)
+    []     ->  Reject (NoneInstalled da vs)
     v      ->  Accept v
 
 standardBacktrack :: Failure -> Bool

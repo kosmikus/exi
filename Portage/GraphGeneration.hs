@@ -83,7 +83,9 @@ data DepState =  DepState
                       callback  ::  Callback
                    }
 
-type Callback = DepAtom -> NodeMap -> GG ()
+data Callback =  CbDepend   { nodemap :: NodeMap }
+              |  CbRDepend  { nodemap :: NodeMap }
+              |  CbPDepend  { nodemap :: NodeMap }
 
 data NodeMap = NodeMap
                  {
@@ -96,10 +98,9 @@ top = 0
 bot = 1
 
 data Progress =  LookAtEbuild  PV EbuildOrigin
-              |  Backtrack     Bool Failure
+              |  Backtrack     (Maybe DepState) Failure
               |  AddEdge       Node Node DepType
               |  Message       String
-  deriving (Eq,Show)
 
 -- | Graph generation monad.
 newtype GG a = GG { runGG :: DepState -> [Either Progress (a,DepState)] }
@@ -177,12 +178,18 @@ activate v =
           Just v'
             | v == v'      ->  return True
             | otherwise    ->  do
-                                   s <- gets (strategy . pconfig)
+                                   s   <-  gets (strategy . pconfig)
+                                   ds  <-  get
                                    let  f  =  SlotConflict v v'
-                                        b  =  sbacktrack s f
+                                        b  |  sbacktrack s f  =  Nothing
+                                           |  otherwise       =  Just ds
                                    progress (Backtrack b f)
                                    backtrack
 
+doCallback :: Callback -> DepAtom -> NodeMap -> GG ()
+doCallback (CbDepend   nm) = depend nm
+doCallback (CbRDepend  nm) = rdepend nm
+doCallback (CbPDepend  nm) = pdepend nm
 
 depend :: NodeMap -> DepAtom -> NodeMap -> GG ()
 depend source da target
@@ -268,8 +275,8 @@ insAvailableHistory v =
              nm   =  NodeMap a a r
         registerNode v nm
         modifyGraph (  insEdges [ (r,a,Meta),
-                                  (bot,a,Meta),
-                                  (r,top,Meta) ] .
+                                  (bot,a,Meta)
+                                  {- (r,top,Meta) -} ] .
                        insNodes [ (a,[Available v]),
                                   (r,[Removed v]) ])
         return nm
@@ -286,14 +293,14 @@ insUpgradeHistory v v' =
              a'   =  n + 2
              r'   =  n + 3
              nm   =  NodeMap a a r
-             nm'  =  NodeMap b' a' r'
+             nm'  =  NodeMap a' b' r'
         registerNode v   nm
         registerNode v'  nm'
         modifyGraph (  insEdges [ (r',a',Meta),
                                   (a',b',Meta),
                                   (r,a,Meta),
-                                  (bot,a,Meta),
-                                  (r',top,Meta) ] .
+                                  (bot,a,Meta)
+                                  {- (r',top,Meta) -} ] .
                        insNodes [ (b',[Built v',Removed v]),
                                   (a',[Available v']),
                                   (r',[Removed v']),
@@ -306,12 +313,12 @@ insInstallHistory v =
         let  b    =  n
              a    =  n + 1
              r    =  n + 2
-             nm   =  NodeMap b a r
+             nm   =  NodeMap a b r
         registerNode v nm
         modifyGraph (  insEdges [ (r,a,Meta),
                                   (a,b,Meta),
-                                  (b,bot,Meta),
-                                  (r,top,Meta) ] .
+                                  (b,bot,Meta)
+                                  {- (r,top,Meta) -} ] .
                        insNodes [ (b,[Built v]),
                                   (a,[Available v]),
                                   (r,[Removed v]) ])

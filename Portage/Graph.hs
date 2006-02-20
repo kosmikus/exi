@@ -104,9 +104,8 @@ buildGraphForOr ds@(dt:_)  =
 
 isInstalled :: PortageConfig -> DepAtom -> Bool
 isInstalled pc da =
-    let  p  =  pFromDepAtom da
-         t  =  itree pc
-    in   case selectInstalled p (findVersions t da) of
+    let  t  =  itree pc
+    in   case selectInstalled da (findVersions t da) of
            Accept v  ->  True
            _         ->  False
 
@@ -142,7 +141,7 @@ buildGraphForDepAtom da
             mapM_ (\v -> do
                              progress (LookAtEbuild (pv (meta v)) (origin (meta v)))
                              n <- insNewNode v (sstop s v)
-                             cb da n)
+                             doCallback cb da n)
                   (findVersions t (unblock da))
             progress (Message $ "blocker " ++ show da)
     | otherwise =
@@ -155,9 +154,12 @@ buildGraphForDepAtom da
                  p     =  pFromDepAtom da
                  acts  =  getActives p a
                  vs    =  acts ++ {- eliminateSlots acts -} (findVersions t da)
-            case sselect s p vs of
+            case sselect s da vs of
               Reject f  ->  do  
-                                progress (Backtrack (sbacktrack s f) f)
+                                ds <- get
+                                let  b  |  sbacktrack s f  =  Nothing
+                                        |  otherwise       =  Just ds
+                                progress (Backtrack b f)
                                 backtrack
               Accept vs ->  choice vs >>= 
                             \ (v@(Variant m e))  ->  
@@ -178,16 +180,16 @@ buildGraphForDepAtom da
                                             already <- activate v
                                             -- insert edges according to current state
                                             cb <- gets callback
-                                            cb da n
+                                            doCallback cb da n
                                             if already || stop
                                               then return ()
                                               else do
                                                        -- add deps to graph
-                                                       withCallback (depend n) $ buildGraphForUDepString deps
+                                                       withCallback (CbDepend n) $ buildGraphForUDepString deps
                                                        -- add rdeps to graph
-                                                       withCallback (rdepend n) $ buildGraphForUDepString rdeps
+                                                       withCallback (CbRDepend n) $ buildGraphForUDepString rdeps
                                                        -- add pdeps to graph
-                                                       withCallback (pdepend n) $ buildGraphForUDepString pdeps
+                                                       withCallback (CbPDepend n) $ buildGraphForUDepString pdeps
 
 
 isAvailable :: Action -> Maybe Variant

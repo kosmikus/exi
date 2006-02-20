@@ -12,17 +12,18 @@ module Portage.Merge
 import Control.Monad (when)
 import Data.Graph.Inductive hiding (Graph())
 import qualified Data.Map as M
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, maybeToList)
 import Data.IORef
 import System.IO
 
 import Portage.Dependency
-import Portage.Ebuild hiding (rdepend)
+import Portage.Ebuild
 import Portage.Package
 import Portage.Strategy
 import Portage.Graph
 import Portage.GraphUtils
 import Portage.PortageConfig
+import Portage.Config
 
 data MergeState =  MergeState
                      {
@@ -41,7 +42,7 @@ pretend pc s d =
                                  labels    =  M.empty,
                                  active    =  M.empty,
                                  counter   =  max top bot + 1,
-                                 callback  =  rdepend (NodeMap top top top)
+                                 callback  =  CbRDepend (NodeMap top top top)
                               }
         let d' | d == "system"  =  system x
                | d == "world"   =  world x
@@ -64,7 +65,7 @@ pretend pc s d =
         putStr $ "Calculating dependencies: "
         when (mverbose s) $ putStrLn ""
         (if (not . mverbose $ s) then withoutBuffering else id) $ do
-          sequence_ $ foldr (showProgress (mverbose s)) [] (fst fs)
+          sequence_ $ foldr (showProgress (mverbose s) (config pc)) [] (fst fs)
           putStrLn $ "\n"
         let gr = graph $ snd $ fs
         let mergelist = concat $ postorderF $ dffWith lab' [0] $ gr
@@ -100,21 +101,49 @@ showNode :: Bool -> DGraph -> Int -> String
 showNode v gr n = (show . fromJust . lab gr $ n) ++ number
   where number = if v then " [" ++ show n ++ "]" else ""
 
-showProgress :: Bool -> Progress -> [IO ()] -> [IO ()]
+showProgress :: Bool -> Config -> Progress -> [IO ()] -> [IO ()]
 showProgress True   =  showProgressLong
 showProgress False  =  showProgressShort
 
-showProgressLong (LookAtEbuild pv o)  r   =  putStrLn (showPV pv ++ " " ++ showOriginLong o) : r
-showProgressLong (AddEdge n1 n2 d)    r   =  putStrLn ("added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d) : r
-showProgressLong (Message s)          r   =  putStrLn s : r
-showProgressLong (Backtrack True _)   r   =  putStrLn "Backtracking" : r
-showProgressLong (Backtrack False _)  r   =  putStrLn "Backtracking" : []
+showProgressLong c (LookAtEbuild pv o)     r   =  putStrLn (showPV pv ++ " " ++ showOriginLong o) : r
+showProgressLong c (AddEdge n1 n2 d)       r   =  putStrLn ("added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d) : r
+showProgressLong c (Message s)             r   =  putStrLn s : r
+showProgressLong c (Backtrack Nothing f)   r   =  putStr (showFailure c f) : r
+showProgressLong c (Backtrack (Just s) f)  r   =  (putStr (showFailure c f) >> printStackTrace s) : []
 
-showProgressShort (LookAtEbuild pv o)  r  = putStr (showOriginShort o) : r
-showProgressShort (AddEdge _ _ _)      r  = r
-showProgressShort (Message s)          r  = r
-showProgressShort (Backtrack True _)   r  = putStr "B" : r
-showProgressShort (Backtrack False _)  r  = putStr "B" : []
+showProgressShort c (LookAtEbuild pv o)     r  = putStr (showOriginShort o) : r
+showProgressShort c (AddEdge _ _ _)         r  = r
+showProgressShort c (Message s)             r  = r
+showProgressShort c (Backtrack Nothing f)   r  = putStr "B" : r
+showProgressShort c (Backtrack (Just s) f)  r  = (putStrLn "B" >> putStr (showFailure c f) >> printStackTrace s) : []
+
+showFailure c (AllMasked da vs) =
+    "All variants that could satisfy " ++ show da ++ " are masked.\n" ++
+    "Candidates:\n" ++ 
+    unlines (map (showVariant c) vs)
+showFailure c (NoneInstalled da vs) =
+    "None of the variants that could satisfy " ++ show da ++ " are installed.\n" ++
+    "Candidates:\n" ++
+    unlines (map (showVariant c) vs)
+showFailure c (SlotConflict v1 v2) =
+    "Dependencies require two incompatible variants simultaneously.\n" ++ 
+    showVariant c v1 ++ "\n" ++
+    showVariant c v2 ++ "\n"
+showFailure c (Other s) = s ++ "\n"
+
+printStackTrace :: DepState -> IO ()
+printStackTrace s =
+    do
+        putStrLn "Stack:"
+        putStr $ unlines (map (showVariant (config . pconfig $ s)) (stackTrace s))
+
+stackTrace :: DepState -> [Variant]
+stackTrace s = 
+    let  g  =  graph s
+         n  =  built (nodemap (callback s))
+         p  =  sp top n (emap (const 1.0) g)
+    in   if null p then error $ "empty path: " ++ show top ++ " " ++ show n ++ "\n\n" ++ show g
+                   else concatMap (\a -> case a of Built v -> [v]; _ -> []) . concatMap (fromJust . lab g) $ p
 
 showOriginLong FromCache         =  "(from cache)"
 showOriginLong CacheRegen        =  "(regenerated cache entry)"
