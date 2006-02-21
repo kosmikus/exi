@@ -75,6 +75,7 @@ selectInstalled da vs =
 standardBacktrack :: Failure -> Bool
 standardBacktrack (AllMasked _ _)      =  False
 standardBacktrack (NoneInstalled _ _)  =  False
+standardBacktrack (Block _ _)          =  False
 standardBacktrack (SlotConflict _ _)   =  True
 standardBacktrack (Other _)            =  True
 

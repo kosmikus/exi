@@ -60,6 +60,7 @@ instance Eq Action where
   _                  ==  _                  =  False
 
 instance Show Action where
+  show (Available    v) = "A  " ++ showPV (pv (meta v))
   show (Built        v) = "B  " ++ showPV (pv (meta v))
   show Top              = "/"
 
@@ -210,15 +211,20 @@ insVariant v cb =
           Just nm  ->  return (True,nm)
 
 resolveBlockers :: Variant -> [Blocker] -> GG ()
-resolveBlockers v = mapM_ (\b ->  if matchDepAtomVariant (unblock $ bdepatom b) v
-                                    then  do  ds  <-  get
-                                              let  s  =  strategy . pconfig $ ds
-                                                   f  =  Block b v
-                                                   x  |  sbacktrack s f  =  Nothing
-                                                      |  otherwise       =  Just ds
-                                              progress (Backtrack x f)
-                                              backtrack
-                                    else  return ())
+resolveBlockers v = mapM_ (\b ->  let  da         =  (unblock . bdepatom) b
+                                       lvBlocked  =  maybe False (matchDepAtomVariant da) (E.getLinked v)
+                                       vBlocked   =  matchDepAtomVariant da v
+                                  in   case (vBlocked,lvBlocked,bruntime b) of
+                                         (False,False,_)     ->  return ()
+                                         (True,False,False)  ->  return () -- registerEdge (built b) (built v)
+                                         (False,True,_)      ->  return () -- registerEdge (built v) (built b)
+                                         _                   ->  do  ds  <-  get
+                                                                     let  s  =  strategy . pconfig $ ds
+                                                                          f  =  Block b v
+                                                                          x  |  sbacktrack s f  =  Nothing
+                                                                             |  otherwise       =  Just ds
+                                                                     progress (Backtrack x f)
+                                                                     backtrack)
 
 insHistory :: Variant -> GG NodeMap
 insHistory v  =

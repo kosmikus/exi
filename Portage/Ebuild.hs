@@ -146,6 +146,11 @@ showLink :: Link -> String
 showLink NoLink     = ""
 showLink (Linked v) = " [" ++ showVersion (verPV . pv . meta $ v) ++ "]"
 
+getLinked :: Variant -> Maybe Variant
+getLinked v = case (location . meta) v of
+                PortageTree _ (Linked l)  ->  Just l
+                _                         ->  Nothing
+
 data Mask          =  KeywordMasked  [UseFlag]              -- ^ reasoning
                    |  HardMasked     FilePath [String]      -- ^ filename and reason
                    |  ProfileMasked  FilePath               -- ^ in which file?
