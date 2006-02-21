@@ -183,49 +183,6 @@ newNode =
     do  g <- gets graph
         return (head $ newNodes 1 g)
 
--- | Insert a set of new nodes into the graph, and connects it.
---   Returns if the node has existed before, and the node map.
-insVariant :: Variant -> (NodeMap -> GG ()) -> GG (Bool,NodeMap)
-insVariant v cb =
-    do  ls <- gets labels
-        case M.lookup v ls of
-          Nothing  ->  do  let  ps'  =  extractPS . pvs $ v
-                           a <- gets active
-                           let  insVariant' bs =
-                                    do  modify (\s -> s { active = insertPS ps' (Left v) a })
-                                        nm <- insHistory v  -- really adds the nodes
-                                        cb nm               -- ties in the nodes with the rest of the graph
-                                        resolveBlockers v bs  -- checks the previously accumulated blockers for this package
-                                        return nm
-                           nm <- case lookupPS ps' a of
-                                   Nothing          ->  insVariant' []
-                                   Just (Left v')   ->  do  s   <-  gets (strategy . pconfig)
-                                                            ds  <-  get
-                                                            let  f  =  SlotConflict v v'
-                                                                 b  |  sbacktrack s f  =  Nothing
-                                                                    |  otherwise       =  Just ds
-                                                            progress (Backtrack b f)
-                                                            backtrack
-                                   Just (Right bs)  ->  insVariant' bs
-                           return (False,nm)
-          Just nm  ->  return (True,nm)
-
-resolveBlockers :: Variant -> [Blocker] -> GG ()
-resolveBlockers v = mapM_ (\b ->  let  da         =  (unblock . bdepatom) b
-                                       lvBlocked  =  maybe False (matchDepAtomVariant da) (E.getLinked v)
-                                       vBlocked   =  matchDepAtomVariant da v
-                                  in   case (vBlocked,lvBlocked,bruntime b) of
-                                         (False,False,_)     ->  return ()
-                                         (True,False,False)  ->  return () -- registerEdge (built b) (built v)
-                                         (False,True,_)      ->  return () -- registerEdge (built v) (built b)
-                                         _                   ->  do  ds  <-  get
-                                                                     let  s  =  strategy . pconfig $ ds
-                                                                          f  =  Block b v
-                                                                          x  |  sbacktrack s f  =  Nothing
-                                                                             |  otherwise       =  Just ds
-                                                                     progress (Backtrack x f)
-                                                                     backtrack)
-
 insHistory :: Variant -> GG NodeMap
 insHistory v  =
     do  n <- stepCounter nr
@@ -238,16 +195,17 @@ insHistory v  =
            nr | hasPDepend  =  2
               | otherwise   =  1
 
--- | insert new node(s) and update labels
+-- | Insert new node(s) and update labels.
 registerNode :: Variant -> NodeMap -> GG ()
 registerNode v nm@(NodeMap a b) = 
     do  modify (\s -> s { labels = M.insert v nm (labels s) })
         if a /= b
           then  modifyGraph ( insNodes [(a,[Available v]),(b,[Built v])] )
-          else  modifyGraph ( insNodes [(a,[Available v,Built v])] )
+          else  modifyGraph ( insNode (a,[Available v,Built v]) )
         when (a /= b) (registerEdge a b Meta >> return ())  -- cannot fail
 
--- | insert a new edge if it does not create a cycle
+-- | Insert a new edge if it does not create a cycle. Returns the cycle
+--   that would have been created if insertion fails, and Nothing on success.
 registerEdge :: Int -> Int -> DepType -> GG (Maybe Path)
 registerEdge s t d =
     do  ps <- gets precs
@@ -255,7 +213,7 @@ registerEdge s t d =
         if IS.member t sPrecs
           then  do  g <- gets graph
                     return (Just (sp t s (emap (const 1.0) g))) -- returns cycle
-          else  do  modifyGraph (insEdges [(s,t,d)])
+          else  do  modifyGraph (insEdge (s,t,d))
                     modifyPrecs (\p -> IM.update (\tPrecs -> Just (IS.union tPrecs sPrecs)) t p)
                     return Nothing -- indicates success
 
@@ -266,50 +224,15 @@ runGGWith s cmp = proc (runGG cmp s)
          proc (Left p:xs)       =  (\ ~(x,y) -> (p:x,y)) (proc xs)
 
 
-doCallback :: Callback -> DepAtom -> NodeMap -> GG ()
-doCallback (CbDepend   nm) = depend nm
-doCallback (CbRDepend  nm) = rdepend nm
-doCallback (CbPDepend  nm) = pdepend nm
+-- | Recompute the predecessors for a certain node.
+recomputePrecs :: Int -> GG ()
+recomputePrecs n =
+    do  g    <-  gets graph
+        let  ps = pre g n
+        modifyPrecs (\prs -> IM.insert n (IS.unions (map (prs IM.!) ps)) prs)
 
-depend :: NodeMap -> DepAtom -> NodeMap -> GG ()
-depend source da target
-{-
-    | blocking da =
-        do
-            let bt = built target
-                bs = built source
-                d  = Depend True da
-            modifyGraph (insEdges [ (bt,bs,d) ])
-            progress (AddEdge bt bs d)
--}
-    | otherwise =
-        do
-            let bs  =  built source
-                at  =  available target
-                d   =  Depend False da
-            registerEdge bs at d
-            progress (AddEdge bs at d)
-
-
-rdepend, pdepend :: NodeMap -> DepAtom -> NodeMap -> GG ()
-rdepend = rpdepend RDepend
-pdepend = rpdepend PDepend
-
-rpdepend :: (Bool -> DepAtom -> DepType) -> NodeMap -> DepAtom -> NodeMap -> GG ()
-rpdepend rpd source da target
-{-
-    | blocking da =
-        do
-           let bt = built target
-               rs = removed source
-               d  = rpd True da
-           modifyGraph (insEdges [  (bt,rs,d) ])
-           progress (AddEdge bt rs d)
--}
-    | otherwise =
-        do
-           let as = available source
-               at = available target
-               d  = rpd False da
-           registerEdge as at d
-           progress (AddEdge as at d)
+-- | Remove an edge from the graph while maintaining the map of predecessors.
+removeEdge :: Int -> Int -> GG ()
+removeEdge s t =
+    do  modifyGraph (delEdge (s,t))
+        recomputePrecs t

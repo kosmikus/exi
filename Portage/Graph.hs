@@ -244,11 +244,15 @@ resolveCycle cnodes =
                                      (inn g a')
             if null incoming
               then return False
-              else do  modifyGraph (  insEdges (map (\(s',_,d') -> (s',a,d')) incoming) .
-                                      delEdges (map (\(s',t',_) -> (s',t')) incoming) )
-                       progress (Message $ "Resolved bootstrap cycle at "  ++ (showPV . pv . meta $ v')
-                                                                           ++ " (redirected " ++ show incoming ++ ")")
-                       return True
+              else do  s <- get
+                       mapM_ (\ (s',t',_) -> removeEdge s' t') incoming
+                       cs <- mapM (\ (s',_,d') -> registerEdge s' a d') incoming
+                       if all isJust cs
+                         then  do  progress (Message $ "Resolved bootstrap cycle at "  ++ (showPV . pv . meta $ v')
+                                                                                       ++ " (redirected " ++ show incoming ++ ")")
+                                   return True
+                         else  do  put s  -- undo unsuccessful redirections
+                                   return False
 
     resolveSelfBlockCycle :: LEdge DepType -> GG Bool
     resolveSelfBlockCycle (s,t,d) =
@@ -257,7 +261,7 @@ resolveCycle cnodes =
             case (getVariantsNode g s,getVariantsNode g t) of
               (vs,vs')     ->  let  vsi = intersect (map (extractPS . pvs) vs) (map (extractPS . pvs) vs')
                                in   if not . null $ vsi
-                                      then  do  modifyGraph (delEdge (s,t))
+                                      then  do  removeEdge s t
                                                 progress (Message $ "Resolved self-block cycle for " ++ (showPS $ head vsi)
                                                                                                     ++ " (redirected " ++ show (s,t,d) ++ ")")
                                                 return True
@@ -278,23 +282,14 @@ resolveCycle cnodes =
                                  else do  let pv'  =  pv . meta $ v
                                           ls  <-  gets labels
                                           let nm   =  ls M.! v
-                                          modifyGraph (  insEdges (map (\(s',_,d') -> (s',built nm,d')) incoming) .
-                                                         delEdges (map (\(s',t',_) -> (s',t')) incoming) )
-                                          progress (Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ show incoming ++ ")" )
-                                          return True
-
-{-
-(||.) :: GG (Bool,[a]) -> GG (Bool,[a]) -> GG (Bool,[a])
-f ||. g = do  (b,r) <- f
-              if b  then return (b,r)
-                    else do  (c,r') <- g
-                             return (c, r ++ r')
-
-(&&.) :: GG (Bool,[a]) -> GG (Bool,[a]) -> GG (Bool,[a])
-f &&. g = do  (b1,r1) <- f
-              (b2,r2) <- g
-              return (b1 || b2, r1 ++ r2)
--}
+                                          s <- get
+                                          mapM_ (\ (s',t',_) -> removeEdge s' t') incoming
+                                          cs <- mapM (\ (s',_,d') -> registerEdge s' (built nm) d') incoming
+                                          if all isJust cs
+                                            then  do  progress (Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ show incoming ++ ")" )
+                                                      return True
+                                            else  do  put s  -- undo unsuccessful redirections
+                                                      return False
 
 sumR :: [GG Bool] -> GG Bool
 sumR = foldr (liftM2 (||)) (return False)
@@ -325,3 +320,104 @@ isBlockingRDependEdge  _                      =  False
 findEdge :: [LEdge b] -> Node -> LEdge b
 findEdge es n = fromJust $ find (\(_,t,_) -> n == t) es
 
+
+-- | Insert a set of new nodes into the graph, and connects it.
+--   Returns if the node has existed before, and the node map.
+insVariant :: Variant -> (NodeMap -> GG ()) -> GG (Bool,NodeMap)
+insVariant v cb =
+    do  ls <- gets labels
+        case M.lookup v ls of
+          Nothing  ->  do  let  ps'  =  extractPS . pvs $ v
+                           a <- gets active
+                           let  insVariant' bs =
+                                    do  modify (\s -> s { active = insertPS ps' (Left v) a })
+                                        nm <- insHistory v    -- really adds the nodes
+                                        cb nm                 -- ties in the nodes with the rest of the graph
+                                        resolveBlockers v bs  -- checks the previously accumulated blockers for this package
+                                        return nm
+                           nm <- case lookupPS ps' a of
+                                   Nothing          ->  insVariant' []
+                                   Just (Left v')   ->  do  s   <-  gets (strategy . pconfig)
+                                                            ds  <-  get
+                                                            let  f  =  SlotConflict v v'
+                                                                 b  |  sbacktrack s f  =  Nothing
+                                                                    |  otherwise       =  Just ds
+                                                            progress (Backtrack b f)
+                                                            backtrack
+                                   Just (Right bs)  ->  insVariant' bs
+                           return (False,nm)
+          Just nm  ->  return (True,nm)
+
+resolveBlockers :: Variant -> [Blocker] -> GG ()
+resolveBlockers v = mapM_ (\b ->  let  da         =  (unblock . bdepatom) b
+                                       lvBlocked  =  maybe False (matchDepAtomVariant da) (E.getLinked v)
+                                       vBlocked   =  matchDepAtomVariant da v
+                                  in   case (vBlocked,lvBlocked,bruntime b) of
+                                         (False,False,_)     ->  return ()
+                                         (True,False,False)  ->  return () -- registerEdge (built b) (built v)
+                                         (False,True,_)      ->  return () -- registerEdge (built v) (built b)
+                                         _                   ->  do  ds  <-  get
+                                                                     let  s  =  strategy . pconfig $ ds
+                                                                          f  =  Block b v
+                                                                          x  |  sbacktrack s f  =  Nothing
+                                                                             |  otherwise       =  Just ds
+                                                                     progress (Backtrack x f)
+                                                                     backtrack)
+
+registerEdgeAndResolveCycle :: Int -> Int -> DepType -> GG ()
+registerEdgeAndResolveCycle s t d =
+    do  r <- registerEdge s t d
+        case r of
+          Nothing  ->  return ()
+          Just c   ->  do  ok <- resolveCycle c
+                           if ok
+                             then  registerEdgeAndResolveCycle s t d
+                             else  return () -- fail
+
+doCallback :: Callback -> DepAtom -> NodeMap -> GG ()
+doCallback (CbDepend   nm) = depend nm
+doCallback (CbRDepend  nm) = rdepend nm
+doCallback (CbPDepend  nm) = pdepend nm
+
+depend :: NodeMap -> DepAtom -> NodeMap -> GG ()
+depend source da target
+{-
+    | blocking da =
+        do
+            let bt = built target
+                bs = built source
+                d  = Depend True da
+            modifyGraph (insEdges [ (bt,bs,d) ])
+            progress (AddEdge bt bs d)
+-}
+    | otherwise =
+        do
+            let bs  =  built source
+                at  =  available target
+                d   =  Depend False da
+            registerEdgeAndResolveCycle bs at d
+            progress (AddEdge bs at d)
+
+
+rdepend, pdepend :: NodeMap -> DepAtom -> NodeMap -> GG ()
+rdepend = rpdepend RDepend
+pdepend = rpdepend PDepend
+
+rpdepend :: (Bool -> DepAtom -> DepType) -> NodeMap -> DepAtom -> NodeMap -> GG ()
+rpdepend rpd source da target
+{-
+    | blocking da =
+        do
+           let bt = built target
+               rs = removed source
+               d  = rpd True da
+           modifyGraph (insEdges [  (bt,rs,d) ])
+           progress (AddEdge bt rs d)
+-}
+    | otherwise =
+        do
+           let as = available source
+               at = available target
+               d  = rpd False da
+           registerEdgeAndResolveCycle as at d
+           progress (AddEdge as at d)
