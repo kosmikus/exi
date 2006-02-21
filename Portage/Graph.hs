@@ -132,6 +132,7 @@ eliminateSlots rs xs = filter (\x -> not ((E.slot . ebuild) x `elem` map (E.slot
 
 buildGraphForDepAtom :: DepAtom -> GG ()
 buildGraphForDepAtom da
+{-
     | blocking da =
         do  -- for blocking dependencies, we have to consider all matching versions
             pc  <-  gets pconfig
@@ -144,6 +145,7 @@ buildGraphForDepAtom da
                              doCallback cb da n)
                   (findVersions t (unblock da))
             progress (Message $ "blocker " ++ show da)
+-}
     | otherwise =
         do  pc  <-  gets pconfig
             -- g   <-  gets graph
@@ -152,7 +154,7 @@ buildGraphForDepAtom da
             let  s     =  strategy pc
                  t     =  itree pc
                  p     =  pFromDepAtom da
-                 acts  =  getActives p a
+                 acts  =  concatMap (either (:[]) (const [])) (getActives p a)
                  vs    =  acts ++ {- eliminateSlots acts -} (findVersions t da)
             case sselect s da vs of
               Reject f  ->  do  
@@ -167,23 +169,20 @@ buildGraphForDepAtom da
                 let  avail      =  E.isAvailable (location m)  -- installed or provided?
                      stop       =  avail && sstop s v 
                                      -- if it's an installed ebuild, we can decide to stop here!
-                in                 let  rdeps    =  E.rdepend  e
-                                        deps     =  E.depend   e
-                                        pdeps    =  E.pdepend  e
-                                        luse     =  mergeUse (use (config pc)) (locuse m)
+                in                 let  luse     =  mergeUse (use (config pc)) (locuse m)
                                    in   -- set new local USE context
                                         withLocUse luse $
                                         do
                                             progress (LookAtEbuild (pv (meta v)) (origin (meta v)))
                                             -- insert nodes for v, and activate
-                                            n <- insNewNode v stop
-                                            already <- activate v
-                                            -- insert edges according to current state
                                             cb <- gets callback
-                                            doCallback cb da n
+                                            (already,n) <- insVariant v (doCallback cb da)
                                             if already || stop
                                               then return ()
                                               else do
+                                                       let  rdeps    =  E.rdepend  e
+                                                            deps     =  E.depend   e
+                                                            pdeps    =  E.pdepend  e
                                                        -- add deps to graph
                                                        withCallback (CbDepend n) $ buildGraphForUDepString deps
                                                        -- add rdeps to graph

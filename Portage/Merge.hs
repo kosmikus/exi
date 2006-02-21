@@ -12,6 +12,7 @@ module Portage.Merge
 import Control.Monad (when)
 import Data.Graph.Inductive hiding (Graph())
 import qualified Data.Map as M
+import qualified Data.IntMap as IM
 import Data.Maybe (fromJust, maybeToList)
 import Data.IORef
 import System.IO
@@ -38,11 +39,12 @@ pretend pc s d =
                               {
                                  pconfig   =  x,
                                  dlocuse   =  [],
-                                 graph     =  insNodes [(top,[Top]),(bot,[Bot])] empty,
+                                 graph     =  insNodes [(top,[Top])] empty,
+                                 precs     =  IM.empty,
                                  labels    =  M.empty,
                                  active    =  M.empty,
-                                 counter   =  max top bot + 1,
-                                 callback  =  CbRDepend (NodeMap top top top)
+                                 counter   =  top + 1,
+                                 callback  =  CbRDepend (NodeMap top top)
                               }
         let d' | d == "system"  =  system x
                | d == "world"   =  world x

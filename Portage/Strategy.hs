@@ -31,7 +31,16 @@ data Strategy =  Strategy
 data Failure  =  AllMasked DepAtom [Variant]
               |  NoneInstalled DepAtom [Variant]
               |  SlotConflict Variant Variant
+              |  Block Blocker Variant
               |  Other String
+  deriving (Eq,Show)
+
+data Blocker =  Blocker
+                   {
+                      bvariant  ::  Variant,   -- who's blocking?
+                      bdepatom  ::  DepAtom,   -- what's blocked?
+                      bruntime  ::  Bool       -- RDEPEND?
+                   }
   deriving (Eq,Show)
 
 makeStrategy :: (Variant -> Variant -> Ordering) -> Strategy
