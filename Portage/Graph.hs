@@ -132,21 +132,60 @@ eliminateSlots rs xs = filter (\x -> not ((E.slot . ebuild) x `elem` map (E.slot
 
 buildGraphForDepAtom :: DepAtom -> GG ()
 buildGraphForDepAtom da
-{-
     | blocking da =
         do  -- for blocking dependencies, we have to consider all matching versions
             pc  <-  gets pconfig
-            let  s  =  strategy pc
-                 t  =  itree pc
+            g   <-  gets graph
             cb  <-  gets callback
+            let  nm  =  nodemap cb
+                 s   =  strategy pc
+                 t   =  itree pc
+                 w   =  head (getVariantsNode g (available nm))
+                 b   =  Blocker w da (case cb of CbRDepend _ -> True; _ -> False)
+            ls  <-  gets labels
+            -- for each variant, there are the following possibilities:
+            -- 1. if v is in the graph, resolve the blocker b for v
+            -- 2. if a variant v' of the same slot as v is in the graph
+            --    already, we can pass, because the blocker will be resolved
+            --    for v'
+            -- 3. if v is available, we have to choose another variant v'
+            -- 4. if v is unavailable, we record b as a blocker for the slot
+            --    of v
+            progress (Message $ "blocker " ++ show da)
             mapM_ (\v -> do
                              progress (LookAtEbuild (pv (meta v)) (origin (meta v)))
-                             n <- insNewNode v (sstop s v)
-                             doCallback cb da n)
+                             case M.lookup v ls of
+                               Just _   ->  resolveBlockers v [b] -- 1.
+                               Nothing  ->  do  a <- gets active
+                                                let  ps' = extractPS (pvs v)
+                                                let  continue bs = 
+                                                       if E.isAvailable . location . meta $ v
+                                                         then  let  reject = do  ds  <-  get
+                                                                                 s   <-  gets (strategy . pconfig)
+                                                                                 let  f  =  Block b v
+                                                                                      x  |  sbacktrack s f  =  Nothing
+                                                                                         |  otherwise       =  Just ds
+                                                                                 progress (Backtrack x f)
+                                                                                 backtrack
+                                                               in   withCallback (CbBlock nm b) $ chooseVariant [reject] (const reject) -- 3.
+                                                         else  modify (\s -> s { active = insertPS ps' (Right (b:bs)) a }) -- 4.
+                                                case lookupPS ps' a of
+                                                  Just (Left _)    ->  return () -- 2.
+                                                  Just (Right bs)  ->  continue bs
+                                                  Nothing          ->  continue []
+                  )
                   (findVersions t (unblock da))
-            progress (Message $ "blocker " ++ show da)
--}
-    | otherwise =
+    | otherwise =  let  reject f =  do  ds <- get
+                                        s  <- gets (strategy . pconfig)
+                                        let  b  |  sbacktrack s f  =  Nothing
+                                                |  otherwise       =  Just ds
+                                        progress (Backtrack b f)
+                                        backtrack
+                   in   chooseVariant [] reject
+  where
+    -- failChoice: what to do if all acceptable ebuilds fail (nothing normally, but error for blockers)
+    -- failReject: what to do if all ebuilds are masked (complain about blocker instead?)
+    chooseVariant failChoice failReject =
         do  pc  <-  gets pconfig
             -- g   <-  gets graph
             -- ls  <-  gets labels
@@ -157,38 +196,30 @@ buildGraphForDepAtom da
                  acts  =  concatMap (either (:[]) (const [])) (getActives p a)
                  vs    =  acts ++ {- eliminateSlots acts -} (findVersions t da)
             case sselect s da vs of
-              Reject f  ->  do  
-                                ds <- get
-                                let  b  |  sbacktrack s f  =  Nothing
-                                        |  otherwise       =  Just ds
-                                progress (Backtrack b f)
-                                backtrack
-              Accept vs ->  choice vs >>= 
-                            \ (v@(Variant m e))  ->  
-                            progress (Message $ "CHOOSING: " ++ E.showVariant' (config pc) v ++ " (out of " ++ show (length vs) ++ ")") >>
-                let  avail      =  E.isAvailable (location m)  -- installed or provided?
-                     stop       =  avail && sstop s v 
-                                     -- if it's an installed ebuild, we can decide to stop here!
-                in                 let  luse     =  mergeUse (use (config pc)) (locuse m)
-                                   in   -- set new local USE context
-                                        withLocUse luse $
-                                        do
-                                            progress (LookAtEbuild (pv (meta v)) (origin (meta v)))
-                                            -- insert nodes for v, and activate
-                                            cb <- gets callback
-                                            (already,n) <- insVariant v (doCallback cb da)
-                                            if already || stop
-                                              then return ()
-                                              else do
-                                                       let  rdeps    =  E.rdepend  e
-                                                            deps     =  E.depend   e
-                                                            pdeps    =  E.pdepend  e
-                                                       -- add deps to graph
-                                                       withCallback (CbDepend n) $ buildGraphForUDepString deps
-                                                       -- add rdeps to graph
-                                                       withCallback (CbRDepend n) $ buildGraphForUDepString rdeps
-                                                       -- add pdeps to graph
-                                                       withCallback (CbPDepend n) $ buildGraphForUDepString pdeps
+              Reject f  ->  failReject f
+              Accept vs ->
+                do   v@(Variant m e) <- choiceM (map return vs ++ failChoice)
+                     progress (Message $ "CHOOSING: " ++ E.showVariant' (config pc) v ++ " (out of " ++ show (length vs) ++ ")")
+                     let  avail  =  E.isAvailable (location m)  -- installed or provided?
+                          stop   =  avail && sstop s v  -- if it's an installed ebuild, we can decide to stop here!
+                          luse   =  mergeUse (use (config pc)) (locuse m)
+                     -- set new local USE context
+                     withLocUse luse $ do
+                       progress (LookAtEbuild (pv (meta v)) (origin (meta v)))
+                       -- insert nodes for v, and activate
+                       cb <- gets callback
+                       (already,n) <- insVariant v (doCallback cb da)
+                       if already || stop
+                         then return ()
+                         else do  let  rdeps    =  E.rdepend  e
+                                       deps     =  E.depend   e
+                                       pdeps    =  E.pdepend  e
+                                  -- add deps to graph
+                                  withCallback (CbDepend n) $ buildGraphForUDepString deps
+                                  -- add rdeps to graph
+                                  withCallback (CbRDepend n) $ buildGraphForUDepString rdeps
+                                  -- add pdeps to graph
+                                  withCallback (CbPDepend n) $ buildGraphForUDepString pdeps
 
 
 isAvailable :: Action -> Maybe Variant
@@ -323,7 +354,7 @@ findEdge es n = fromJust $ find (\(_,t,_) -> n == t) es
 
 -- | Insert a set of new nodes into the graph, and connects it.
 --   Returns if the node has existed before, and the node map.
-insVariant :: Variant -> (NodeMap -> GG ()) -> GG (Bool,NodeMap)
+insVariant :: Variant -> (NodeMap -> Variant -> GG ()) -> GG (Bool,NodeMap)
 insVariant v cb =
     do  ls <- gets labels
         case M.lookup v ls of
@@ -332,7 +363,7 @@ insVariant v cb =
                            let  insVariant' bs =
                                     do  modify (\s -> s { active = insertPS ps' (Left v) a })
                                         nm <- insHistory v    -- really adds the nodes
-                                        cb nm                 -- ties in the nodes with the rest of the graph
+                                        cb nm v               -- ties in the nodes with the rest of the graph
                                         resolveBlockers v bs  -- checks the previously accumulated blockers for this package
                                         return nm
                            nm <- case lookupPS ps' a of
@@ -349,20 +380,26 @@ insVariant v cb =
           Just nm  ->  return (True,nm)
 
 resolveBlockers :: Variant -> [Blocker] -> GG ()
-resolveBlockers v = mapM_ (\b ->  let  da         =  (unblock . bdepatom) b
-                                       lvBlocked  =  maybe False (matchDepAtomVariant da) (E.getLinked v)
-                                       vBlocked   =  matchDepAtomVariant da v
-                                  in   case (vBlocked,lvBlocked,bruntime b) of
-                                         (False,False,_)     ->  return ()
-                                         (True,False,False)  ->  return () -- registerEdge (built b) (built v)
-                                         (False,True,_)      ->  return () -- registerEdge (built v) (built b)
-                                         _                   ->  do  ds  <-  get
-                                                                     let  s  =  strategy . pconfig $ ds
-                                                                          f  =  Block b v
-                                                                          x  |  sbacktrack s f  =  Nothing
-                                                                             |  otherwise       =  Just ds
-                                                                     progress (Backtrack x f)
-                                                                     backtrack)
+resolveBlockers v bs =
+    do  ls <- gets labels
+        let nm = ls M.! v
+        mapM_ (\b ->  let  da         =  (unblock . bdepatom) b
+                           lvBlocked  =  maybe False (matchDepAtomVariant da) (E.getLinked v)
+                           vBlocked   =  matchDepAtomVariant da v
+                           bnm        =  ls M.! bvariant b
+                      in   case (vBlocked,lvBlocked,bruntime b) of
+                             (False,False,_)     ->  return ()
+                             (True,False,False)  ->  registerEdgeAndResolveCycle (built bnm) (built nm)
+                                                       (Depend False (bdepatom b))
+                             (False,True,rd)     ->  registerEdgeAndResolveCycle (built nm) (built bnm)
+                                                       ((if rd then RDepend else Depend) True (bdepatom b))
+                             _                   ->  do  ds  <-  get
+                                                         let  s  =  strategy . pconfig $ ds
+                                                              f  =  Block b v
+                                                              x  |  sbacktrack s f  =  Nothing
+                                                                 |  otherwise       =  Just ds
+                                                         progress (Backtrack x f)
+                                                         backtrack) bs
 
 registerEdgeAndResolveCycle :: Int -> Int -> DepType -> GG ()
 registerEdgeAndResolveCycle s t d =
@@ -374,50 +411,36 @@ registerEdgeAndResolveCycle s t d =
                              then  registerEdgeAndResolveCycle s t d
                              else  return () -- fail
 
-doCallback :: Callback -> DepAtom -> NodeMap -> GG ()
-doCallback (CbDepend   nm) = depend nm
-doCallback (CbRDepend  nm) = rdepend nm
-doCallback (CbPDepend  nm) = pdepend nm
+doCallback :: Callback -> DepAtom -> NodeMap -> Variant -> GG ()
+doCallback (CbDepend   nm)    =  depend nm
+doCallback (CbRDepend  nm)    =  rdepend nm
+doCallback (CbPDepend  nm)    =  pdepend nm
+doCallback (CbBlock    nm b)  =  blocker b
 
-depend :: NodeMap -> DepAtom -> NodeMap -> GG ()
-depend source da target
-{-
-    | blocking da =
+blocker :: Blocker -> DepAtom -> NodeMap -> Variant -> GG ()
+blocker b _ target v =
         do
-            let bt = built target
-                bs = built source
-                d  = Depend True da
-            modifyGraph (insEdges [ (bt,bs,d) ])
-            progress (AddEdge bt bs d)
--}
-    | otherwise =
+            let at  =  available target
+                d   =  Meta
+            registerEdgeAndResolveCycle top at d
+            resolveBlockers v [b]
+
+depend :: NodeMap -> DepAtom -> NodeMap -> Variant -> GG ()
+depend source da target _ =
         do
             let bs  =  built source
                 at  =  available target
                 d   =  Depend False da
             registerEdgeAndResolveCycle bs at d
-            progress (AddEdge bs at d)
 
-
-rdepend, pdepend :: NodeMap -> DepAtom -> NodeMap -> GG ()
+rdepend, pdepend :: NodeMap -> DepAtom -> NodeMap -> Variant -> GG ()
 rdepend = rpdepend RDepend
 pdepend = rpdepend PDepend
 
-rpdepend :: (Bool -> DepAtom -> DepType) -> NodeMap -> DepAtom -> NodeMap -> GG ()
-rpdepend rpd source da target
-{-
-    | blocking da =
-        do
-           let bt = built target
-               rs = removed source
-               d  = rpd True da
-           modifyGraph (insEdges [  (bt,rs,d) ])
-           progress (AddEdge bt rs d)
--}
-    | otherwise =
+rpdepend :: (Bool -> DepAtom -> DepType) -> NodeMap -> DepAtom -> NodeMap -> Variant -> GG ()
+rpdepend rpd source da target _ =
         do
            let as = available source
                at = available target
                d  = rpd False da
            registerEdgeAndResolveCycle as at d
-           progress (AddEdge as at d)

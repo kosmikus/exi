@@ -86,6 +86,7 @@ type PrecMap    =  IntMap IntSet
 data Callback =  CbDepend   { nodemap :: NodeMap }
               |  CbRDepend  { nodemap :: NodeMap }
               |  CbPDepend  { nodemap :: NodeMap }
+              |  CbBlock    { nodemap :: NodeMap, cblocker :: Blocker }
 
 data NodeMap = NodeMap
                  {
@@ -144,6 +145,9 @@ progress p = GG (\s -> [Left p,Right ((),s)])
 choice :: [a] -> GG a
 choice cs = GG (\s -> [Right (c,s) | c <- cs])
 
+choiceM :: [GG a] -> GG a
+choiceM cs = GG (\s -> [r | GG f <- cs, r <- f s])
+
 backtrack :: GG a
 backtrack = GG (\_ -> [])
 
@@ -189,19 +193,21 @@ insHistory v  =
         let  a   =  n
              b   =  n + nr - 1
              nm  =  NodeMap a b
-        registerNode v nm
+        registerNode v nm av
         return nm
     where  hasPDepend       =  not . null . E.pdepend . E.ebuild $ v
-           nr | hasPDepend  =  2
+           av               =  (E.isAvailable . location . meta) v
+           nr | hasPDepend && not av 
+                            =  2
               | otherwise   =  1
 
 -- | Insert new node(s) and update labels.
-registerNode :: Variant -> NodeMap -> GG ()
-registerNode v nm@(NodeMap a b) = 
+registerNode :: Variant -> NodeMap -> Bool -> GG ()
+registerNode v nm@(NodeMap a b) av =
     do  modify (\s -> s { labels = M.insert v nm (labels s) })
         if a /= b
           then  modifyGraph ( insNodes [(a,[Available v]),(b,[Built v])] )
-          else  modifyGraph ( insNode (a,[Available v,Built v]) )
+          else  modifyGraph ( insNode (a,Available v : if av then [] else [Built v]) )
         when (a /= b) (registerEdge a b Meta >> return ())  -- cannot fail
 
 -- | Insert a new edge if it does not create a cycle. Returns the cycle
@@ -212,8 +218,10 @@ registerEdge s t d =
         let sPrecs = IM.findWithDefault IS.empty s ps
         if IS.member t sPrecs
           then  do  g <- gets graph
+                    progress (Message "adding edge would cause cycle")
                     return (Just (sp t s (emap (const 1.0) g))) -- returns cycle
           else  do  modifyGraph (insEdge (s,t,d))
+                    progress (AddEdge s t d)
                     modifyPrecs (\p -> IM.update (\tPrecs -> Just (IS.union tPrecs sPrecs)) t p)
                     return Nothing -- indicates success
 

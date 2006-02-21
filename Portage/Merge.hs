@@ -127,6 +127,9 @@ showFailure c (NoneInstalled da vs) =
     "None of the variants that could satisfy " ++ show da ++ " are installed.\n" ++
     "Candidates:\n" ++
     unlines (map (showVariant c) vs)
+showFailure c (Block (Blocker v1 da _) v2) =
+    "The package\n" ++ showVariant c v1 ++ "\nis blocking (" ++ show da ++ ") the package\n" ++
+    showVariant c v2 ++ "\n"
 showFailure c (SlotConflict v1 v2) =
     "Dependencies require two incompatible variants simultaneously.\n" ++ 
     showVariant c v1 ++ "\n" ++
