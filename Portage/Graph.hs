@@ -11,7 +11,7 @@ module Portage.Graph
   where
 
 import Data.List
-import Data.Maybe (fromJust, isJust, listToMaybe, maybeToList)
+import Data.Maybe (fromJust, isJust, isNothing, listToMaybe, maybeToList)
 import Data.Graph.Inductive hiding (version, Graph(), NodeMap())
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -252,19 +252,24 @@ isUpgradeNode g n =  listToMaybe $
 --   the cycle to the Built state.
 -- * Self-blockers. We just drop them, but with a headache.
 -- This is currently very fragile w.r.t. ordering of the resolutions.
-resolveCycle :: [Node] -> GG Bool
-resolveCycle cnodes = 
-    do  progress (Message "trying to resolve a cycle")
-        g <- gets graph
-        let cedges = zipWith findEdge  (map (out g) cnodes)
-                                       (tail cnodes ++ [head cnodes])
+resolveCycle :: [Node] -> DepType -> GG Bool
+resolveCycle cnodes dt = 
+    do  g <- gets graph
+        let  cedges  =  zipWith findEdge (map (out g) cnodes) (tail cnodes)
+                        ++ [(s0,t0,dt)]
+        progress (Message (show cnodes ++ "\n" ++ show cedges))
         sumR $ 
-                   map resolvePDependCycle (filter isPDependEdge cedges)
+                   map (resolvePDependCycle cedges) (filter isPDependEdge cedges)
                ++  map resolveSelfBlockCycle (filter (\x -> isBlockingDependEdge x || isBlockingRDependEdge x) cedges)
+{-
                ++ (case detectBootstrapCycle g cnodes of
                     Just (a',v',a,v)  ->  [resolveBootstrapCycle a' v' a v]
                     Nothing           ->  [])
+-}
   where
+    s0  =  last cnodes
+    t0  =  head cnodes
+
     detectBootstrapCycle :: Graph -> [Node] -> Maybe (Node,Variant,Node,Variant)
     detectBootstrapCycle g ns = msum (map (isUpgradeNode g) ns)
 
@@ -302,29 +307,32 @@ resolveCycle cnodes =
                                                 return True
                                       else  return False
  
-    resolvePDependCycle :: LEdge DepType -> GG Bool
-    resolvePDependCycle (s,t,d) =
+    resolvePDependCycle :: [LEdge DepType] -> LEdge DepType -> GG Bool
+    resolvePDependCycle cedges (s,t,d) =
         do
+            progress (Message "trying to resolve PDEPEND cycle")
             g   <-  gets graph
-            case isAvailableNode g s of
-              Nothing  ->  return False
-              Just v   ->  do  let incoming = 
-                                     filter  (\e@(s',_,_) ->  s' `elem` cnodes &&
-                                                              (isDependEdge e || isRDependEdge e))
-                                             (inn g s)
-                               if null incoming
-                                 then return False
-                                 else do  let pv'  =  pv . meta $ v
-                                          ls  <-  gets labels
-                                          let nm   =  ls M.! v
-                                          s <- get
-                                          mapM_ (\ (s',t',_) -> removeEdge s' t') incoming
-                                          cs <- mapM (\ (s',_,d') -> registerEdge s' (built nm) d') incoming
-                                          if all isJust cs
-                                            then  do  progress (Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ show incoming ++ ")" )
-                                                      return True
-                                            else  do  put s  -- undo unsuccessful redirections
-                                                      return False
+            let (Just v) = isAvailableNode g s
+            let incoming = filter  (\e@(_,t',_) ->  t' == s &&
+                                                    (isDependEdge e || isRDependEdge e))
+                                   cedges
+            if null incoming
+              then progress (Message "none incoming") >> return False
+              else do  let (s',t',_):_ = incoming
+                       let pv'  =  pv . meta $ v
+                       ls  <-  gets labels
+                       let nm   =  ls M.! v
+                       s <- get
+                       removeEdge s' t'
+                       -- register original edge, if not selected for removal
+                       c0 <- if s' /= s0 then registerEdge s0 t0 dt else return Nothing
+                       cs <- mapM (\ (s',_,d') -> registerEdge s' (built nm) d') incoming
+                       if all isNothing (c0:cs)
+                         then  do  progress (Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ show incoming ++ ")" )
+                                   return True
+                         else  do  progress (Message $ "unsuccessful attempt to resolve PDEPEND cycle")
+                                   put s  -- undo unsuccessful redirections
+                                   return False
 
 sumR :: [GG Bool] -> GG Bool
 sumR = foldr (liftM2 (||)) (return False)
@@ -380,7 +388,8 @@ insVariant v cb =
                                                             backtrack
                                    Just (Right bs)  ->  insVariant' bs
                            return (False,nm)
-          Just nm  ->  return (True,nm)
+          Just nm  ->  do  cb nm v
+                           return (True,nm)
 
 resolveBlockers :: Variant -> [Blocker] -> GG ()
 resolveBlockers v bs =
@@ -406,12 +415,13 @@ resolveBlockers v bs =
 
 registerEdgeAndResolveCycle :: Int -> Int -> DepType -> GG ()
 registerEdgeAndResolveCycle s t d =
-    do  r <- registerEdge s t d
+    do  progress (Message $ "trying to register edge " ++ show s ++ " " ++ show t ++ " " ++ show d)
+        r <- registerEdge s t d
         case r of
           Nothing  ->  return ()
-          Just c   ->  do  ok <- resolveCycle c
+          Just c   ->  do  ok <- resolveCycle c d
                            if ok
-                             then  registerEdgeAndResolveCycle s t d
+                             then  return () -- fail
                              else  return () -- fail
 
 doCallback :: Callback -> DepAtom -> NodeMap -> Variant -> GG ()

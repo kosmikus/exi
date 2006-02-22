@@ -52,18 +52,7 @@ pretend pc s d =
         let fs = runGGWith initialState $ 
                            do  buildGraphForUDepString d'
                                gr <- gets graph
-                               progress (Message "Graph complete, checking for cycles.")
-                               let cycles = cyclesFrom gr [top]
-                               if null cycles
-                                       then  return ()
-                                       else  do  progress (Message "Removing cycles.")
-                                                 let loop cs = do b <- allR (map resolveCycle cs)
-                                                                  gr <- gets graph
-                                                                  let ncs = cyclesFrom gr [top]
-                                                                  if b && not (null ncs)
-                                                                    then loop ncs 
-                                                                    else return ()
-                                                 loop cycles
+                               progress (Message "Graph complete.")
         putStr $ "Calculating dependencies: "
         when (mverbose s) $ putStrLn ""
         (if (not . mverbose $ s) then withoutBuffering else id) $ do

@@ -226,8 +226,9 @@ registerEdge s t d =
                     progress (Message "adding edge would cause cycle")
                     return (Just (sp t s (emap (const 1.0) g))) -- returns cycle
           else  do  modifyGraph (insEdge (s,t,d))
+                    progress (Message $ "precs: " ++ show sPrecs)
                     progress (AddEdge s t d)
-                    modifyPrecs (\p -> IM.update (\tPrecs -> Just (IS.union tPrecs sPrecs)) t p)
+                    modifyPrecs (\p -> IM.insertWith IS.union t (IS.insert s sPrecs) p)
                     return Nothing -- indicates success
 
 runGGWith :: DepState -> GG a -> ([Progress],DepState)
@@ -249,6 +250,7 @@ removeEdge :: Int -> Int -> GG ()
 removeEdge s t =
     do  modifyGraph (delEdge (s,t))
         recomputePrecs t
+        progress (Message $ "removed edge: " ++ show s ++ " " ++ show t)
 
 -- | Find the label of an edge.
 labEdge :: (DynGraph gr) => gr a b -> Node -> Node -> b
