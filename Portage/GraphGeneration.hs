@@ -243,7 +243,7 @@ recomputePrecs :: Int -> GG ()
 recomputePrecs n =
     do  g    <-  gets graph
         let  ps = pre g n
-        modifyPrecs (\prs -> IM.insert n (IS.unions (map (prs IM.!) ps)) prs)
+        modifyPrecs (\prs -> IM.insert n (IS.unions (map (\k -> IM.findWithDefault IS.empty k prs) ps)) prs)
 
 -- | Remove an edge from the graph while maintaining the map of predecessors.
 removeEdge :: Int -> Int -> GG ()

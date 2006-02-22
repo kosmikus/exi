@@ -235,11 +235,12 @@ isAvailableNode g = msum . map isAvailable . fromJust . lab g
 getVariantsNode :: Graph -> Int -> [Variant]
 getVariantsNode g = concatMap (maybeToList . getVariant) . fromJust . lab g
 
-isUpgradeNode :: Graph -> Node -> Maybe (Node,Variant,Node,Variant)
+isUpgradeNode :: Graph -> Node -> Maybe (Node,Variant,Variant)
 isUpgradeNode g n =  listToMaybe $
-                     [ (n,v',a,v) |  let va' = isAvailableNode g n, isJust va', let (Just v') = va',
-                                     (_,t,Meta) <- out g n, (_,a,Meta) <- out g t,
-                                     let va = isAvailableNode g a, isJust va, let (Just v) = va ]
+                     [ (n,v',v) |  let va' = isAvailableNode g n, isJust va',
+                                   let (Just v') = va',
+                                   let lv = E.getLinked v', isJust lv,
+                                   let (Just v) = lv ]
 
 -- Types of cycles:
 -- * Bootstrap cycle. A cycle which wants to recursively update itself, but a
@@ -252,47 +253,47 @@ isUpgradeNode g n =  listToMaybe $
 --   the cycle to the Built state.
 -- * Self-blockers. We just drop them, but with a headache.
 -- This is currently very fragile w.r.t. ordering of the resolutions.
-resolveCycle :: [Node] -> DepType -> GG Bool
+resolveCycle :: [Node] -> DepType -> GG ()
 resolveCycle cnodes dt = 
     do  g <- gets graph
         let  cedges  =  zipWith findEdge (map (out g) cnodes) (tail cnodes)
                         ++ [(s0,t0,dt)]
         progress (Message (show cnodes ++ "\n" ++ show cedges))
-        sumR $ 
-                   map (resolvePDependCycle cedges) (filter isPDependEdge cedges)
-               ++  map resolveSelfBlockCycle (filter (\x -> isBlockingDependEdge x || isBlockingRDependEdge x) cedges)
+        choiceM $ map (resolvePDependCycle cedges) (filter isPDependEdge cedges)
 {-
-               ++ (case detectBootstrapCycle g cnodes of
-                    Just (a',v',a,v)  ->  [resolveBootstrapCycle a' v' a v]
-                    Nothing           ->  [])
+              ++  map resolveSelfBlockCycle (filter (\x -> isBlockingDependEdge x || isBlockingRDependEdge x) cedges)
 -}
+              ++ (case detectBootstrapCycle g cnodes of
+                    Just (a',v',v)  ->  [resolveBootstrapCycle cedges a' v' v]
+                    Nothing         ->  [])
   where
     s0  =  last cnodes
     t0  =  head cnodes
 
-    detectBootstrapCycle :: Graph -> [Node] -> Maybe (Node,Variant,Node,Variant)
+    detectBootstrapCycle :: Graph -> [Node] -> Maybe (Node,Variant,Variant)
     detectBootstrapCycle g ns = msum (map (isUpgradeNode g) ns)
 
-    resolveBootstrapCycle :: Node -> Variant -> Node -> Variant -> GG Bool
-    resolveBootstrapCycle a' v' a v =
+    resolveBootstrapCycle :: [LEdge DepType] -> Node -> Variant -> Variant -> GG ()
+    resolveBootstrapCycle cedges a' v' v =
         do
+            progress (Message "trying to resolve bootstrap cycle")
             g <- gets graph
-            let incoming  =  filter  (\e@(s',_,d') ->  s' `elem` cnodes &&
+            let incoming  =  filter  (\e@(_,t',d') ->  t' == a' &&
                                                        (isJust . getDepAtom $ d') &&
                                                        matchDepAtomVariant (fromJust . getDepAtom $ d') v &&
                                                        (isDependEdge e || isRDependEdge e))
-                                     (inn g a')
+                                     cedges
             if null incoming
-              then return False
-              else do  s <- get
-                       mapM_ (\ (s',t',_) -> removeEdge s' t') incoming
-                       cs <- mapM (\ (s',_,d') -> registerEdge s' a d') incoming
-                       if all isJust cs
+              then progress (Message "none incoming") >> backtrack
+              else do  let (s',t',d'):_ = incoming
+                       removeEdge s' t'
+                       -- register original edge, if not selected for removal
+                       c0 <- if s' /= s0 then registerEdge s0 t0 dt else return Nothing
+                       if isNothing c0
                          then  do  progress (Message $ "Resolved bootstrap cycle at "  ++ (showPV . pv . meta $ v')
-                                                                                       ++ " (redirected " ++ show incoming ++ ")")
-                                   return True
-                         else  do  put s  -- undo unsuccessful redirections
-                                   return False
+                                                                                       ++ " (dropped " ++ show incoming ++ ")")
+                         else  do  progress (Message $ "unsuccessful attempt to resolve bootstrap cycle")
+                                   backtrack
 
     resolveSelfBlockCycle :: LEdge DepType -> GG Bool
     resolveSelfBlockCycle (s,t,d) =
@@ -307,7 +308,7 @@ resolveCycle cnodes dt =
                                                 return True
                                       else  return False
  
-    resolvePDependCycle :: [LEdge DepType] -> LEdge DepType -> GG Bool
+    resolvePDependCycle :: [LEdge DepType] -> LEdge DepType -> GG ()
     resolvePDependCycle cedges (s,t,d) =
         do
             progress (Message "trying to resolve PDEPEND cycle")
@@ -317,22 +318,19 @@ resolveCycle cnodes dt =
                                                     (isDependEdge e || isRDependEdge e))
                                    cedges
             if null incoming
-              then progress (Message "none incoming") >> return False
-              else do  let (s',t',_):_ = incoming
+              then progress (Message "none incoming") >> backtrack
+              else do  let (s',t',d'):_ = incoming
                        let pv'  =  pv . meta $ v
                        ls  <-  gets labels
                        let nm   =  ls M.! v
-                       s <- get
                        removeEdge s' t'
                        -- register original edge, if not selected for removal
                        c0 <- if s' /= s0 then registerEdge s0 t0 dt else return Nothing
-                       cs <- mapM (\ (s',_,d') -> registerEdge s' (built nm) d') incoming
-                       if all isNothing (c0:cs)
+                       cs <- registerEdge s' (built nm) d'
+                       if all isNothing [c0,cs]
                          then  do  progress (Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ show incoming ++ ")" )
-                                   return True
                          else  do  progress (Message $ "unsuccessful attempt to resolve PDEPEND cycle")
-                                   put s  -- undo unsuccessful redirections
-                                   return False
+                                   backtrack
 
 sumR :: [GG Bool] -> GG Bool
 sumR = foldr (liftM2 (||)) (return False)
@@ -419,10 +417,7 @@ registerEdgeAndResolveCycle s t d =
         r <- registerEdge s t d
         case r of
           Nothing  ->  return ()
-          Just c   ->  do  ok <- resolveCycle c d
-                           if ok
-                             then  return () -- fail
-                             else  return () -- fail
+          Just c   ->  resolveCycle c d
 
 doCallback :: Callback -> DepAtom -> NodeMap -> Variant -> GG ()
 doCallback (CbDepend   nm)    =  depend nm
