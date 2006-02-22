@@ -17,7 +17,7 @@ import Data.Maybe (fromJust, maybeToList)
 import Data.IORef
 import System.IO
 
-import Portage.Dependency
+import Portage.Dependency hiding (getDepAtom)
 import Portage.Ebuild
 import Portage.Package
 import Portage.Strategy
@@ -109,15 +109,17 @@ showProgress False  =  showProgressShort
 
 showProgressLong c (LookAtEbuild pv o)     r   =  putStrLn (showPV pv ++ " " ++ showOriginLong o) : r
 showProgressLong c (AddEdge n1 n2 d)       r   =  putStrLn ("added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d) : r
+showProgressLong c (AddNode nm v)          r   =  putStrLn ("added nodes " ++ showNodeMap nm ++ " " ++ showVariant c v) : r
 showProgressLong c (Message s)             r   =  putStrLn s : r
 showProgressLong c (Backtrack Nothing f)   r   =  putStr (showFailure c f) : r
 showProgressLong c (Backtrack (Just s) f)  r   =  (putStr (showFailure c f) >> printStackTrace s) : []
 
-showProgressShort c (LookAtEbuild pv o)     r  = putStr (showOriginShort o) : r
-showProgressShort c (AddEdge _ _ _)         r  = r
-showProgressShort c (Message s)             r  = r
-showProgressShort c (Backtrack Nothing f)   r  = putStr "B" : r
-showProgressShort c (Backtrack (Just s) f)  r  = (putStrLn "B" >> putStr (showFailure c f) >> printStackTrace s) : []
+showProgressShort c (LookAtEbuild pv o)     r  =  putStr (showOriginShort o) : r
+showProgressShort c (AddEdge _ _ _)         r  =  r
+showProgressShort c (AddNode _ _)           r  =  r
+showProgressShort c (Message s)             r  =  r
+showProgressShort c (Backtrack Nothing f)   r  =  putStr "B" : r
+showProgressShort c (Backtrack (Just s) f)  r  =  (putStrLn "B" >> putStr (showFailure c f) >> printStackTrace s) : []
 
 showFailure c (AllMasked da vs) =
     "All variants that could satisfy " ++ show da ++ " are masked.\n" ++
@@ -140,15 +142,22 @@ printStackTrace :: DepState -> IO ()
 printStackTrace s =
     do
         putStrLn "Stack:"
-        putStr $ unlines (map (showVariant (config . pconfig $ s)) (stackTrace s))
+        putStr $ unlines (map (showStackLine (config . pconfig $ s)) (stackTrace s))
 
-stackTrace :: DepState -> [Variant]
+  where
+    showStackLine c (v,d)  =  showVariant' c v ++ showDepend d
+    showDepend Nothing     =  ""
+    showDepend (Just da)   =  " depends on " ++ show (fromJust . getDepAtom $ da) ++ ":"
+
+stackTrace :: DepState -> [(Variant,Maybe DepType)]
 stackTrace s = 
-    let  g  =  graph s
-         n  =  built (nodemap (callback s))
-         p  =  sp top n (emap (const 1.0) g)
-    in   if null p then error $ "empty path: " ++ show top ++ " " ++ show n ++ "\n\n" ++ show g
-                   else concatMap (\a -> case a of Built v -> [v]; _ -> []) . concatMap (fromJust . lab g) $ p
+    let  g   =  graph s
+         n   =  built (nodemap (callback s))
+         p   =  sp top n (emap (const 1.0) g)
+         es  =  map Just (zipWith (labEdge g) p (tail p)) ++ [Nothing]
+    in   [  (r,x) |
+            (a,x) <- zip p es, case x of { Just Meta -> False; _ -> True },
+            Just r <- [getVariant . head . fromJust . lab g $ a] ]
 
 showOriginLong FromCache         =  "(from cache)"
 showOriginLong CacheRegen        =  "(regenerated cache entry)"

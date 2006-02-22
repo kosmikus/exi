@@ -251,7 +251,8 @@ isUpgradeNode g n =  listToMaybe $
 -- This is currently very fragile w.r.t. ordering of the resolutions.
 resolveCycle :: [Node] -> GG Bool
 resolveCycle cnodes = 
-    do  g <- gets graph
+    do  progress (Message "trying to resolve a cycle")
+        g <- gets graph
         let cedges = zipWith findEdge  (map (out g) cnodes)
                                        (tail cnodes ++ [head cnodes])
         sumR $ 
@@ -350,7 +351,6 @@ isBlockingRDependEdge  _                      =  False
 
 findEdge :: [LEdge b] -> Node -> LEdge b
 findEdge es n = fromJust $ find (\(_,t,_) -> n == t) es
-
 
 -- | Insert a set of new nodes into the graph, and connects it.
 --   Returns if the node has existed before, and the node map.

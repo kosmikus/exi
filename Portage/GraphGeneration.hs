@@ -93,6 +93,9 @@ data NodeMap = NodeMap
                     available  ::  !Int,
                     built      ::  !Int
                  }
+  deriving (Show,Eq)
+
+showNodeMap (NodeMap a b) = "(" ++ show a ++ "," ++ show b ++ ")"
 
 top :: Int
 top = 0
@@ -100,6 +103,7 @@ top = 0
 data Progress =  LookAtEbuild  PV EbuildOrigin
               |  Backtrack     (Maybe DepState) Failure
               |  AddEdge       Node Node DepType
+              |  AddNode       NodeMap Variant
               |  Message       String
 
 -- | Graph generation monad.
@@ -205,6 +209,7 @@ insHistory v  =
 registerNode :: Variant -> NodeMap -> Bool -> GG ()
 registerNode v nm@(NodeMap a b) av =
     do  modify (\s -> s { labels = M.insert v nm (labels s) })
+        progress (AddNode nm v)
         if a /= b
           then  modifyGraph ( insNodes [(a,[Available v]),(b,[Built v])] )
           else  modifyGraph ( insNode (a,Available v : if av then [] else [Built v]) )
@@ -244,3 +249,7 @@ removeEdge :: Int -> Int -> GG ()
 removeEdge s t =
     do  modifyGraph (delEdge (s,t))
         recomputePrecs t
+
+-- | Find the label of an edge.
+labEdge :: (DynGraph gr) => gr a b -> Node -> Node -> b
+labEdge g s t = head [ l | (_,t',l) <- out g s, t == t' ]
