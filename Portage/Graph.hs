@@ -142,8 +142,10 @@ buildGraphForDepAtom da
                  t   =  itree pc
                  w   =  head (getVariantsNode g (available nm))
                  b   =  Blocker w da (case cb of CbRDepend _ -> True; _ -> False)
+                 ps  =  extractPS (pvs w)
             ls  <-  gets labels
             -- for each variant, there are the following possibilities:
+            -- 0. we ignore self-blockers (but with a headache)
             -- 1. if v is in the graph, resolve the blocker b for v
             -- 2. if a variant v' of the same slot as v is in the graph
             --    already, we can pass, because the blocker will be resolved
@@ -154,25 +156,26 @@ buildGraphForDepAtom da
             progress (Message $ "blocker " ++ show da)
             mapM_ (\v -> do
                              progress (LookAtEbuild (pv (meta v)) (origin (meta v)))
-                             case M.lookup v ls of
-                               Just _   ->  resolveBlockers v [b] -- 1.
-                               Nothing  ->  do  a <- gets active
-                                                let  ps' = extractPS (pvs v)
-                                                let  continue bs = 
-                                                       if E.isAvailable . location . meta $ v
-                                                         then  let  reject = do  ds  <-  get
-                                                                                 s   <-  gets (strategy . pconfig)
-                                                                                 let  f  =  Block b v
-                                                                                      x  |  sbacktrack s f  =  Nothing
-                                                                                         |  otherwise       =  Just ds
-                                                                                 progress (Backtrack x f)
-                                                                                 backtrack
-                                                               in   withCallback (CbBlock nm b) $ chooseVariant [reject] (const reject) -- 3.
-                                                         else  modify (\s -> s { active = insertPS ps' (Right (b:bs)) a }) -- 4.
-                                                case lookupPS ps' a of
-                                                  Just (Left _)    ->  return () -- 2.
-                                                  Just (Right bs)  ->  continue bs
-                                                  Nothing          ->  continue []
+                             let ps' = extractPS (pvs v)
+                             when (ps /= ps') $ do -- 0.
+                               case M.lookup v ls of
+                                 Just _   ->  resolveBlockers v [b] -- 1.
+                                 Nothing  ->  do  a <- gets active
+                                                  let  continue bs = 
+                                                         if E.isAvailable . location . meta $ v
+                                                           then  let  reject = do  ds  <-  get
+                                                                                   s   <-  gets (strategy . pconfig)
+                                                                                   let  f  =  Block b v
+                                                                                        x  |  sbacktrack s f  =  Nothing
+                                                                                           |  otherwise       =  Just ds
+                                                                                   progress (Backtrack x f)
+                                                                                   backtrack
+                                                                 in   withCallback (CbBlock nm b) $ chooseVariant [reject] (const reject) -- 3.
+                                                           else  modify (\s -> s { active = insertPS ps' (Right (b:bs)) a }) -- 4.
+                                                  case lookupPS ps' a of
+                                                    Just (Left _)    ->  return () -- 2.
+                                                    Just (Right bs)  ->  continue bs
+                                                    Nothing          ->  continue []
                   )
                   (findVersions t (unblock da))
     | otherwise =  let  reject f =  do  ds <- get
