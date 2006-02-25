@@ -74,7 +74,7 @@ data DepState =  DepState
                       dlocuse   ::  [UseFlag],
                       graph     ::  Graph,
                       labels    ::  Map Variant NodeMap,
-                      precs     ::  PrecMap,
+                      -- precs     ::  PrecMap,
                       active    ::  ActiveMap,
                       counter   ::  !Int,
                       callback  ::  Callback
@@ -175,9 +175,11 @@ isActive v m =  case lookupPS (extractPS . pvs $ v) m of
 modifyGraph :: (Graph -> Graph) -> GG ()
 modifyGraph f = modify (\s -> s { graph = f (graph s) })
 
+{-
 -- | Modify the precs within the monad.
 modifyPrecs :: (PrecMap -> PrecMap) -> GG ()
 modifyPrecs f = modify (\s -> s { precs = f (precs s) })
+-}
 
 -- | Modify the counter within the monad.
 stepCounter :: Int -> GG Int
@@ -219,17 +221,21 @@ registerNode v nm@(NodeMap a b) av =
 --   that would have been created if insertion fails, and Nothing on success.
 registerEdge :: Int -> Int -> DepType -> GG (Maybe Path)
 registerEdge s t d =
-    do  ps <- gets precs
-        let sPrecs = IM.findWithDefault IS.empty s ps
-        if IS.member t sPrecs
+    do  -- ps <- gets precs
+        g <- gets graph
+        let sPrecs = ancestors s g -- IM.findWithDefault IS.empty s ps
+        if elem t sPrecs
           then  do  g <- gets graph
                     progress (Message "adding edge would cause cycle")
                     return (Just (sp t s (emap (const 1.0) g))) -- returns cycle
           else  do  modifyGraph (insEdge (s,t,d))
                     progress (Message $ "precs: " ++ show sPrecs)
                     progress (AddEdge s t d)
-                    modifyPrecs (\p -> IM.insertWith IS.union t (IS.insert s sPrecs) p)
+                    -- modifyPrecs (\p -> IM.insertWith IS.union t (IS.insert s sPrecs) p)
                     return Nothing -- indicates success
+
+ancestors :: Node -> Graph -> [Node]
+ancestors v g = preorderF (rdff [v] g)
 
 runGGWith :: DepState -> GG a -> ([Progress],DepState)
 runGGWith s cmp = proc (runGG cmp s)
@@ -238,18 +244,20 @@ runGGWith s cmp = proc (runGG cmp s)
          proc (Left p:xs)       =  (\ ~(x,y) -> (p:x,y)) (proc xs)
 
 
+{-
 -- | Recompute the predecessors for a certain node.
 recomputePrecs :: Int -> GG ()
 recomputePrecs n =
     do  g    <-  gets graph
         let  ps = pre g n
         modifyPrecs (\prs -> IM.insert n (IS.unions (map (\k -> IM.findWithDefault IS.empty k prs) ps)) prs)
+-}
 
 -- | Remove an edge from the graph while maintaining the map of predecessors.
 removeEdge :: Int -> Int -> GG ()
 removeEdge s t =
     do  modifyGraph (delEdge (s,t))
-        recomputePrecs t
+        -- recomputePrecs t
         progress (Message $ "removed edge: " ++ show s ++ " " ++ show t)
 
 -- | Find the label of an edge.

@@ -42,14 +42,14 @@ pretend pc s d =
                                  pconfig   =  x,
                                  dlocuse   =  [],
                                  graph     =  insNodes [(top,[Top])] empty,
-                                 precs     =  IM.empty,
+                                 -- precs     =  IM.empty,
                                  labels    =  M.empty,
                                  active    =  M.empty,
                                  counter   =  top + 1,
                                  callback  =  CbRDepend (NodeMap top top)
                               }
         let d' | d == "system"  =  system x
-               | d == "world"   =  world x
+               | d == "world"   =  world x ++ system x
                | otherwise      =  getDepString' (expand x) d
         let fs = runGGWith initialState $ 
                            do  buildGraphForUDepString d'
