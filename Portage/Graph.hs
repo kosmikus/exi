@@ -142,6 +142,7 @@ buildGraphForDepAtom da
                  t   =  itree pc
                  w   =  head (getVariantsNode g (available nm))
                  b   =  Blocker w da (case cb of CbRDepend _ -> True; _ -> False)
+                 p   =  extractP (pv . meta $ w)
                  ps  =  extractPS (pvs w)
             ls  <-  gets labels
             -- for each variant, there are the following possibilities:
@@ -155,10 +156,12 @@ buildGraphForDepAtom da
             --    of v
             progress (Message $ "blocker " ++ show da)
             mapM_ (\v -> do
-                             progress (LookAtEbuild (pv (meta v)) (origin (meta v)))
+                             let pv' = pv . meta $ v
+                             let p' = extractP pv'
+                             progress (LookAtEbuild pv' (origin (meta v)))
                              let ps' = extractPS (pvs v)
-                             progress (Message $ "comparing " ++ show ps ++ "(" ++ show (pvs w) ++ ") vs. " ++ show ps')
-                             when (ps /= ps') $ do -- 0.
+                             progress (Message $ "comparing " ++ show p ++ "(" ++ show (pvs w) ++ ") vs. " ++ show p') -- was ps, ps'
+                             when (p /= p') $ do -- 0.  WAS: ps /= ps'
                                case M.lookup v ls of
                                  Just _   ->  resolveBlockers v [b] -- 1.
                                  Nothing  ->  do  a <- gets active
