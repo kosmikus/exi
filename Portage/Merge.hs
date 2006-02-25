@@ -11,6 +11,7 @@ module Portage.Merge
 
 import Control.Monad (when)
 import Data.Graph.Inductive hiding (Graph())
+import Data.Tree
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import Data.Maybe (fromJust, maybeToList)
@@ -29,6 +30,7 @@ import Portage.Config
 data MergeState =  MergeState
                      {
                        mupdate   ::  Bool,
+                       mtree     ::  Bool,
                        mverbose  ::  Bool
                      }
 
@@ -59,20 +61,43 @@ pretend pc s d =
           sequence_ $ foldr (showProgress (mverbose s) (config pc)) [] (fst fs)
           putStrLn $ "\n"
         let gr = graph $ snd $ fs
-        let mergelist = concat $ postorderF $ dffWith lab' [0] $ gr
+        let mergeforest  =  dffWith lab' [0] $ gr
+        let mergelist    =  concat $ postorderF $ dffWith lab' [0] $ gr
         when (mverbose s) $ do
-          putStr $ unlines $ map show $ mergelist
+          putStr $ if (mtree s)  then  showForest (showAllLines (config x)) 0 mergeforest
+                                 else  unlines $ map show $ mergelist
           putStrLn $ "\nShort version: "
-        putStr $ unlines $ 
-          concatMap (\ a ->  case a of
-                               Built v  ->  [showStatus v ++ " " ++ showVariant (config x) v]
-                               _        ->  []) $ mergelist
+        putStr $ if (mtree s)  then  showForest (showMergeLines (config x)) 0 mergeforest
+                               else  concatMap (showMergeLine (config x) 0) mergelist
         let cycles = cyclesFrom gr [top]
         when (not (null cycles)) $
             do
                 putStrLn "\nThe graph has cycles:" 
                 putStr $ unlines $ map (unlines . map (showNode (mverbose s) gr)) cycles
         return gr
+
+showMergeLines :: Config -> Int -> Bool -> [Action] -> String
+showMergeLines c n child a =  
+    case a of
+      Built v : _   ->  showStatus v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
+      [Top]         ->  ""
+      [a] | child   ->  "_ " ++ replicate (1 + 2*n) ' ' ++ (showPV . pv . meta . fromJust . getVariant $ a) ++ "\n"
+      _ : a'        ->  showMergeLines c n child a'
+      []            ->  ""
+
+showMergeLine :: Config -> Int -> Action -> String
+showMergeLine c n a =  case a of
+                         Built v  ->  showStatus v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
+                         _        ->  ""
+
+showAllLines :: Config -> Int -> Bool -> [Action] -> String
+showAllLines c n child a =
+    case a of
+      [Top]          ->  ""
+      [Available v]  ->  "_ " ++ replicate (1 + 2*n) ' ' ++ (showPV . pv . meta $ v) ++ "\n"
+      Built v : _    ->  showStatus v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
+      _ : a'         ->  showAllLines c n child a'
+      []             ->  ""
 
 -- | Temporarily disables buffering on stdout. Should probably depend on
 --   whether the output is a terminal of a file.
@@ -119,7 +144,7 @@ showFailure c (NoneInstalled da vs) =
     "Candidates:\n" ++
     unlines (map (showVariant c) vs)
 showFailure c (Block (Blocker v1 da _) v2) =
-    "The package\n" ++ showVariant c v1 ++ "\nis blocking (" ++ show da ++ ") the package\n" ++
+    "The package\n" ++ showVariant c v1 ++ "\nis blocked (" ++ show da ++ ") by the package\n" ++
     showVariant c v2 ++ "\n"
 showFailure c (SlotConflict v1 v2) =
     "Dependencies require two incompatible variants simultaneously.\n" ++ 
@@ -160,3 +185,6 @@ showOriginShort EclassDummy      =  "E"
 showOriginShort FromInstalledDB  =  "i"
 showOriginShort IsProvided       =  "p"
 
+showForest :: (Int -> Bool -> a -> String) -> Int -> Forest a -> String
+showForest pe d []               =  ""
+showForest pe d (Node n f : ts)  =  pe d (not (null f)) n ++ showForest pe (d+1) f ++ showForest pe d ts

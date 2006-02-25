@@ -157,6 +157,7 @@ buildGraphForDepAtom da
             mapM_ (\v -> do
                              progress (LookAtEbuild (pv (meta v)) (origin (meta v)))
                              let ps' = extractPS (pvs v)
+                             progress (Message $ "comparing " ++ show ps ++ "(" ++ show (pvs w) ++ ") vs. " ++ show ps')
                              when (ps /= ps') $ do -- 0.
                                case M.lookup v ls of
                                  Just _   ->  resolveBlockers v [b] -- 1.
@@ -202,7 +203,7 @@ buildGraphForDepAtom da
               Reject f  ->  failReject f
               Accept vs ->
                 do   v@(Variant m e) <- choiceM (map return vs ++ failChoice)
-                     progress (Message $ "CHOOSING: " ++ E.showVariant' (config pc) v ++ " (out of " ++ show (length vs) ++ ")")
+                     -- progress (Message $ "CHOOSING: " ++ E.showVariant' (config pc) v ++ " (out of " ++ show (length vs) ++ ")")
                      let  avail  =  E.isAvailable (location m)  -- installed or provided?
                           stop   =  avail && sstop s v  -- if it's an installed ebuild, we can decide to stop here!
                           luse   =  mergeUse (use (config pc)) (locuse m)

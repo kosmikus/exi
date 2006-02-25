@@ -385,7 +385,7 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                               -- If no eclasses mtime file is present, we assume
                               -- the current tree
                               do
-                                  putStrLn ("making eclass dummy for " ++ showPV pv)
+                                  -- putStrLn ("making eclass dummy for " ++ showPV pv)
                                   makePortageFile eclassesFile
                                   let c         =  getEbuild cacheFormat cacheFile origCache
                                   let eclasses  =  inherited c
@@ -406,7 +406,7 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
         let eclassesOK     =  all (\(e,l,m) ->  E.location (ecs M.! e) == l
                                                 && mtime (ecs M.! e) == m) eclasses
         let refreshCache   =  do
-                                  putStrLn ("cache refresh for " ++ showPV pv)
+                                  -- putStrLn ("cache refresh for " ++ showPV pv)
                                   makePortageFile cacheFile
                                   makeCacheEntry cfg pt pv
                                   ebuild <- fmap (getEbuildFlatList cacheFile) (fmap lines (strictReadFile cacheFile))
