@@ -141,10 +141,17 @@ getRev :: Version -> Int
 getRev (Version a b c r rep) = r
 
 -- | Check if one version is a prefix of the other (for comparisons with
---   starred dependencies).
+--   starred dependencies). Apparently portage treats this as a string
+--   comparison.
+versionPrefixOf :: Version -> Version -> Bool
+versionPrefixOf (Version _ _ _ _ r1) (Version _ _ _ _ r2) = isPrefixOf r1 r2
+
+-- This is the original definition we had:
+{-
 versionPrefixOf :: Version -> Version -> Bool
 versionPrefixOf v@(Version ver1 c1 suf1 rev1 _) w@(Version ver2 c2 suf2 rev2 _)
   | rev1 > 0        =  v == w
   | suf1 /= Normal  =  ver1 == ver2 && c1 == c2 && suf1 == suf2
   | isJust c1       =  ver1 == ver2 && c1 == c2
   | otherwise       =  ver1 == take (length ver1) ver2
+-}
