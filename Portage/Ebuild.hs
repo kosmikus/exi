@@ -151,7 +151,9 @@ getLinked v = case (location . meta) v of
                 PortageTree _ (Linked l)  ->  Just l
                 _                         ->  Nothing
 
-data Mask          =  KeywordMasked  [UseFlag]              -- ^ reasoning
+-- The list added to KeywordMasked is supposed not to contain keywords
+-- that do now affect the current arch.
+data Mask          =  KeywordMasked  [Keyword]              -- ^ reasoning
                    |  HardMasked     FilePath [String]      -- ^ filename and reason
                    |  ProfileMasked  FilePath               -- ^ in which file?
                    |  NotInProfile                          -- ^ without further reason
@@ -209,7 +211,15 @@ showStatus (Variant m e)  = f ++ s
                    _     -> "S"
 
 filterMaskedVariants :: [Variant] -> [Variant]
-filterMaskedVariants = filter (\(Variant m _) -> null (masked m))
+filterMaskedVariants = filter (\ (Variant m _) -> null (masked m))
+
+filterOtherArchVariants :: [Variant] -> [Variant]
+filterOtherArchVariants = filter (\ (Variant m _) -> all ok (masked m))
+  where  ok (KeywordMasked xs)  =  any (isPrefixOf "~") xs
+         ok (HardMasked f r)    =  True
+         ok (ProfileMasked f)   =  False
+         ok NotInProfile        =  False
+         ok (Shadowed t)        =  False
 
 putEbuildFlatHash :: FilePath -> Ebuild -> [(Eclass,FilePath,MTime)] -> IO ()
 putEbuildFlatHash f ebuild eclasses  =

@@ -10,6 +10,7 @@ module Portage.Strategy
   where
 
 import Data.List (sortBy)
+import Data.Monoid
 
 import Portage.Dependency
 import Portage.Package
@@ -43,18 +44,18 @@ data Blocker =  Blocker
                    }
   deriving (Eq,Show)
 
-makeStrategy :: (Variant -> Variant -> Ordering) -> Strategy
-makeStrategy order =  
+strategy' :: ([Variant] -> [Variant]) -> Strategy
+strategy' filter =  
     Strategy
       {
-         sselect     =  select order,
+         sselect     =  select filter,
          sstop       =  const True,
          sbacktrack  =  standardBacktrack
       }
 
-select :: (Variant -> Variant -> Ordering) -> DepAtom -> [Variant] -> Selection
-select order da vs =
-  case sortBy order . filterMaskedVariants $ vs of
+select :: ([Variant] -> [Variant]) -> DepAtom -> [Variant] -> Selection
+select filter da vs =
+  case filter vs of
     []     ->  Reject (AllMasked da vs)
     v      ->  Accept v
 
@@ -65,6 +66,15 @@ defaultOrder :: Variant -> Variant -> Ordering
 defaultOrder (Variant { meta = m1 }) (Variant { meta = m2 }) =
     compare  (isAvailable (location m2), verPV (pv m2))
              (isAvailable (location m1), verPV (pv m1))
+
+unmaskOrder :: (Variant -> Variant -> Ordering) -> Variant -> Variant -> Ordering
+unmaskOrder o = \ v w -> maskOrder v w `mappend` o v w
+  where maskOrder (Variant { meta = m1 }) (Variant { meta = m2 }) =
+          compare  (foldr max 0 . map maskRank . masked $ m1)
+                   (foldr max 0 . map maskRank . masked $ m2)
+        maskRank (KeywordMasked _)  =  1
+        maskRank (HardMasked _ _)   =  2
+        maskRank _                  =  3
 
 selectInstalled :: DepAtom -> [Variant] -> Selection
 selectInstalled da vs =
@@ -79,7 +89,13 @@ standardBacktrack (Block _ _)          =  False
 standardBacktrack (SlotConflict _ _)   =  True
 standardBacktrack (Other _)            =  True
 
-updateStrategy, defaultStrategy :: Strategy
-updateStrategy   =  makeStrategy updateOrder
-defaultStrategy  =  makeStrategy defaultOrder
+makeStrategy :: Bool -> Bool -> Strategy
+makeStrategy update unmask =
+    let  upd  =  if update  then updateOrder else defaultOrder
+         unm  =  if unmask  then unmaskOrder else id
+         flt  =  if unmask  then filterOtherArchVariants
+                            else filterMaskedVariants
+    in  strategy' (sortBy (unm upd) . flt)
 
+defaultStrategy :: Strategy
+defaultStrategy = makeStrategy False False

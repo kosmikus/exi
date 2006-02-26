@@ -38,7 +38,10 @@ mergeCmd =  Command
               {
                 command = ["merge"],
                 description = "merge one or more variants",
-                state = MergeState { mupdate = False, mtree = False, mverbose = False },
+                state = MergeState {  mupdate = False,
+                                      munmask = False,
+                                      mtree = False,
+                                      mverbose = False },
                 options = mergeOpts,
                 handler = doMerge
               }
@@ -46,6 +49,7 @@ mergeCmd =  Command
 mergeOpts :: [OptDescr (MergeState -> MergeState)]
 mergeOpts = [Option "u" ["update"] (NoArg (\s -> s { mupdate = True })) "update variants",
              Option "p" ["pretend"] (NoArg id) "calculate dependencies only",
+             Option "M" ["unmask"] (NoArg (\s -> s { munmask = True })) "unmask if necessary",
              Option "t" ["tree"] (NoArg (\s -> s { mtree = True })) "display packages to merge in tree form",
              Option "v" ["verbose"] (NoArg (\s -> s { mverbose = True })) "be verbose"]
 

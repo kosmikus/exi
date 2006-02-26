@@ -30,13 +30,14 @@ import Portage.Config
 data MergeState =  MergeState
                      {
                        mupdate   ::  Bool,
+                       munmask   ::  Bool,
                        mtree     ::  Bool,
                        mverbose  ::  Bool
                      }
 
 pretend :: PortageConfig -> MergeState -> String -> IO Graph
 pretend pc s d = 
-    do  x <- return $ if mupdate s then pc { strategy = updateStrategy } else pc
+    do  x <- return $ pc { strategy = makeStrategy (mupdate s) (munmask s) }
         let initialState =  DepState
                               {
                                  pconfig   =  x,
