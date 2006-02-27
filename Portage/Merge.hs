@@ -16,6 +16,7 @@ import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import Data.Maybe (fromJust, maybeToList)
 import Data.IORef
+import Data.List (nub)
 import System.IO
 
 import Portage.Dependency hiding (getDepAtom)
@@ -26,6 +27,8 @@ import Portage.Graph
 import Portage.GraphUtils
 import Portage.PortageConfig
 import Portage.Config
+import Portage.Constants
+import Portage.Utilities
 
 data MergeState =  MergeState
                      {
@@ -37,10 +40,10 @@ data MergeState =  MergeState
 
 pretend :: PortageConfig -> MergeState -> String -> IO Graph
 pretend pc s d = 
-    do  x <- return $ pc { strategy = makeStrategy (mupdate s) (munmask s) }
+    do  pc <- return $ pc { strategy = makeStrategy (mupdate s) (munmask s) }
         let initialState =  DepState
                               {
-                                 pconfig   =  x,
+                                 pconfig   =  pc,
                                  dlocuse   =  [],
                                  graph     =  insNodes [(top,[Top])] empty,
                                  -- precs     =  IM.empty,
@@ -49,9 +52,9 @@ pretend pc s d =
                                  counter   =  top + 1,
                                  callback  =  CbRDepend (NodeMap top top)
                               }
-        let d' | d == "system"  =  system x
-               | d == "world"   =  world x ++ system x
-               | otherwise      =  getDepString' (expand x) d
+        let d' | d == "system"  =  system pc
+               | d == "world"   =  world pc ++ system pc
+               | otherwise      =  getDepString' (expand pc) d
         let fs = runGGWith initialState $ 
                            do  buildGraphForUDepString d'
                                gr <- gets graph
@@ -65,16 +68,34 @@ pretend pc s d =
         let mergeforest  =  dffWith lab' [0] $ gr
         let mergelist    =  concat $ postorderF $ dffWith lab' [0] $ gr
         when (mverbose s) $ do
-          putStr $ if (mtree s)  then  showForest (showAllLines (config x)) 0 mergeforest
+          putStr $ if (mtree s)  then  showForest (showAllLines (config pc)) 0 mergeforest
                                  else  unlines $ map show $ mergelist
           putStrLn $ "\nShort version: "
-        putStr $ if (mtree s)  then  showForest (showMergeLines (config x)) 0 mergeforest
-                               else  concatMap (showMergeLine (config x) 0) mergelist
+        putStr $ if (mtree s)  then  showForest (showMergeLines (config pc)) 0 mergeforest
+                               else  concatMap (showMergeLine (config pc) 0) mergelist
         let cycles = cyclesFrom gr [top]
         when (not (null cycles)) $
             do
                 putStrLn "\nThe graph has cycles:" 
                 putStr $ unlines $ map (unlines . map (showNode (mverbose s) gr)) cycles
+        when (munmask s) $
+            do
+                let vs     =  concatMap (maybeToList . getVariant) .
+                              concatMap snd . labNodes $ gr
+                    kmask  =  nub $ filter (\v -> any (isKMasked) (masked . meta $ v)) vs
+                    hmask  =  nub $ filter (\v -> any (isHMasked) (masked . meta $ v)) vs
+                    isKMasked (KeywordMasked _)  =  True
+                    isKMasked _                  =  False
+                    isHMasked (HardMasked _ _)   =  True
+                    isHMasked _                  =  False
+                when (not . null $ kmask) $ 
+                    do
+                        putStrLn $ "\nChanges to " ++ localKeywordsFile ++ ":"
+                        putStr . unlines . map (\v -> "=" ++ showPV (pv . meta $ v) ++ " ~" ++ (arch . config $ pc)) $ kmask
+                when (not . null $ hmask) $
+                    do
+                        putStrLn $ "\nChanges to " ++ (localConfigDir ./. packageUnMask) ++ ":"
+                        putStr . unlines . map (\v -> "=" ++ showPV (pv . meta $ v)) $ hmask
         return gr
 
 showMergeLines :: Config -> Int -> Bool -> [Action] -> String
