@@ -87,7 +87,7 @@ getP xs       =  case parseP xs of
                      error $ "getCatPkg: cat/pkg parse error '" ++ xs ++ "'\n" ++ show e
                    Right  x  ->  x
 
-parsePV       =  parse readPV "<cat/pkg-ver>"
+parsePV       =  parse (readPV >>= \x -> eof >> return x) "<cat/pkg-ver>"
 
 readPV        =  do  cat         <-  readCat
                      char '/'
@@ -96,7 +96,7 @@ readPV        =  do  cat         <-  readCat
                        Nothing   ->  error "readPV: version expected"
                        Just ver  ->  return (PV cat pkg ver)
 
-parseP        =  parse readP "<cat/pkg>"
+parseP        =  parse (readP >>= \x -> eof >> return x) "<cat/pkg>"
 
 readP         =  do  cat         <-  readCat
                      char '/'
@@ -112,7 +112,16 @@ readCat        =   many1 (letter <|> digit <|> oneOf "_-")
 readPkgAndVer  =   do  pre    <-  many1 (letter <|> digit <|> oneOf "_+")
                        (p,v)  <-  option ("",Nothing)
                                             (do  char '-'
-                                                 liftM (\v -> ("",Just v)) readVersion 
+                                                 liftM (\v -> ("",Just v)) readVerOrFail
                                                    <|> liftM (\(p,v) -> ('-':p,v)) readPkgAndVer
                                             )
                        return (pre ++ p,v)
+
+readVerOrFail  ::  CharParser st Version
+readVerOrFail  =   try $
+                   do  ver    <-  many1 (letter <|> digit <|> oneOf "_+.-")
+                       case parseVersion ver of
+                           Left   _  -> 
+                             fail $ "version parse error"
+                           Right  x  -> return x
+

@@ -92,7 +92,7 @@ getVersion ver = case parseVersion ver of
                    Right  x  ->  x
 
 parseVersion :: String -> Either ParseError Version
-parseVersion = parse readVersion "<version number>"
+parseVersion = parse (readVersion >>= \x -> eof >> return x) "<version number>"
 
 readVersion :: CharParser st Version
 readVersion =  do  (ver,  verr)  <-  readVer
