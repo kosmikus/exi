@@ -161,7 +161,7 @@ data Mask          =  KeywordMasked  [Keyword]              -- ^ reasoning
   deriving (Show,Eq)
 
 hardMask :: Mask -> String
-hardMask (HardMasked f r) = unlines r
+hardMask (HardMasked f r) = "\n" ++ unlines r
 hardMask _                = ""
 
 showMasked :: Mask -> String
@@ -188,7 +188,13 @@ instance Ord Variant where
 showVariant :: Config -> Variant -> String
 showVariant cfg v@(Variant m e)  =  showVariant' cfg v
                                     ++ " " ++ unwords (map showMasked (masked m))
-                                    ++ " " ++ concatMap hardMask (masked m) ++ unwords (diffUse (mergeUse (use cfg) (locuse m)) (iuse e))
+                                    ++ " " ++ unwords (diffUse (mergeUse (use cfg) (locuse m)) (iuse e))
+
+-- | Like "showVariant", but additionally print the reason for hard-masking.
+--   Takes up more than one line, therefore not suitable in a context where
+--   space is critical.
+showVariantMasked :: Config -> Variant -> String
+showVariantMasked cfg v@(Variant m e)  = showVariant cfg v ++ concatMap hardMask (masked m)
 
 showVariant' :: Config -> Variant -> String
 showVariant' cfg (Variant m e)  =  showPV (pv m) ++ showSlot (slot e) ++ showLocation cfg (location m) 

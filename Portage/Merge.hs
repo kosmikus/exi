@@ -139,18 +139,18 @@ showProgressShort c (Backtrack (Just s) f)  r  =  (putStrLn "B" >> putStr (showF
 showFailure c (AllMasked da vs) =
     "All variants that could satisfy " ++ show da ++ " are masked.\n" ++
     "Candidates:\n" ++ 
-    unlines (map (showVariant c) vs)
+    unlines (map (showVariantMasked c) vs)
 showFailure c (NoneInstalled da vs) =
     "None of the variants that could satisfy " ++ show da ++ " are installed.\n" ++
     "Candidates:\n" ++
-    unlines (map (showVariant c) vs)
+    unlines (map (showVariantMasked c) vs)
 showFailure c (Block (Blocker v1 da _) v2) =
     "The package\n" ++ showVariant c v1 ++ "\nis blocked (" ++ show da ++ ") by the package\n" ++
     showVariant c v2 ++ "\n"
 showFailure c (SlotConflict v1 v2) =
     "Dependencies require two incompatible variants simultaneously.\n" ++ 
-    showVariant c v1 ++ "\n" ++
-    showVariant c v2 ++ "\n"
+    showVariantMasked c v1 ++ "\n" ++
+    showVariantMasked c v2 ++ "\n"
 showFailure c (Other s) = s ++ "\n"
 
 printStackTrace :: DepState -> IO ()
