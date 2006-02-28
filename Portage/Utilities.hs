@@ -14,6 +14,13 @@ import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
 
+-- | Aligns a table of strings.
+align :: [[String]] -> String
+align ts =  let  maxlengths = map (maximum . map length) (transpose ts)
+            in   unlines . map (concat . zipWith formatIn maxlengths) $ ts
+  where  formatIn :: Int -> String -> String
+         formatIn n s = s ++ replicate (n - length s) ' '
+
 -- | Variant of |words| that accepts a custom separator.
 split :: Char -> String -> [String]
 split c s = case dropWhile (==c) s of

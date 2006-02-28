@@ -11,6 +11,8 @@ module Portage.Constants
 
 import Portage.Utilities
 
+myself           =  "exi"
+
 bashBin          =  "/bin/bash"
 
 profileDir       =  "/etc/make.profile"
