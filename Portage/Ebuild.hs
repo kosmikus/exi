@@ -401,7 +401,7 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                               -- If no eclasses mtime file is present, we assume
                               -- the current tree
                               do
-                                  -- putStrLn ("making eclass dummy for " ++ showPV pv)
+                                  when (debug cfg) $ putStrLn ("making eclass dummy for " ++ showPV pv)
                                   makePortageFile eclassesFile
                                   let c         =  getEbuild cacheFormat cacheFile origCache
                                   let eclasses  =  inherited c
@@ -422,7 +422,7 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
         let eclassesOK     =  all (\(e,l,m) ->  E.location (ecs M.! e) == l
                                                 && mtime (ecs M.! e) == m) eclasses
         let refreshCache   =  do
-                                  -- putStrLn ("cache refresh for " ++ showPV pv)
+                                  when (debug cfg) $ putStrLn ("cache refresh for " ++ showPV pv)
                                   makePortageFile cacheFile
                                   makeCacheEntry cfg pt pv
                                   ebuild <- fmap (getEbuildFlatList cacheFile) (fmap lines (strictReadFile cacheFile))
@@ -438,8 +438,19 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
                                               writeEclassesFile  eclassesFile eclasses'
                                   return ebuild
         (orc,cacheContents) <- if (not (cacheExists && cacheNewer && eclassesExist && eclassesOK))
-                               then refreshCache >>= \ebuild -> return (True,ebuild)
-                               else return (False,cacheContents)
+                               then  do  when (debug cfg) $ do
+                                           putStr $ " cacheExists:   " ++ show cacheExists
+                                           putStr $ " cacheNewer:    " ++ show cacheNewer
+                                           putStr $ " eclassesExist: " ++ show eclassesExist
+                                           putStr $ " eclassesOK:    " ++ show eclassesOK
+                                           putStr "\n"
+                                           when (eclassesExist && not eclassesOK) $ do
+                                             putStrLn "Eclasses reference:"
+                                             print (M.filterWithKey (\e _ -> e `elem` (map (\ (x,_,_) -> x) eclasses)) ecs)
+                                             putStrLn "Eclasses here:"
+                                             print eclasses
+                                         refreshCache >>= \ebuild -> return (True,ebuild)
+                               else  return (False,cacheContents)
         let origin | orc        =  CacheRegen
                    | oed        =  EclassDummy
                    | otherwise  =  FromCache
@@ -496,29 +507,31 @@ makeCacheEntry cfg pt pv@(PV cat pkg ver) =
         let buildDir      =  buildPrefix ./. showPV pv
         
         let env =
-              [  ("ROOT",            envroot),
-                 ("STARTDIR",        wd),
-                 ("EBUILD",          originalFile),
-                 ("O",               ebuildDir),
-                 ("FILESDIR",        filesDir),
-                 ("PF",              showPV pv),
-                 ("ECLASSDIR",       eclassDir (portDir cfg)),
+              [  ("ROOT",              envroot),
+                 ("STARTDIR",          wd),
+                 ("EBUILD",            originalFile),
+                 ("O",                 ebuildDir),
+                 ("CATEGORY",          cat),
+                 ("FILESDIR",          filesDir),
+                 ("PF",                showPV pv),
+                 ("ECLASSDIR",         eclassDir (portDir cfg)),
                  -- TODO: do we need SANDBOX_LOG?
-                 ("PROFILE_PATHS",   unlines profileDirs),
-                 ("P",               (pkg ++ "-" ++ ver)),
-                 ("PN",              pkg),
-                 ("PV",              ver),
-                 ("PR",              showRevPR rev),
-                 ("PVR",             showVersion (verPV pv)),
-                 ("SLOT",            ""),
-                 ("PATH",            path),
-                 ("BUILD_PREFIX",    buildPrefix),
-                 ("HOME",            home),
-                 ("PKG_TMPDIR",      pkgTmpDir),
-                 ("BUILDDIR",        buildDir),
-                 ("PORTAGE_BASHRC",  bashrcFile),
+                 ("PROFILE_PATHS",     unlines profileDirs),
+                 ("P",                 (pkg ++ "-" ++ ver)),
+                 ("PN",                pkg),
+                 ("PV",                ver),
+                 ("PR",                showRevPR rev),
+                 ("PVR",               showVersion (verPV pv)),
+                 ("SLOT",              ""),
+                 ("PATH",              path),
+                 ("BUILD_PREFIX",      buildPrefix),
+                 ("HOME",              home),
+                 ("PKG_TMPDIR",        pkgTmpDir),
+                 ("PORTAGE_BUILDDIR",  buildDir),
+                 ("PORTAGE_BASHRC",    bashrcFile),
                  -- TODO: KV and KVERS missing ...
-                 ("dbkey",           cacheFile)
+                 -- TODO: PORTAGE_DEBUG missing ...
+                 ("dbkey",             cacheFile)
               ]
 
         runCommandInEnv (ebuildsh ++ " depend") env
