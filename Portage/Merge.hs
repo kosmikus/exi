@@ -58,11 +58,13 @@ pretend pc s d =
         let fs = runGGWith initialState $ 
                            do  buildGraphForUDepString d'
                                gr <- gets graph
-                               progress (Message "Graph complete.")
+                               progress Done
         putStr $ "Calculating dependencies: "
         when (mverbose s) $ putStrLn ""
-        (if (not . mverbose $ s) then withoutBuffering else id) $ do
-          sequence_ $ foldr (showProgress (mverbose s) (config pc)) [] (fst fs)
+        (if (mverbose s) then id else withoutBuffering) $ do
+          putStrLn .  
+            (if mverbose s then id else spin 10) . concat .
+            foldr (showProgress (mverbose s) (config pc)) [] $ fst fs
           putStrLn $ "\n"
         let gr = graph $ snd $ fs
         let mergeforest  =  dffWith lab' [0] $ gr
@@ -139,23 +141,25 @@ showNode :: Bool -> DGraph -> Int -> String
 showNode v gr n = (show . fromJust . lab gr $ n) ++ number
   where number = if v then " [" ++ show n ++ "]" else ""
 
-showProgress :: Bool -> Config -> Progress -> [IO ()] -> [IO ()]
+showProgress :: Bool -> Config -> Progress -> [String] -> [String]
 showProgress True   =  showProgressLong
 showProgress False  =  showProgressShort
 
-showProgressLong c (LookAtEbuild pv o)     r   =  putStrLn (showPV pv ++ " " ++ showOriginLong o) : r
-showProgressLong c (AddEdge n1 n2 d)       r   =  putStrLn ("added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d) : r
-showProgressLong c (AddNode nm v)          r   =  putStrLn ("added nodes " ++ showNodeMap nm ++ " " ++ showVariant c v) : r
-showProgressLong c (Message s)             r   =  putStrLn s : r
-showProgressLong c (Backtrack Nothing f)   r   =  putStr (showFailure c f) : r
-showProgressLong c (Backtrack (Just s) f)  r   =  (putStr (showFailure c f) >> printStackTrace s) : []
+showProgressLong c (LookAtEbuild pv o)     r   =  (showPV pv ++ " " ++ showOriginLong o ++ "\n") : r
+showProgressLong c (AddEdge n1 n2 d)       r   =  ("added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d ++ "\n") : r
+showProgressLong c (AddNode nm v)          r   =  ("added nodes " ++ showNodeMap nm ++ " " ++ showVariant c v ++ "\n") : r
+showProgressLong c (Message s)             r   =  (s ++ "\n") : r
+showProgressLong c (Backtrack Nothing f)   r   =  showFailure c f : r
+showProgressLong c (Backtrack (Just s) f)  r   =  ("\n" ++ showFailure c f ++ printStackTrace s) : []
+showProgressLong c Done                    r   =  "\nGraph complete." : []
 
-showProgressShort c (LookAtEbuild pv o)     r  =  putStr (showOriginShort o) : r
+showProgressShort c (LookAtEbuild pv o)     r  =  showOriginShort o : r
 showProgressShort c (AddEdge _ _ _)         r  =  r
 showProgressShort c (AddNode _ _)           r  =  r
 showProgressShort c (Message s)             r  =  r
-showProgressShort c (Backtrack Nothing f)   r  =  putStr "B" : r
-showProgressShort c (Backtrack (Just s) f)  r  =  (putStrLn "B" >> putStr (showFailure c f) >> printStackTrace s) : []
+showProgressShort c (Backtrack Nothing f)   r  =  "B" : r
+showProgressShort c (Backtrack (Just s) f)  r  =  ("B" ++ "\n\n" ++ showFailure c f ++ printStackTrace s) : []
+showProgressShort c Done                    r  =  "\nDone." : []
 
 showFailure c (AllMasked da vs) =
     "All variants that could satisfy " ++ show da ++ " are masked.\n" ++
@@ -174,12 +178,9 @@ showFailure c (SlotConflict v1 v2) =
     showVariantMasked c v2 ++ "\n"
 showFailure c (Other s) = s ++ "\n"
 
-printStackTrace :: DepState -> IO ()
+printStackTrace :: DepState -> String
 printStackTrace s =
-    do
-        putStrLn "Stack:"
-        putStr $ unlines (map (showStackLine (config . pconfig $ s)) (stackTrace s))
-
+    unlines ("Stack:" : map (showStackLine (config . pconfig $ s)) (stackTrace s))
   where
     showStackLine c (v,d)  =  showVariant' c v ++ showDepend d
     showDepend Nothing     =  ""

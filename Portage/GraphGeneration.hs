@@ -105,6 +105,7 @@ data Progress =  LookAtEbuild  PV EbuildOrigin
               |  AddEdge       Node Node DepType
               |  AddNode       NodeMap Variant
               |  Message       String
+              |  Done
 
 -- | Graph generation monad.
 newtype GG a = GG { runGG :: DepState -> [Either Progress (a,DepState)] }

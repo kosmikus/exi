@@ -14,6 +14,14 @@ import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
 
+-- | Implements a "spinner".
+spin :: Int -> String -> String
+spin w = spin' w
+  where spin' _ []           =  []
+        spin' 0 xs           =  replicate w '\b' ++ spin' w xs
+        spin' c xs@('\n':_)  =  xs
+        spin' c (x:xs)       =  x : ' ' : '\b' : spin' (c-1) xs
+
 -- | Aligns a table of strings.
 align :: [[String]] -> String
 align ts =  let  maxlengths = map (maximum . map length) (transpose ts)
