@@ -94,8 +94,8 @@ handleArgs [a]
 handleArgs (x:xs)  =  do
                           r <- portageConfig >>= newIORef
                           case findCommand x of
-                            Nothing -> handleCommand  r  x  (Command' mergeCmd)  (x:xs)
-                            Just c  -> handleCommand  r  x  c                    xs
+                            Nothing -> handleCommand  r  "merge"  (Command' mergeCmd)  (x:xs)
+                            Just c  -> handleCommand  r  x        c                    xs
 
 isHelp :: String -> Bool
 isHelp "-?"      =  True
