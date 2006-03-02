@@ -33,6 +33,7 @@ import Portage.Utilities
 data MergeState =  MergeState
                      {
                        mupdate   ::  Bool,
+                       mdeep     ::  Bool,
                        munmask   ::  Bool,
                        mtree     ::  Bool,
                        mverbose  ::  Bool
@@ -40,7 +41,7 @@ data MergeState =  MergeState
 
 pretend :: PortageConfig -> MergeState -> String -> IO Graph
 pretend pc s d = 
-    do  pc <- return $ pc { strategy = makeStrategy (mupdate s) (munmask s) }
+    do  pc <- return $ pc { strategy = makeStrategy (mupdate s) (munmask s) (mdeep s) }
         let initialState =  DepState
                               {
                                  pconfig   =  pc,
@@ -172,6 +173,9 @@ showFailure c (NoneInstalled da vs) =
 showFailure c (Block (Blocker v1 da _) v2) =
     "The package\n" ++ showVariant c v1 ++ "\nis blocked (" ++ show da ++ ") by the package\n" ++
     showVariant c v2 ++ "\n"
+showFailure c (Cycle p) =
+    unlines (  "Could not resolve cyclic dependencies in graph:" : 
+               map (showStackLine c) p)
 showFailure c (SlotConflict v1 v2) =
     "Dependencies require two incompatible variants simultaneously.\n" ++ 
     showVariantMasked c v1 ++ "\n" ++
@@ -181,20 +185,23 @@ showFailure c (Other s) = s ++ "\n"
 printStackTrace :: DepState -> String
 printStackTrace s =
     unlines ("Stack:" : map (showStackLine (config . pconfig $ s)) (stackTrace s))
+
+showStackLine :: Config -> (Variant,Maybe DepType) -> String
+showStackLine c (v,d)  =  showVariant' c v ++ showDepend d
   where
-    showStackLine c (v,d)  =  showVariant' c v ++ showDepend d
-    showDepend Nothing     =  ""
-    showDepend (Just da)   =  " depends on " ++ show (fromJust . getDepAtom $ da) ++ ":"
+    showDepend Nothing                     =  ""
+    showDepend (Just Meta)                 =  ""
+    showDepend (Just (Depend False da))    =  " depends on " ++ show da
+    showDepend (Just (RDepend False da))   =  " runtime-depends on " ++ show da
+    showDepend (Just (PDepend False da))   =  " post-depends on " ++ show da
+    showDepend _                           =  " (illegal dependency)"
 
 stackTrace :: DepState -> [(Variant,Maybe DepType)]
-stackTrace s = 
+stackTrace s =
     let  g   =  graph s
          n   =  built (nodemap (callback s))
          p   =  sp top n (emap (const 1.0) g)
-         es  =  map Just (zipWith (labEdge g) p (tail p)) ++ [Nothing]
-    in   [  (r,x) |
-            (a,x) <- zip p es, case x of { Just Meta -> False; _ -> True },
-            Just r <- [getVariant . head . fromJust . lab g $ a] ]
+    in   pathTrace s p Nothing
 
 showOriginLong FromCache         =  "(from cache)"
 showOriginLong CacheRegen        =  "(regenerated cache entry)"

@@ -81,11 +81,11 @@ buildGraphForOr ds@(dt:_)  =
     do
         pc    <-  gets pconfig
         case findInstalled pc ds of
-          Nothing   ->  do  buildGraphForDepTerm dt  -- default
-                            progress (Message $ "|| (" ++ show ds ++ ")) resolved to default")
-          Just dt'  ->  do  
+          Nothing   ->  do  progress (Message $ "|| (" ++ show ds ++ ")) resolved to default")
+                            buildGraphForDepTerm dt   -- default
+          Just dt'  ->  do  progress (Message $ "|| (" ++ show ds ++ ")) resolved to available: " ++ show dt')
                             buildGraphForDepTerm dt'  -- installed
-                            progress (Message $ "|| (" ++ show ds ++ ")) resolved to available: " ++ show dt')
+                            
   where
     findInstalled :: PortageConfig -> DepString -> Maybe DepTerm
     findInstalled pc = find (isInstalledTerm . resolveVirtuals pc)
@@ -126,9 +126,6 @@ withCallback cb' g =
         r <- g
         modify (\s -> s { callback = cb })
         return r
-
-eliminateSlots :: [Variant] -> [Variant] -> [Variant]
-eliminateSlots rs xs = filter (\x -> not ((E.slot . ebuild) x `elem` map (E.slot . ebuild) rs)) xs
 
 buildGraphForDepAtom :: DepAtom -> GG ()
 buildGraphForDepAtom da
@@ -200,8 +197,9 @@ buildGraphForDepAtom da
             let  s     =  strategy pc
                  t     =  itree pc
                  p     =  pFromDepAtom da
-                 acts  =  concatMap (either (:[]) (const [])) (getActives p a)
-                 vs    =  acts ++ {- eliminateSlots acts -} (findVersions t da)
+                 -- it might be a good idea to speed up the process of finding
+                 -- the correct variants by preferring currently active variants
+                 vs    =  findVersions t da
             case sselect s da vs of
               Reject f  ->  failReject f
               Accept vs ->
@@ -217,7 +215,7 @@ buildGraphForDepAtom da
                        cb <- gets callback
                        (already,n) <- insVariant v (doCallback cb da)
                        if already || stop
-                         then return ()
+                         then progress (Message $ "stopping at " ++ showPV (pv (meta v)))
                          else do  let  rdeps    =  E.rdepend  e
                                        deps     =  E.depend   e
                                        pdeps    =  E.pdepend  e
@@ -227,6 +225,7 @@ buildGraphForDepAtom da
                                   withCallback (CbRDepend n) $ buildGraphForUDepString rdeps
                                   -- add pdeps to graph
                                   withCallback (CbPDepend n) $ buildGraphForUDepString pdeps
+                                  progress (Message $ "done with dependencies for " ++ showPV (pv (meta v)))
 
 
 isAvailable :: Action -> Maybe Variant
@@ -239,12 +238,18 @@ isAvailableNode g = msum . map isAvailable . fromJust . lab g
 getVariantsNode :: Graph -> Int -> [Variant]
 getVariantsNode g = concatMap (maybeToList . getVariant) . fromJust . lab g
 
-isUpgradeNode :: Graph -> Node -> Maybe (Node,Variant,Variant)
-isUpgradeNode g n =  listToMaybe $
-                     [ (n,v',v) |  let va' = isAvailableNode g n, isJust va',
-                                   let (Just v') = va',
-                                   let lv = E.getLinked v', isJust lv,
-                                   let (Just v) = lv ]
+hasUpgradeHistory :: Graph -> Node -> Maybe (Node,Variant,Variant)
+hasUpgradeHistory g n = 
+   listToMaybe $ [ (n,v',v) |  let va' = isAvailableNode g n, isJust va',
+                               let (Just v') = va',
+                               let lv = E.getLinked v', isJust lv,
+                               let (Just v) = lv ]
+
+hasAvailableHistory :: Graph -> Node -> Maybe (Node,Variant,Variant)
+hasAvailableHistory g n =
+   listToMaybe $ [ (n,v,v)  |  let va = isAvailableNode g n, isJust va,
+                               let (Just v) = va,
+                               E.isAvailable . location . meta $ v ]
 
 -- Types of cycles:
 -- * Bootstrap cycle. A cycle which wants to recursively update itself, but a
@@ -267,15 +272,23 @@ resolveCycle cnodes dt =
 {-
               ++  map resolveSelfBlockCycle (filter (\x -> isBlockingDependEdge x || isBlockingRDependEdge x) cedges)
 -}
-              ++ (case detectBootstrapCycle g cnodes of
-                    Just (a',v',v)  ->  [resolveBootstrapCycle cedges a' v' v]
-                    Nothing         ->  [])
+              ++ (map  (\ (a',v',v) -> resolveBootstrapCycle cedges a' v' v)
+                       (detectBootstrapCycle g cnodes))
+              ++ [do  ds  <-  get
+                      s   <-  gets (strategy . pconfig)
+                      let  f                     =  Cycle (cycleTrace ds cnodes dt)
+                           b  |  sbacktrack s f  =  Nothing
+                              |  otherwise       =  Just ds
+                      progress (Backtrack b f)
+                      backtrack]
   where
     s0  =  last cnodes
     t0  =  head cnodes
 
-    detectBootstrapCycle :: Graph -> [Node] -> Maybe (Node,Variant,Variant)
-    detectBootstrapCycle g ns = msum (map (isUpgradeNode g) ns)
+    detectBootstrapCycle :: Graph -> [Node] -> [(Node,Variant,Variant)]
+    detectBootstrapCycle g ns =
+       concatMap (maybeToList . hasUpgradeHistory g) ns
+       ++ concatMap (maybeToList . hasAvailableHistory g) ns
 
     resolveBootstrapCycle :: [LEdge DepType] -> Node -> Variant -> Variant -> GG ()
     resolveBootstrapCycle cedges a' v' v =
@@ -285,7 +298,7 @@ resolveCycle cnodes dt =
             let incoming  =  filter  (\e@(_,t',d') ->  t' == a' &&
                                                        (isJust . getDepAtom $ d') &&
                                                        matchDepAtomVariant (fromJust . getDepAtom $ d') v &&
-                                                       (isDependEdge e || isRDependEdge e))
+                                                       (isDependEdge e || isRDependEdge e || isPDependEdge e))
                                      cedges
             if null incoming
               then progress (Message "none incoming") >> backtrack
@@ -293,12 +306,21 @@ resolveCycle cnodes dt =
                        removeEdge s' t'
                        -- register original edge, if not selected for removal
                        c0 <- if s' /= s0 then registerEdge s0 t0 dt else return Nothing
-                       if isNothing c0
+                       -- check if t' is still reachable from the top;
+                       -- (this is a bit subtle: if it is not, it'd be possible
+                       -- to `lose' parts of the graph by the edge removal)
+                       g' <- gets graph
+                       -- inserting a node from top helps, but destroys the tree
+                       -- structure
+                       let reach = top `elem` ancestors t' g'
+                       c1 <- if not reach then registerEdge top t' Meta else return Nothing
+                       if isNothing c0 && isNothing c1
                          then  do  progress (Message $ "Resolved bootstrap cycle at "  ++ (showPV . pv . meta $ v')
                                                                                        ++ " (dropped " ++ show incoming ++ ")")
                          else  do  progress (Message $ "unsuccessful attempt to resolve bootstrap cycle")
                                    backtrack
 
+{-
     resolveSelfBlockCycle :: LEdge DepType -> GG Bool
     resolveSelfBlockCycle (s,t,d) =
         do
@@ -311,6 +333,7 @@ resolveCycle cnodes dt =
                                                                                                     ++ " (redirected " ++ show (s,t,d) ++ ")")
                                                 return True
                                       else  return False
+-}
  
     resolvePDependCycle :: [LEdge DepType] -> LEdge DepType -> GG ()
     resolvePDependCycle cedges (s,t,d) =

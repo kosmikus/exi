@@ -11,6 +11,7 @@ module Portage.Utilities
 
 import System.Directory
 import Data.List
+import Data.Maybe (fromJust)
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -110,3 +111,13 @@ dirname = fst . splitPath
 --   @os.path.basename@ and returns the non-directory component of a pathname.
 basename :: FilePath -> FilePath
 basename = snd . splitPath
+
+-- | Variant of 'head' that takes a location.
+head' :: String -> [a] -> a
+head' err []     =  error ("(" ++ err ++ ") empty list")
+head' err (x:_)  =  x
+
+-- | Variant of 'fromJust' that takes a location.
+fromJust' :: String -> Maybe a -> a
+fromJust' err Nothing   =  error ("(" ++ err ++ ") fromJust applied to Nothing")
+fromJust' err (Just x)  =  x

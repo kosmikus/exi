@@ -10,6 +10,7 @@ module Portage.GraphGeneration
   (module Portage.GraphGeneration)
   where
 
+import Data.Maybe (fromJust)
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.IntMap (IntMap)
@@ -28,14 +29,10 @@ import Portage.Package
 import Portage.Ebuild (Variant(..), Ebuild(iuse), EbuildMeta(..), EbuildOrigin(..), TreeLocation(..), Mask(..), Link(..), pvs)
 import qualified Portage.Ebuild as E
 import Portage.Strategy
+import Portage.Utilities
 
 type DGraph = Graph
 type Graph = Gr [Action] DepType
-data DepType = Depend        Bool DepAtom
-             | RDepend       Bool DepAtom
-             | PDepend       Bool DepAtom
-             | Meta                        -- ^ meta-logic
-  deriving (Eq,Show)
 
 data Action  =  Available    Variant       -- ^ used for PDEPENDs
              |  Built        Variant
@@ -192,7 +189,7 @@ stepCounter n = do  c <- gets counter
 newNode :: GG Node
 newNode =
     do  g <- gets graph
-        return (head $ newNodes 1 g)
+        return (head' "newNode" $ newNodes 1 g)
 
 insHistory :: Variant -> GG NodeMap
 insHistory v  =
@@ -230,7 +227,7 @@ registerEdge s t d =
                     progress (Message "adding edge would cause cycle")
                     return (Just (sp t s (emap (const 1.0) g))) -- returns cycle
           else  do  modifyGraph (insEdge (s,t,d))
-                    progress (Message $ "precs: " ++ show sPrecs)
+                    progress (Message $ "precs of " ++ show s ++ ": " ++ show sPrecs)
                     progress (AddEdge s t d)
                     -- modifyPrecs (\p -> IM.insertWith IS.union t (IS.insert s sPrecs) p)
                     return Nothing -- indicates success
@@ -263,4 +260,19 @@ removeEdge s t =
 
 -- | Find the label of an edge.
 labEdge :: (DynGraph gr) => gr a b -> Node -> Node -> b
-labEdge g s t = head [ l | (_,t',l) <- out g s, t == t' ]
+labEdge g s t = head' "labEdge" [ l | (_,t',l) <- out g s, t == t' ]
+
+-- | Generate a debug trace of a path in the graph.
+pathTrace :: DepState -> [Node] -> Maybe DepType -> [(Variant, Maybe DepType)]
+pathTrace s p dt = 
+    let  g   =  graph s
+         es  =  map Just (zipWith (labEdge g) p (tail p)) ++ [dt]
+    in   [  (r,x) |
+            (a,x) <- zip p es, case x of { Just Meta -> False; _ -> True },
+            Just r <- [  getVariant . head' "pathTrace" . 
+                         fromJust' "pathTrace" . lab g $ a ] ]
+
+-- | Generate a debug trace of a cycle in the graph.
+cycleTrace :: DepState -> [Node] -> DepType -> [(Variant,Maybe DepType)]
+cycleTrace s p dt = pathTrace s p (Just dt)
+

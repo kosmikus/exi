@@ -11,6 +11,7 @@ module Portage.Strategy
 
 import Data.List (sortBy)
 import Data.Monoid
+import Data.Graph.Inductive
 
 import Portage.Dependency
 import Portage.Package
@@ -29,10 +30,17 @@ data Strategy =  Strategy
                       sbacktrack  ::  Failure -> Bool
                    }
 
+data DepType = Depend        Bool DepAtom
+             | RDepend       Bool DepAtom
+             | PDepend       Bool DepAtom
+             | Meta                        -- ^ meta-logic
+  deriving (Eq,Show)
+
 data Failure  =  AllMasked DepAtom [Variant]
               |  NoneInstalled DepAtom [Variant]
               |  SlotConflict Variant Variant
               |  Block Blocker Variant
+              |  Cycle [(Variant,Maybe DepType)]
               |  Other String
   deriving (Eq,Show)
 
@@ -44,12 +52,12 @@ data Blocker =  Blocker
                    }
   deriving (Eq,Show)
 
-strategy' :: ([Variant] -> [Variant]) -> Strategy
-strategy' filter =  
+strategy' :: ([Variant] -> [Variant]) -> (Variant -> Bool) -> Strategy
+strategy' filter stop =  
     Strategy
       {
          sselect     =  select filter,
-         sstop       =  const True,
+         sstop       =  stop,
          sbacktrack  =  standardBacktrack
       }
 
@@ -86,16 +94,23 @@ standardBacktrack :: Failure -> Bool
 standardBacktrack (AllMasked _ _)      =  False
 standardBacktrack (NoneInstalled _ _)  =  False
 standardBacktrack (Block _ _)          =  False
+standardBacktrack (Cycle _)            =  False
 standardBacktrack (SlotConflict _ _)   =  True
 standardBacktrack (Other _)            =  True
 
-makeStrategy :: Bool -> Bool -> Strategy
-makeStrategy update unmask =
+deepStop :: Variant -> Bool
+deepStop v =  case location . meta $ v of
+                Provided _  ->  True
+                _           ->  False
+
+makeStrategy :: Bool -> Bool -> Bool -> Strategy
+makeStrategy update unmask deep =
     let  upd  =  if update  then updateOrder else defaultOrder
          unm  =  if unmask  then unmaskOrder else id
          flt  =  if unmask  then filterOtherArchVariants
                             else filterMaskedVariants
-    in  strategy' (sortBy (unm upd) . flt)
+         stp  =  if deep    then deepStop else const True
+    in  strategy' (sortBy (unm upd) . flt) stp
 
 defaultStrategy :: Strategy
-defaultStrategy = makeStrategy False False
+defaultStrategy = makeStrategy False False False
