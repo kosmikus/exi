@@ -32,11 +32,12 @@ import Portage.Utilities
 
 data MergeState =  MergeState
                      {
-                       mupdate   ::  Bool,
-                       mdeep     ::  Bool,
-                       munmask   ::  Bool,
-                       mtree     ::  Bool,
-                       mverbose  ::  Bool
+                       mupdate     ::  Bool,
+                       mdeep       ::  Bool,
+                       munmask     ::  Bool,
+                       mtree       ::  Bool,
+                       mbacktrack  ::  Bool,
+                       mverbose    ::  Bool
                      }
 
 pretend :: PortageConfig -> MergeState -> String -> IO Graph

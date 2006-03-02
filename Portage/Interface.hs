@@ -47,6 +47,7 @@ mergeCmd =  Command
                                       mdeep = False,
                                       munmask = False,
                                       mtree = False,
+                                      mbacktrack = False,
                                       mverbose = False },
                 options = mergeOpts,
                 handler = doMerge
@@ -58,6 +59,7 @@ mergeOpts = [Option "u" ["update"] (NoArg (\s -> s { mupdate = True })) "update 
              Option "p" ["pretend"] (NoArg id) "calculate dependencies only",
              Option "M" ["unmask"] (NoArg (\s -> s { munmask = True {- , mpretend = True -} })) "unmask if necessary",
              Option "t" ["tree"] (NoArg (\s -> s { mtree = True })) "display packages to merge in tree form",
+             Option "B" ["backtrack"] (NoArg (\s -> s { mbacktrack = True })) "backtrack to find more solutions",
              Option "v" ["verbose"] (NoArg (\s -> s { mverbose = True })) "be verbose"]
 
 -- | The 'nullCmd' is only for debugging purposes. It does nothing (except initialization)
