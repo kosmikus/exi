@@ -38,7 +38,8 @@ data Config = Config  {
                          overlays          ::  [FilePath],
                          features          ::  [String],
                          useExpand         ::  [(String,String)],
-                         debug             ::  Bool
+                         debug             ::  Bool,
+                         color             ::  Bool
                       }
   deriving (Eq,Show)
 
@@ -63,7 +64,8 @@ getConfig c  =
                   (nub (words overlays))  -- space as separator seems strange to me, but apparently that's the current rule
                   (nub (words features))
                   (zip expand expandvars)
-                  False
+                  False  -- debug
+                  True   -- color
   where  vars        =  map (\k -> M.findWithDefault "" k c) configEnvVars
          (arch:key:use:pd:tmpd:{- distd:pkgd:logd: -}overlays:features:exp:_) = vars
          expand      =  words exp

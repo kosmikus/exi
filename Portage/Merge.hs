@@ -29,6 +29,7 @@ import Portage.PortageConfig
 import Portage.Config
 import Portage.Constants
 import Portage.Utilities
+import Portage.AnsiColor
 
 data MergeState =  MergeState
                      {
@@ -105,7 +106,7 @@ pretend pc s d =
 showMergeLines :: Config -> Int -> Bool -> [Action] -> String
 showMergeLines c n child a =  
     case a of
-      Built v : _   ->  showStatus v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
+      Built v : _   ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
       [Top]         ->  ""
       [a] | child   ->  "_ " ++ replicate (1 + 2*n) ' ' ++ (showPV . pv . meta . fromJust . getVariant $ a) ++ "\n"
       _ : a'        ->  showMergeLines c n child a'
@@ -113,7 +114,7 @@ showMergeLines c n child a =
 
 showMergeLine :: Config -> Int -> Action -> String
 showMergeLine c n a =  case a of
-                         Built v  ->  showStatus v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
+                         Built v  ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
                          _        ->  ""
 
 showAllLines :: Config -> Int -> Bool -> [Action] -> String
@@ -121,7 +122,7 @@ showAllLines c n child a =
     case a of
       [Top]          ->  ""
       [Available v]  ->  "_ " ++ replicate (1 + 2*n) ' ' ++ (showPV . pv . meta $ v) ++ "\n"
-      Built v : _    ->  showStatus v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
+      Built v : _    ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
       _ : a'         ->  showAllLines c n child a'
       []             ->  ""
 
@@ -164,28 +165,28 @@ showProgressShort c (Backtrack (Just s) f)  r  =  ("B" ++ "\n\n" ++ showFailure 
 showProgressShort c Done                    r  =  "\nDone." : []
 
 showFailure c (AllMasked da vs) =
-    "All variants that could satisfy " ++ show da ++ " are masked.\n" ++
-    "Candidates:\n" ++ 
+    inColor c Red True Default ("All variants that could satisfy " ++ show da ++ " are masked.\n" ++ "Candidates:\n") ++ 
     unlines (map (showVariantMasked c) vs)
 showFailure c (NoneInstalled da vs) =
-    "None of the variants that could satisfy " ++ show da ++ " are installed.\n" ++
+    inColor c Red True Default ("None of the variants that could satisfy " ++ show da ++ " are installed.\n") ++
     "Candidates:\n" ++
     unlines (map (showVariantMasked c) vs)
 showFailure c (Block (Blocker v1 da _) v2) =
-    "The package\n" ++ showVariant c v1 ++ "\nis blocked (" ++ show da ++ ") by the package\n" ++
-    showVariant c v2 ++ "\n"
+    inColor c Red True Default ("The package\n" ++ showVariant c v1 ++ "\nis blocked (" ++ show da ++ ") by the package\n" ++
+    showVariant c v2 ++ "\n")
 showFailure c (Cycle p) =
-    unlines (  "Could not resolve cyclic dependencies in graph:" : 
+    unlines (  inColor c Red True Default ("Could not resolve cyclic dependencies in graph:") : 
                map (showStackLine c) p)
 showFailure c (SlotConflict v1 v2) =
-    "Dependencies require two incompatible variants simultaneously.\n" ++ 
+    inColor c Red True Default ("Dependencies require two incompatible variants simultaneously.\n") ++ 
     showVariantMasked c v1 ++ "\n" ++
     showVariantMasked c v2 ++ "\n"
-showFailure c (Other s) = s ++ "\n"
+showFailure c (Other s) = inColor c Red True Default s ++ "\n"
 
 printStackTrace :: DepState -> String
 printStackTrace s =
-    unlines ("Stack:" : map (showStackLine (config . pconfig $ s)) (stackTrace s))
+    let  c = config . pconfig $ s
+    in   unlines (inColor c Red True Default "Stack:" : map (showStackLine c) (stackTrace s))
 
 showStackLine :: Config -> (Variant,Maybe DepType) -> String
 showStackLine c (v,d)  =  showVariant' c v ++ showDepend d

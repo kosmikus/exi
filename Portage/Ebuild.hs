@@ -35,6 +35,7 @@ import Portage.Utilities
 import Portage.Shell
 import Portage.Profile
 import Portage.Cache
+import Portage.AnsiColor
 
 -- The ebuild cache format (as created by calling @ebuild depend@) is as follows:
 -- DEPEND
@@ -122,7 +123,7 @@ instance Ord TreeLocation where
 showLocation :: Config -> TreeLocation -> String
 showLocation c Installed          =  " (installed)"
 showLocation c (Provided f)       =  " (provided in " ++ f ++ ")"
-showLocation c (PortageTree t l)  =  showLink l ++
+showLocation c (PortageTree t l)  =  inColor c Blue True Default (showLink l) ++
                                      if portDir c == t then "" else " [" ++ t ++ "]"
 
 showTreeLocation :: TreeLocation -> String
@@ -197,24 +198,25 @@ showVariantMasked :: Config -> Variant -> String
 showVariantMasked cfg v@(Variant m e)  = showVariant cfg v ++ concatMap hardMask (masked m)
 
 showVariant' :: Config -> Variant -> String
-showVariant' cfg (Variant m e)  =  showPV (pv m) ++ showSlot (slot e) ++ showLocation cfg (location m) 
+showVariant' cfg (Variant m e)  =  inColor cfg Green False Default (showPV (pv m)) ++
+                                   showSlot (slot e) ++ showLocation cfg (location m) 
 
-showStatus :: Variant -> String
-showStatus (Variant m e)  = f ++ s
+showStatus :: Config -> Variant -> String
+showStatus cfg (Variant m e)  = f ++ s
     where  f  =  case location m of
-                   Installed                 ->  "R"
-                   Provided _xo                ->  "P"
-                   PortageTree t NoLink      ->  "N"
+                   Installed                 ->  inColor cfg Yellow True Default "R"
+                   Provided _                ->  inColor cfg Black True Default "P"
+                   PortageTree t NoLink      ->  inColor cfg Green True Default "N"
                    PortageTree t (Linked v)  ->
                      let  lver   =  verPV . pv . meta $ v
                           ver    =  verPV . pv $ m
                      in   case () of
-                            _ | lver > ver  ->  "D"
-                              | lver < ver  ->  "U"
-                              | otherwise   ->  "R"
+                            _ | lver > ver  ->  inColor cfg Blue True Default "D"
+                              | lver < ver  ->  inColor cfg Cyan True Default "U"
+                              | otherwise   ->  inColor cfg Yellow True Default "R"
            s  =  case slot e of
                    ['0'] -> " "
-                   _     -> "S"
+                   _     -> inColor cfg Green True Default "S"
 
 filterMaskedVariants :: [Variant] -> [Variant]
 filterMaskedVariants = filter (\ (Variant m _) -> null (masked m))
