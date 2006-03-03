@@ -105,9 +105,8 @@ buildGraphForOr ds@(dt:_)  =
 isInstalled :: PortageConfig -> DepAtom -> Bool
 isInstalled pc da =
     let  t  =  itree pc
-    in   case selectInstalled da (findVersions t da) of
-           Accept v  ->  True
-           _         ->  False
+    in   not . null . filter (E.isAvailable . location . meta) $
+         (t !? (pFromDepAtom da))
 
 withLocUse :: [UseFlag] -> GG a -> GG a
 withLocUse luse' g =

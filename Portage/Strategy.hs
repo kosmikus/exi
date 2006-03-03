@@ -84,12 +84,6 @@ unmaskOrder o = \ v w -> maskOrder v w `mappend` o v w
         maskRank (HardMasked _ _)   =  2
         maskRank _                  =  3
 
-selectInstalled :: DepAtom -> [Variant] -> Selection
-selectInstalled da vs =
-  case sortBy updateOrder . filter (isAvailable . location . meta) . filterMaskedVariants $ vs of
-    []     ->  Reject (NoneInstalled da vs)
-    v      ->  Accept v
-
 standardBacktrack :: Failure -> Bool
 standardBacktrack (AllMasked _ _)      =  False
 standardBacktrack (NoneInstalled _ _)  =  False
