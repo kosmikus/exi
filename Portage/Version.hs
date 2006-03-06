@@ -134,7 +134,7 @@ readRev      =  option (0,        "")  (  do  rr      <- string "-r"
 
 -- | Strip a revision number from a version.
 stripRev :: Version -> Version
-stripRev (Version a b c r rep) = Version a b c 0 rep
+stripRev (Version a b c r rep) = Version a b c 0 (fst . break (=='-') $ rep)
 
 -- | Get a revision number from a version.
 getRev :: Version -> Int
