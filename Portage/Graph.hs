@@ -76,8 +76,26 @@ resolveVirtuals pc (Plain d)  =  maybe (Plain d) id (virtuals pc d)
 resolveVirtuals _  dt         =  dt
 
 buildGraphForOr :: DepString -> GG ()
-buildGraphForOr []         =  return ()  -- strange case, empty OR, but ok
-buildGraphForOr ds@(dt:_)  =
+buildGraphForOr ds  =
+    do
+        pc <- gets pconfig
+        case filterUnmasked pc ds of
+          []   ->  buildGraphForOr' ds  -- should fail here already
+          ds'  ->  do  
+                       progress (Message $ "|| (" ++ show ds ++ ") simplified to || (" ++ show ds' ++ ")")
+                       buildGraphForOr' ds'
+  where
+    filterUnmasked :: PortageConfig -> DepString -> DepString
+    filterUnmasked pc = filter (isUnmaskedTerm . resolveVirtuals pc)
+      where
+        isUnmaskedTerm :: DepTerm -> Bool
+        isUnmaskedTerm (Or ds)     =  any isUnmaskedTerm ds
+        isUnmaskedTerm (And ds)    =  all isUnmaskedTerm ds
+        isUnmaskedTerm (Plain d)   =  isUnmasked pc d
+
+buildGraphForOr' :: DepString -> GG ()
+buildGraphForOr' []         =  return ()  -- strange case, empty OR, but ok
+buildGraphForOr' ds@(dt:_)  =
     do
         pc    <-  gets pconfig
         case findInstalled pc ds of
@@ -85,7 +103,6 @@ buildGraphForOr ds@(dt:_)  =
                             buildGraphForDepTerm dt   -- default
           Just dt'  ->  do  progress (Message $ "|| (" ++ show ds ++ ")) resolved to available: " ++ show dt')
                             buildGraphForDepTerm dt'  -- installed
-                            
   where
     findInstalled :: PortageConfig -> DepString -> Maybe DepTerm
     findInstalled pc = find (isInstalledTerm . resolveVirtuals pc)
@@ -94,6 +111,7 @@ buildGraphForOr ds@(dt:_)  =
         isInstalledTerm (Or ds)    =  any isInstalledTerm ds
         isInstalledTerm (And ds)   =  all isInstalledTerm ds
         isInstalledTerm (Plain d)  =  isInstalled pc d
+
 
 -- Critical case for OR-dependencies:
 -- || ( ( a b ) c )
@@ -107,6 +125,12 @@ isInstalled pc da =
     let  t  =  itree pc
     in   not . null . filter (E.isAvailable . location . meta) $
          (t !? (pFromDepAtom da))
+
+isUnmasked :: PortageConfig -> DepAtom -> Bool
+isUnmasked pc da =
+    let  t  =  itree pc
+    in   not . null . E.filterMaskedVariants $
+         findVersions t da
 
 withLocUse :: [UseFlag] -> GG a -> GG a
 withLocUse luse' g =
