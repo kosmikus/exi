@@ -46,7 +46,7 @@ readEclassesFile f =  do
 -- | Writes a file associating eclasses with mtimes.
 writeEclassesFile :: FilePath -> [(Eclass,FilePath,MTime)] -> IO ()
 writeEclassesFile f c =  do
-                             let out  =  map  (\(e,l,m) -> e ++ " " ++ l ++ " " ++ show m) c
+                             let out  =  map  (\(e,l,m) -> e ++ "\t" ++ l ++ "\t" ++ show m) c
                              h <- openFile f WriteMode
                              hPutStr h (unlines out)
                              hClose h

@@ -47,8 +47,8 @@ detectFileFormat (Just f)  =
 
 detectStringFormat :: [String] -> CacheFormat
 detectStringFormat s
-  | length s == 2  =  scan s
-  | otherwise      =  FlatHash
+  | length s == 22  =  scan s
+  | otherwise       =  FlatHash
   where  -- we test the RESTRICT line for an occurrence of an '='
          scan (_:_:_:_:x:_)  =  if elem '=' x then FlatHash else FlatList
          scan _              =  FlatHash
