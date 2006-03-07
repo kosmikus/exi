@@ -130,7 +130,7 @@ runEbuild cfg v =
             let file    =  pt ./. (showEbuildPV . pv) m
             let uses    =  diffUse (mergeUse (use cfg) (locuse m)) (iuse e)
             let addEnv  =  [("USE", unwords uses)]
-            let cmd     =  ebuildBin ++ " " ++ quote file ++ " merge"
+            let cmd     =  ebuildBin ++ " " ++ quote file ++ " merge clean"
             env <- getEnvironment
             putStrLn (inColor cfg Green True Default (">>> " ++ cmd))
             exit <- systemInEnv cmd (addEnv ++ [ e | e@(v,_) <- env, v /= "USE" ])
