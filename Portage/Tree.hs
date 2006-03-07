@@ -189,7 +189,9 @@ linkInstalledEbuilds t i =
 
     findSlot :: Variant -> [Variant] -> Link
     findSlot v vs =  case find (\v' -> (slot . ebuild $ v) == (slot . ebuild $ v')) vs of
-                       Nothing   ->  NoLink
+                       Nothing   ->  case vs of
+                                       []  ->  NoLink
+                                       _   ->  OtherSlot $ head (sortBy (flip compare) vs)
                        Just v'   ->  Linked v'
 
 overlayInstalledEbuilds ::  Ebuilds -> Ebuilds -> Ebuilds

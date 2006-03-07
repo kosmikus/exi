@@ -140,12 +140,14 @@ isAvailable _             =  False
 --   of the same slot. We can thus say whether selecting this variant would be
 --   an up- or a downgrade, and we can compare use flags.
 data Link          =  NoLink
-                   |  Linked  Variant     -- ^ installed variant
+                   |  OtherSlot  Variant     -- ^ installed variant of another slot
+                   |  Linked     Variant     -- ^ installed variant
   deriving (Show,Eq)
 
 showLink :: Link -> String
-showLink NoLink     = ""
-showLink (Linked v) = " [" ++ showVersion (verPV . pv . meta $ v) ++ "]"
+showLink NoLink         =  ""
+showLink (OtherSlot v)  =  " [" ++ showVersion (verPV . pv . meta $ v) ++ "]"
+showLink (Linked v)     =  " [" ++ showVersion (verPV . pv . meta $ v) ++ "]"
 
 getLinked :: Variant -> Maybe Variant
 getLinked v = case (location . meta) v of
@@ -202,21 +204,22 @@ showVariant' cfg (Variant m e)  =  inColor cfg Green False Default (showPV (pv m
                                    showSlot (slot e) ++ showLocation cfg (location m) 
 
 showStatus :: Config -> Variant -> String
-showStatus cfg (Variant m e)  = f ++ s
+showStatus cfg (Variant m e)  = f
     where  f  =  case location m of
-                   Installed                 ->  inColor cfg Yellow True Default "R"
-                   Provided _                ->  inColor cfg Black True Default "P"
-                   PortageTree t NoLink      ->  inColor cfg Green True Default "N"
-                   PortageTree t (Linked v)  ->
+                   Installed                    ->  inColor cfg Yellow True Default "R "
+                   Provided _                   ->  inColor cfg Black True Default "P "
+                   PortageTree t NoLink         ->  inColor cfg Green True Default "N "
+                   PortageTree t (OtherSlot v)  ->  inColor cfg Green True Default ("N" ++ s)
+                   PortageTree t (Linked v)     ->
                      let  lver   =  verPV . pv . meta $ v
                           ver    =  verPV . pv $ m
                      in   case () of
-                            _ | lver > ver  ->  inColor cfg Blue True Default "D"
-                              | lver < ver  ->  inColor cfg Cyan True Default "U"
-                              | otherwise   ->  inColor cfg Yellow True Default "R"
+                            _ | lver > ver      ->  inColor cfg Blue True Default ("D" ++ s)
+                              | lver < ver      ->  inColor cfg Cyan True Default ("U" ++ s)
+                              | otherwise       ->  inColor cfg Yellow True Default ("R" ++ s)
            s  =  case slot e of
                    ['0'] -> " "
-                   _     -> inColor cfg Green True Default "S"
+                   _     -> "S"
 
 filterMaskedVariants :: [Variant] -> [Variant]
 filterMaskedVariants = filter (\ (Variant m _) -> null (masked m))
