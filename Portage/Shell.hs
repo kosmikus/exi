@@ -15,7 +15,9 @@ import System.Process
 import System.Exit
 import System.IO
 import System.Directory
+import System.Process.Internals  -- for "systemInEnv"
 import Control.Monad
+import GHC.IOBase                -- for "systemInEnv"
 
 import Portage.Constants
 import Portage.Utilities
@@ -43,6 +45,26 @@ runCommand  ::  String               -- ^ the command
             ->  IO (ExitCode,String,String)
 runCommand cmd = runCommandInEnv cmd []
 
+-- | Run a command in a specific environment and return the exit code.
+--   Very low-level. Contains code from the GHC definition of "system"
+--   in System.Cmd.
+systemInEnv  ::  String               -- ^ the command
+             ->  [(String,String)]    -- ^ the environment
+             ->  IO ExitCode
+systemInEnv ""   _    = ioException (IOError Nothing InvalidArgument "systemInEnv" "null command" Nothing)
+systemInEnv cmd  env  =
+    do
+        let env' = if null env then Nothing else Just env
+        old_int      <-  installHandler sigINT   Ignore Nothing
+        old_quit     <-  installHandler sigQUIT  Ignore Nothing
+        (cmd',args)  <-  commandToProcess cmd
+        pid          <-  runProcessPosix  "systemInEnv" cmd' args Nothing env' Nothing Nothing Nothing
+                                          (Just defaultSignal) (Just defaultSignal)
+        exit         <-  waitForProcess pid
+        installHandler sigINT    old_int   Nothing
+        installHandler sigQUIT   old_quit  Nothing
+        return exit
+        
 -- | Quotes a string such that it will survive the shell.
 quote :: String -> String
 quote x =  "\"" ++ concatMap quotesingle x ++ "\""

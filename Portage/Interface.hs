@@ -43,7 +43,8 @@ mergeCmd =  Command
                 command = ["merge"],
                 description = "Merge one or more variants.",
                 usage = \c -> myself ++ " " ++ c ++ " [OPTIONS] dependency atoms ...",
-                state = MergeState {  mupdate = False,
+                state = MergeState {  mpretend = False,
+                                      mupdate = False,
                                       mdeep = False,
                                       munmask = False,
                                       mtree = False,
@@ -56,8 +57,8 @@ mergeCmd =  Command
 mergeOpts :: [OptDescr (MergeState -> MergeState)]
 mergeOpts = [Option "u" ["update"] (NoArg (\s -> s { mupdate = True })) "update variants",
              Option "D" ["deep"] (NoArg (\s -> s { mdeep = True, mupdate = True })) "deep update",
-             Option "p" ["pretend"] (NoArg id) "calculate dependencies only",
-             Option "M" ["unmask"] (NoArg (\s -> s { munmask = True {- , mpretend = True -} })) "unmask if necessary",
+             Option "p" ["pretend"] (NoArg (\s -> s { mpretend = True })) "calculate dependencies only",
+             Option "M" ["unmask"] (NoArg (\s -> s { munmask = True, mpretend = True })) "unmask if necessary",
              Option "t" ["tree"] (NoArg (\s -> s { mtree = True })) "display packages to merge in tree form",
              Option "B" ["backtrack"] (NoArg (\s -> s { mbacktrack = True })) "backtrack to find more solutions",
              Option "v" ["verbose"] (NoArg (\s -> s { mverbose = True })) "be verbose"]

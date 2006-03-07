@@ -40,6 +40,8 @@ cacheDir     pt  =  "/var/cache/edb/dep" ./. pt
 ownCacheDir  pt  =  "/var/cache/hdb/dep" ./. pt  -- for non-portage compliant own files
 dbDir            =  "/var/db/pkg"
 
+emergeBin        =  "/usr/bin/emerge"
+ebuildBin        =  "/usr/sbin/ebuild"
 ebuildsh         =  "/usr/sbin/ebuild.sh"
 
 categoriesFile  pt  =  profilesDir pt ./. "categories"

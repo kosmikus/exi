@@ -9,7 +9,7 @@
 module Portage.Merge
   where
 
-import Control.Monad (when)
+import Control.Monad (when, foldM)
 import Data.Graph.Inductive hiding (Graph())
 import Data.Tree
 import qualified Data.Map as M
@@ -18,6 +18,8 @@ import Data.Maybe (fromJust, maybeToList)
 import Data.IORef
 import Data.List (nub)
 import System.IO
+import System.Environment
+import System.Exit
 
 import Portage.Dependency hiding (getDepAtom)
 import Portage.Ebuild
@@ -30,9 +32,12 @@ import Portage.Config
 import Portage.Constants
 import Portage.Utilities
 import Portage.AnsiColor
+import Portage.Shell
+import Portage.Use
 
 data MergeState =  MergeState
                      {
+                       mpretend    ::  Bool,
                        mupdate     ::  Bool,
                        mdeep       ::  Bool,
                        munmask     ::  Bool,
@@ -72,17 +77,21 @@ pretend pc s d =
         let gr = graph $ snd $ fs
         let mergeforest  =  dffWith lab' [0] $ gr
         let mergelist    =  concat $ postorderF $ dffWith lab' [0] $ gr
+        -- Verbose (debug) output.
         when (mverbose s) $ do
           putStr $ if (mtree s)  then  showForest (showAllLines (config pc)) 0 mergeforest
                                  else  unlines $ map show $ mergelist
           putStrLn $ "\nShort version: "
+        -- Normal output. (Only if --pretend??)
         putStr $ if (mtree s)  then  showForest (showMergeLines (config pc)) 0 mergeforest
                                else  concatMap (showMergeLine (config pc) 0) mergelist
         let cycles = cyclesFrom gr [top]
+        -- If cycles remain, print them.
         when (not (null cycles)) $
             do
                 putStrLn "\nThe graph has cycles:" 
                 putStr $ unlines $ map (unlines . map (showNode (mverbose s) gr)) cycles
+        -- If --unmask, print a list of necessary changes to package.keywords and package.unmask.
         when (munmask s) $
             do
                 let vs     =  concatMap (maybeToList . getVariant) .
@@ -101,7 +110,38 @@ pretend pc s d =
                     do
                         putStrLn $ "\nChanges to " ++ (localConfigDir ./. packageUnMask) ++ ":"
                         putStr . unlines . map (\v -> "=" ++ showPV (pv . meta $ v)) $ hmask
+        -- Perform merging.
+        when (null cycles && not (mpretend s)) $
+             do
+                 exit <- foldM  (\exit a ->  case exit of
+                                               ExitSuccess  ->  processMergeLine (config pc) a
+                                               _            ->  return exit)
+                                ExitSuccess mergelist
+                 case exit of
+                   ExitSuccess  ->  return ()
+                   _            ->  putStrLn "Quitting due to errors."
         return gr
+
+runEbuild :: Config -> Variant -> IO ExitCode
+runEbuild cfg v =
+    case location m of
+      PortageTree pt _ ->
+        do
+            let file    =  pt ./. (showEbuildPV . pv) m
+            let uses    =  diffUse (mergeUse (use cfg) (locuse m)) (iuse e)
+            let addEnv  =  [("USE", unwords uses)]
+            let cmd     =  ebuildBin ++ " " ++ quote file ++ " merge"
+            env <- getEnvironment
+            putStrLn (inColor cfg Green True Default (">>> " ++ cmd))
+            exit <- systemInEnv cmd (addEnv ++ [ e | e@(v,_) <- env, v /= "USE" ])
+            case exit of
+              ExitSuccess  ->  -- cleaning should look at AUTOCLEAN, and possibly call emerge unmerge directly
+                               systemInEnv (emergeBin ++ " --clean") []
+              _            ->  return exit
+      _ -> return ExitSuccess  -- or should it be an error?
+  where
+    m  =  meta v
+    e  =  ebuild v
 
 showMergeLines :: Config -> Int -> Bool -> [Action] -> String
 showMergeLines c n child a =  
@@ -116,6 +156,11 @@ showMergeLine :: Config -> Int -> Action -> String
 showMergeLine c n a =  case a of
                          Built v  ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
                          _        ->  ""
+
+processMergeLine :: Config -> Action -> IO ExitCode
+processMergeLine c a =  case a of
+                          Built v  ->  runEbuild c v
+                          _        ->  return ExitSuccess
 
 showAllLines :: Config -> Int -> Bool -> [Action] -> String
 showAllLines c n child a =
