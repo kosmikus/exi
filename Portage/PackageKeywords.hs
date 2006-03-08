@@ -42,14 +42,10 @@ parseKeywordsLine x =
       (d:ks)  ->  KeywordsForPackage ks (getDepAtom d)
 
 readKeywordsFile :: FilePath -> IO [KeywordsForPackage]
-readKeywordsFile f = fmap parseKeywords (strictReadFile f)
+readKeywordsFile f = fmap parseKeywords (strictReadFileIfExists f)
 
 userKeywords  ::  IO [KeywordsForPackage]
-userKeywords  =   unsafeInterleaveIO $ do
-                  localExists <- doesFileExist localKeywordsFile
-                  if localExists
-                    then readKeywordsFile localKeywordsFile
-                    else return []
+userKeywords  =   readKeywordsFile localKeywordsFile
 
 performKeywords :: KeywordsForPackage -> Tree -> Tree
 performKeywords (KeywordsForPackage ks d) =

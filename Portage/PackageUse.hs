@@ -43,14 +43,10 @@ parseUseLine x =
       (d:us)  ->  UseForPackage us (getDepAtom d)
 
 readUseFile :: FilePath -> IO [UseForPackage]
-readUseFile f = fmap parseUse (strictReadFile f)
+readUseFile f = fmap parseUse (strictReadFileIfExists f)
 
 userUseFlags  ::  IO [UseForPackage]
-userUseFlags  =   unsafeInterleaveIO $ do
-                  localExists <- doesFileExist localUseFlagsFile
-                  if localExists
-                    then readUseFile localUseFlagsFile
-                    else return []
+userUseFlags  =   readUseFile localUseFlagsFile
 
 performUseFlags :: UseForPackage -> Tree -> Tree
 performUseFlags (UseForPackage us d) =
