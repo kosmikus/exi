@@ -9,7 +9,6 @@
 module Portage.PackageKeywords
   where
 
-import System.Directory (doesFileExist)
 import System.IO.Unsafe
 
 import Portage.Keyword

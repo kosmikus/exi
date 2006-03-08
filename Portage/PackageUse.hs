@@ -8,7 +8,6 @@
 
 module Portage.PackageUse where
 
-import System.Directory (doesFileExist)
 import System.IO.Unsafe
 
 import Portage.Use
