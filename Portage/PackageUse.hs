@@ -8,6 +8,7 @@
 
 module Portage.PackageUse where
 
+import System.Directory (doesFileExist)
 import System.IO.Unsafe
 
 import Portage.Use
@@ -45,8 +46,11 @@ readUseFile :: FilePath -> IO [UseForPackage]
 readUseFile f = fmap parseUse (strictReadFile f)
 
 userUseFlags  ::  IO [UseForPackage]
-userUseFlags  =   unsafeInterleaveIO $
-                  readUseFile localUseFlagsFile
+userUseFlags  =   unsafeInterleaveIO $ do
+                  localExists <- doesFileExist localUseFlagsFile
+                  if localExists
+                    then readUseFile localUseFlagsFile
+                    else return []
 
 performUseFlags :: UseForPackage -> Tree -> Tree
 performUseFlags (UseForPackage us d) =

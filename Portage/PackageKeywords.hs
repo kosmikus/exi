@@ -9,6 +9,7 @@
 module Portage.PackageKeywords
   where
 
+import System.Directory (doesFileExist)
 import System.IO.Unsafe
 
 import Portage.Keyword
@@ -44,8 +45,11 @@ readKeywordsFile :: FilePath -> IO [KeywordsForPackage]
 readKeywordsFile f = fmap parseKeywords (strictReadFile f)
 
 userKeywords  ::  IO [KeywordsForPackage]
-userKeywords  =   unsafeInterleaveIO $
-                  readKeywordsFile localKeywordsFile
+userKeywords  =   unsafeInterleaveIO $ do
+                  localExists <- doesFileExist localKeywordsFile
+                  if localExists
+                    then readKeywordsFile localKeywordsFile
+                    else return []
 
 performKeywords :: KeywordsForPackage -> Tree -> Tree
 performKeywords (KeywordsForPackage ks d) =
