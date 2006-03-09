@@ -67,13 +67,7 @@ pretend pc s d =
                            do  buildGraphForUDepString d'
                                gr <- gets graph
                                progress Done
-        putStr $ "Calculating dependencies: "
-        when (mverbose s) $ putStrLn ""
-        (if (mverbose s) then id else withoutBuffering) $ do
-          putStrLn .  
-            (if mverbose s then id else spin 10) . concat .
-            foldr (showProgress (mverbose s) (config pc)) [] $ fst fs
-          putStrLn $ "\n"
+        graphCalcProgressTalk (mverbose s) (config pc) (fst fs)
         let gr = graph $ snd $ fs
         let mergeforest  =  dffWith lab' [0] $ gr
         let mergelist    =  concat $ postorderF $ dffWith lab' [0] $ gr
@@ -170,6 +164,22 @@ showAllLines c n child a =
       Built v : _    ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
       _ : a'         ->  showAllLines c n child a'
       []             ->  ""
+
+-- | Prints the progress of a graph calculation.
+-- In particular, it removes the spinner if we're not running on a terminal.
+graphCalcProgressTalk :: Bool   -- ^ Verbose
+              -> Config
+              -> [Progress]
+              -> IO ()
+graphCalcProgressTalk verbose conf ps = do
+    putStr "Calculating dependencies: "
+    when verbose $ putStr "\n"
+    onTerminal <- hIsTerminalDevice stdout
+    let pr | verbose        = putStrLn . concat
+           | not onTerminal = withoutBuffering . putStrLn . last
+           | otherwise      = withoutBuffering . putStrLn . spin 10 . concat
+    pr . foldr (showProgress verbose conf) [] $ ps
+    putStrLn "\n"  
 
 -- | Temporarily disables buffering on stdout. Should probably depend on
 --   whether the output is a terminal of a file.
