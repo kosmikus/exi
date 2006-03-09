@@ -176,7 +176,7 @@ graphCalcProgressTalk verbose conf ps = do
     when verbose $ putStr "\n"
     onTerminal <- hIsTerminalDevice stdout
     let pr | verbose        = putStrLn . concat
-           | not onTerminal = withoutBuffering . putStrLn . last
+           | not onTerminal = putStrLn . last
            | otherwise      = withoutBuffering . putStrLn . spin 10 . concat
     pr . foldr (showProgress verbose conf) [] $ ps
     putStrLn "\n"  
