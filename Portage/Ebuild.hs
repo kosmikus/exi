@@ -154,7 +154,7 @@ getLinked v = case (location . meta) v of
                 _                                  ->  Nothing
 
 -- The list added to KeywordMasked is supposed not to contain keywords
--- that do now affect the current arch.
+-- that do not affect the current arch.
 data Mask          =  KeywordMasked  [Keyword]              -- ^ reasoning
                    |  HardMasked     FilePath [String]      -- ^ filename and reason
                    |  ProfileMasked  FilePath               -- ^ in which file?

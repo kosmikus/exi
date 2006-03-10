@@ -181,8 +181,7 @@ graphCalcProgressTalk verbose conf ps = do
     pr . foldr (showProgress verbose conf) [] $ ps
     putStrLn "\n"  
 
--- | Temporarily disables buffering on stdout. Should probably depend on
---   whether the output is a terminal of a file.
+-- | Temporarily disables buffering on stdout.
 withoutBuffering :: IO a -> IO a
 withoutBuffering x =
     do
