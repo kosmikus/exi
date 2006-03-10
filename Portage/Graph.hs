@@ -34,13 +34,6 @@ import Portage.GraphGeneration
 findVersions :: Tree -> DepAtom -> [Variant]
 findVersions = flip matchDepAtomTree
 
-
-
--- x :: Graph -> DepString -> Graph
--- y :: Graph -> DepTerm -> Graph
--- z :: Graph -> DepAtom -> Graph
-
-
 -- | Builds a graph for an uninterpreted dependency string,
 --   i.e., a dependency string containing USE flags.
 buildGraphForUDepString :: DepString -> GG ()
