@@ -137,22 +137,21 @@ isAvailable (Provided _)  =  True
 isAvailable _             =  False
 
 -- | The 'Link' is used to link an uninstalled variant to an installed variant
---   of the same slot. We can thus say whether selecting this variant would be
+--   of the same slot and to an installed variant of another slot. 
+--   We can thus say whether selecting this variant would be
 --   an up- or a downgrade, and we can compare use flags.
-data Link          =  NoLink
-                   |  OtherSlot  Variant     -- ^ installed variant of another slot
-                   |  Linked     Variant     -- ^ installed variant
+data Link          =  Linked     (Maybe Variant) (Maybe Variant)   -- ^ installed variant, and installed variant of other slot
   deriving (Show,Eq)
 
 showLink :: Link -> String
-showLink NoLink         =  ""
-showLink (OtherSlot v)  =  " [" ++ showVersion (verPV . pv . meta $ v) ++ "]"
-showLink (Linked v)     =  " [" ++ showVersion (verPV . pv . meta $ v) ++ "]"
+showLink (Linked Nothing Nothing)   =  ""
+showLink (Linked (Just v) _)        =  " [" ++ showVersion (verPV . pv . meta $ v) ++ "]"
+showLink (Linked Nothing (Just v))  =  " [" ++ showVersion (verPV . pv . meta $ v) ++ "]"
 
 getLinked :: Variant -> Maybe Variant
 getLinked v = case (location . meta) v of
-                PortageTree _ (Linked l)  ->  Just l
-                _                         ->  Nothing
+                PortageTree _ (Linked (Just l) _)  ->  Just l
+                _                                  ->  Nothing
 
 -- The list added to KeywordMasked is supposed not to contain keywords
 -- that do now affect the current arch.
@@ -208,18 +207,22 @@ showStatus cfg (Variant m e)  = f
     where  f  =  case location m of
                    Installed                    ->  inColor cfg Yellow True Default "R "
                    Provided _                   ->  inColor cfg Black True Default "P "
-                   PortageTree t NoLink         ->  inColor cfg Green True Default "N "
-                   PortageTree t (OtherSlot v)  ->  inColor cfg Green True Default ("N" ++ s)
-                   PortageTree t (Linked v)     ->
+                   PortageTree t (Linked Nothing Nothing)
+                                                ->  inColor cfg Green True Default "N "
+                   PortageTree t (Linked Nothing (Just o))
+                                                ->  inColor cfg Green True Default ("NS")
+                   PortageTree t (Linked (Just v) o)   ->
                      let  lver   =  verPV . pv . meta $ v
                           ver    =  verPV . pv $ m
+                          s      =  case o of
+                                      Nothing  ->  " "
+                                      Just _   ->  case slot e of
+                                                     ['0']  ->  " "
+                                                     _      ->  "S"
                      in   case () of
                             _ | lver > ver      ->  inColor cfg Blue True Default ("D" ++ s)
                               | lver < ver      ->  inColor cfg Cyan True Default ("U" ++ s)
                               | otherwise       ->  inColor cfg Yellow True Default ("R" ++ s)
-           s  =  case slot e of
-                   ['0'] -> " "
-                   _     -> "S"
 
 filterMaskedVariants :: [Variant] -> [Variant]
 filterMaskedVariants = filter (\ (Variant m _) -> null (masked m))

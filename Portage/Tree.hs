@@ -15,6 +15,7 @@ import System.Directory
 import qualified Data.Map as M
 import Data.Map (Map)
 import Data.List
+import Data.Maybe
 
 import Portage.Package
 import Portage.Ebuild
@@ -138,7 +139,7 @@ createTree cfg pt cats ecs =
                                    let meta             =  EbuildMeta
                                                              {
                                                                pv        =  pv,
-                                                               location  =  PortageTree pt NoLink,
+                                                               location  =  PortageTree pt (Linked Nothing Nothing),
                                                                masked    =  [],
                                                                locuse    =  [],
                                                                lockey    =  [],
@@ -188,12 +189,12 @@ linkInstalledEbuilds t i =
     linkLocation x                  _  =  x
 
     findSlot :: Variant -> [Variant] -> Link
-    findSlot v vs =  case find (\v' -> (slot . ebuild $ v) == (slot . ebuild $ v')) vs of
-                       Nothing   ->  case vs of
-                                       []  ->  NoLink
-                                       _   ->  OtherSlot $ head (sortBy (flip compare) vs)
-                       Just v'   ->  Linked v'
-
+    findSlot v vs =
+      let  (vss,vso)  =  partition  (\v' -> (slot . ebuild) v == (slot . ebuild) v') vs
+           s          =  listToMaybe vss
+           o          =  listToMaybe (sortBy (flip compare) vso)
+      in   Linked s o
+                       
 overlayInstalledEbuilds ::  Ebuilds -> Ebuilds -> Ebuilds
 overlayInstalledEbuilds = M.unionWith (M.unionWith (flip (++)))
 
