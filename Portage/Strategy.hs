@@ -17,7 +17,7 @@ import Portage.Dependency
 import Portage.Package
 import Portage.Ebuild
 
-data Selection  =  Accept   [Variant]
+data Selection  =  Accept   [Variant] Strategy
                 |  Reject   Failure
 
 data Strategy =  Strategy
@@ -52,20 +52,20 @@ data Blocker =  Blocker
                    }
   deriving (Eq,Show)
 
-strategy' :: ([Variant] -> [Variant]) -> (Variant -> Bool) -> Strategy
-strategy' filter stop =  
+strategy' :: ([Variant] -> [Variant]) -> Strategy -> (Variant -> Bool) -> Strategy
+strategy' filter ns stop =  
     Strategy
       {
-         sselect     =  select filter,
+         sselect     =  select filter ns,
          sstop       =  stop,
          sbacktrack  =  standardBacktrack
       }
 
-select :: ([Variant] -> [Variant]) -> DepAtom -> [Variant] -> Selection
-select filter da vs =
+select :: ([Variant] -> [Variant]) -> Strategy -> DepAtom -> [Variant] -> Selection
+select filter ns da vs =
   case filter vs of
     []     ->  Reject (AllMasked da vs)
-    v      ->  Accept v
+    v      ->  Accept v ns
 
 updateOrder :: Variant -> Variant -> Ordering
 updateOrder v1 v2 = compare (verPV (pv (meta v2))) (verPV (pv (meta v1)))
@@ -101,10 +101,14 @@ makeStrategy :: Bool -> Bool -> Bool -> Strategy
 makeStrategy update unmask deep =
     let  upd  =  if update  then updateOrder else defaultOrder
          unm  =  if unmask  then unmaskOrder else id
-         flt  =  if unmask  then filterOtherArchVariants
+         fl'  =  if unmask  then filterOtherArchVariants
                             else filterMaskedVariants
+         flt  =  sortBy (unm upd) . fl'
+         fl0  =  if update  then flt else sortBy (unm defaultOrder) . filterAvailableVariants . fl'
          stp  =  if deep    then deepStop else const True
-    in  strategy' (sortBy (unm upd) . flt) stp
+         ns   =  s { sselect = select flt ns }
+         s    =  strategy' fl0 ns stp
+    in   s
 
 defaultStrategy :: Strategy
 defaultStrategy = makeStrategy False False False

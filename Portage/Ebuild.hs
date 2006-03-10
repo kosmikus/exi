@@ -232,6 +232,9 @@ filterOtherArchVariants = filter (\ (Variant m _) -> all ok (masked m))
          ok NotInProfile        =  False
          ok (Shadowed t)        =  False
 
+filterAvailableVariants :: [Variant] -> [Variant]
+filterAvailableVariants = filter (\ (Variant m _) -> (not . isAvailable . location) m)
+
 putEbuildFlatHash :: FilePath -> Ebuild -> [(Eclass,FilePath,MTime)] -> IO ()
 putEbuildFlatHash f ebuild eclasses  =
     do

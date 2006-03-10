@@ -74,7 +74,8 @@ data DepState =  DepState
                       -- precs     ::  PrecMap,
                       active    ::  ActiveMap,
                       counter   ::  !Int,
-                      callback  ::  Callback
+                      callback  ::  Callback,
+                      strategy  ::  Strategy
                    }
 
 type ActiveMap  =  Map P (Map Slot (Either Variant [Blocker]))

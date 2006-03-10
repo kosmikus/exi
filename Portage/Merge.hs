@@ -48,8 +48,7 @@ data MergeState =  MergeState
 
 pretend :: PortageConfig -> MergeState -> String -> IO Graph
 pretend pc s d = 
-    do  pc <- return $ pc { strategy = makeStrategy (mupdate s) (munmask s) (mdeep s) }
-        let initialState =  DepState
+    do  let initialState =  DepState
                               {
                                  pconfig   =  pc,
                                  dlocuse   =  [],
@@ -58,7 +57,8 @@ pretend pc s d =
                                  labels    =  M.empty,
                                  active    =  M.empty,
                                  counter   =  top + 1,
-                                 callback  =  CbRDepend (NodeMap top top)
+                                 callback  =  CbRDepend (NodeMap top top),
+                                 strategy  =  makeStrategy (mupdate s) (munmask s) (mdeep s)
                               }
         let d' | d == "system"  =  system pc
                | d == "world"   =  world pc ++ system pc

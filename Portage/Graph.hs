@@ -143,6 +143,15 @@ withCallback cb' g =
         modify (\s -> s { callback = cb })
         return r
 
+withStrategy :: Strategy -> GG a -> GG a
+withStrategy st' g =
+    do
+        st <- gets strategy
+        modify (\s -> s { strategy = st' })
+        r <- g
+        modify (\s -> s { strategy = st })
+        return r
+
 buildGraphForDepAtom :: DepAtom -> GG ()
 buildGraphForDepAtom da
     | blocking da =
@@ -150,8 +159,8 @@ buildGraphForDepAtom da
             pc  <-  gets pconfig
             g   <-  gets graph
             cb  <-  gets callback
+            s   <-  gets strategy
             let  nm  =  nodemap cb
-                 s   =  strategy pc
                  t   =  itree pc
                  w   =  head (getVariantsNode g (available nm))
                  b   =  Blocker w da (case cb of CbRDepend _ -> True; _ -> False)
@@ -181,7 +190,7 @@ buildGraphForDepAtom da
                                                   let  continue bs = 
                                                          if E.isAvailable . location . meta $ v
                                                            then  let  reject = do  ds  <-  get
-                                                                                   s   <-  gets (strategy . pconfig)
+                                                                                   s   <-  gets strategy
                                                                                    let  f  =  Block b v
                                                                                         x  |  sbacktrack s f  =  Nothing
                                                                                            |  otherwise       =  Just ds
@@ -196,7 +205,7 @@ buildGraphForDepAtom da
                   )
                   (findVersions t (unblock da))
     | otherwise =  let  reject f =  do  ds <- get
-                                        s  <- gets (strategy . pconfig)
+                                        s  <- gets strategy
                                         let  b  |  sbacktrack s f  =  Nothing
                                                 |  otherwise       =  Just ds
                                         progress (Backtrack b f)
@@ -207,25 +216,23 @@ buildGraphForDepAtom da
     -- failReject: what to do if all ebuilds are masked (complain about blocker instead?)
     chooseVariant failChoice failReject =
         do  pc  <-  gets pconfig
-            -- g   <-  gets graph
-            -- ls  <-  gets labels
+            s   <-  gets strategy
             a   <-  gets active
-            let  s     =  strategy pc
-                 t     =  itree pc
+            let  t     =  itree pc
                  p     =  pFromDepAtom da
                  -- it might be a good idea to speed up the process of finding
                  -- the correct variants by preferring currently active variants
                  vs    =  findVersions t da
             case sselect s da vs of
-              Reject f  ->  failReject f
-              Accept vs ->
+              Reject f      ->  failReject f
+              Accept vs ns  ->
                 do   v@(Variant m e) <- choiceM (map return vs ++ failChoice)
                      -- progress (Message $ "CHOOSING: " ++ E.showVariant' (config pc) v ++ " (out of " ++ show (length vs) ++ ")")
                      let  avail  =  E.isAvailable (location m)  -- installed or provided?
                           stop   =  avail && sstop s v  -- if it's an installed ebuild, we can decide to stop here!
                           luse   =  mergeUse (use (config pc)) (locuse m)
                      -- set new local USE context
-                     withLocUse luse $ do
+                     withLocUse luse $ withStrategy ns $ do
                        progress (LookAtEbuild (pv (meta v)) (origin (meta v)))
                        -- insert nodes for v, and activate
                        cb <- gets callback
@@ -291,7 +298,7 @@ resolveCycle cnodes dt =
               ++ (map  (\ (a',v',v) -> resolveBootstrapCycle cedges a' v' v)
                        (detectBootstrapCycle g cnodes))
               ++ [do  ds  <-  get
-                      s   <-  gets (strategy . pconfig)
+                      s   <-  gets strategy
                       let  f                     =  Cycle (cycleTrace ds cnodes dt)
                            b  |  sbacktrack s f  =  Nothing
                               |  otherwise       =  Just ds
@@ -420,7 +427,7 @@ insVariant v cb =
                                         return nm
                            nm <- case lookupPS ps' a of
                                    Nothing          ->  insVariant' []
-                                   Just (Left v')   ->  do  s   <-  gets (strategy . pconfig)
+                                   Just (Left v')   ->  do  s   <-  gets strategy
                                                             ds  <-  get
                                                             let  f  =  SlotConflict v v'
                                                                  b  |  sbacktrack s f  =  Nothing
@@ -447,7 +454,7 @@ resolveBlockers v bs =
                              (False,True,rd)     ->  registerEdgeAndResolveCycle (built nm) (built bnm)
                                                        ((if rd then RDepend else Depend) True (bdepatom b))
                              _                   ->  do  ds  <-  get
-                                                         let  s  =  strategy . pconfig $ ds
+                                                         let  s  =  strategy ds
                                                               f  =  Block b v
                                                               x  |  sbacktrack s f  =  Nothing
                                                                  |  otherwise       =  Just ds
