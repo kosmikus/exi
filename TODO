@@ -1,0 +1,6 @@
+* resolution of RDEPEND cycles
+* global options (--debug, --verbose, --nocolor)
+* implement --backtrack properly
+* implement --newuse
+* implement use.mask
+
