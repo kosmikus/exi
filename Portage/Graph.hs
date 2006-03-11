@@ -431,10 +431,10 @@ resolveBlockers v bs =
                            bnm        =  ls M.! bvariant b
                       in   case (vBlocked,lvBlocked,bruntime b) of
                              (False,False,_)     ->  return ()
-                             (True,False,False)  ->  registerEdgeAndResolveCycle (built bnm) (built nm)
-                                                       (Depend False (bdepatom b))
-                             (False,True,rd)     ->  registerEdgeAndResolveCycle (built nm) (built bnm)
-                                                       ((if rd then RDepend else Depend) True (bdepatom b))
+                             (True,False,False)  ->  registerEdgeAndResolveCycle (built nm) (built bnm)
+                                                       (Depend True (bdepatom b))
+                             (False,True,rd)     ->  registerEdgeAndResolveCycle (built bnm) (built nm)
+                                                       ((if rd then RDepend else Depend) False (bdepatom b))
                              _                   ->  do  ds  <-  get
                                                          let  s  =  strategy ds
                                                               f  =  Block b v
