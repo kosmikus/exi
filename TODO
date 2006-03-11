@@ -1,4 +1,5 @@
 * resolution of RDEPEND cycles
+* nested callbacks; generate stack traces from callbacks rather than graph
 * global options (--debug, --verbose, --nocolor)
 * implement --backtrack properly
 * implement --newuse
