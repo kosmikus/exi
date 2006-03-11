@@ -63,6 +63,7 @@ pretend pc s d =
         let d' | d == "system"  =  system pc
                | d == "world"   =  world pc ++ system pc
                | otherwise      =  getDepString' (expand pc) d
+        when (mverbose s) $ putStrLn $ "goal: " ++ show d'
         let fs = runGGWith initialState $ 
                            do  buildGraphForUDepString d'
                                gr <- gets graph
