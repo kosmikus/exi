@@ -1,8 +1,41 @@
 * resolution of RDEPEND cycles
+  --
+  I'm no longer sure if something must be done in cycle resolution. The
+  cycle errors we currently get seem to be the result of blockers, usually.
+  Blockers can cause backtracking, and sometimes a cycle is reported as an
+  error although a blocker really is the cause. I need to investigate how
+  this can be fixed in such a way that the code gets cleaner rather than more
+  convoluted.
+
 * nested callbacks; generate stack traces from callbacks rather than graph
-* virtual handling doesn't respect --unmask properly
+  --
+  Sometimes (in blockers and in cycle resolution), we cut the graph structure
+  and hang in a node directly underneath Top. Then, if an error occurs, the
+  stack trace from the graph doesn't contain the full history. Using the
+  callbacks for stack traces fixes this problem, but it doesn't fix the related
+  problem that --tree output is unhelpful.
+
+* || handling doesn't respect --unmask properly
+  --
+  ||'s are simplified before resolution. Entries which don't contain any
+  unmasked packages are removed. This should not be done when --unmask is
+  set (easy, I think).
+
 * global options (--debug, --verbose, --nocolor)
+  --
+  In the Interface code, make room for global options that are common to all
+  commands. Furthermore, --debug and --verbose should be made different options,
+  with the current --verbose becoming --debug, and the new --verbose becoming
+  more like emerge's --verbose.
+
 * implement --backtrack properly
+  --
+  After the first error, we don't print progress reports anymore, but continue
+  to look for a solution. I want to change this. By default, the first error
+  should be printed, and exi should be terminated. With --backtrack as an
+  option, we shouldn't stop on the error, but also continue to output a progress
+  indicator.
+
 * implement --newuse
 * implement use.mask
 * update the world file when merging
