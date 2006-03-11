@@ -279,7 +279,8 @@ hasAvailableHistory g n =
 --   version is already installed (happens if an upgrade strategy always selects
 --   the most recent version). If we have an Upgrade-history, and incoming dependencies
 --   on the newer version from within the cycle, we can redirect these dependencies
---   to the old version.
+--   to the old version. Also, if the package is available and not upgraded, dependencies
+--   on the package can be dropped to resolve cycles.
 -- * PDEPEND cycle. All cycles that contain PDEPEND edges. For an Available-type node
 --   with an outgoing PDEPEND, we redirect incoming DEPENDs and RDEPENDs from within 
 --   the cycle to the Built state.
