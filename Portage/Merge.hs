@@ -71,7 +71,7 @@ pretend pc s d =
         graphCalcProgressTalk (mverbose s) (config pc) (fst fs)
         let gr = graph $ snd $ fs
         let mergeforest  =  dffWith lab' [0] $ gr
-        let mergelist    =  concat $ postorderF $ dffWith lab' [0] $ gr
+        let mergelist    =  reverse . concat . preorderF $ mergeforest
         -- Verbose (debug) output.
         when (mverbose s) $ do
           putStr $ if (mtree s)  then  showForest (showAllLines (config pc)) 0 mergeforest
