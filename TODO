@@ -3,4 +3,5 @@
 * implement --backtrack properly
 * implement --newuse
 * implement use.mask
+* update the world file when merging
 
