@@ -283,7 +283,6 @@ hasAvailableHistory g n =
 -- * PDEPEND cycle. All cycles that contain PDEPEND edges. For an Available-type node
 --   with an outgoing PDEPEND, we redirect incoming DEPENDs and RDEPENDs from within 
 --   the cycle to the Built state.
--- * Self-blockers. We just drop them, but with a headache.
 -- This is currently very fragile w.r.t. ordering of the resolutions.
 resolveCycle :: [Node] -> DepType -> GG ()
 resolveCycle cnodes dt = 
@@ -292,9 +291,6 @@ resolveCycle cnodes dt =
                         ++ [(s0,t0,dt)]
         progress (Message (show cnodes ++ "\n" ++ show cedges))
         choiceM $ map (resolvePDependCycle cedges) (filter isPDependEdge cedges)
-{-
-              ++  map resolveSelfBlockCycle (filter (\x -> isBlockingDependEdge x || isBlockingRDependEdge x) cedges)
--}
               ++ (map  (\ (a',v',v) -> resolveBootstrapCycle cedges a' v' v)
                        (detectBootstrapCycle g cnodes))
               ++ [do  ds  <-  get
@@ -343,21 +339,6 @@ resolveCycle cnodes dt =
                          else  do  progress (Message $ "unsuccessful attempt to resolve bootstrap cycle")
                                    backtrack
 
-{-
-    resolveSelfBlockCycle :: LEdge DepType -> GG Bool
-    resolveSelfBlockCycle (s,t,d) =
-        do
-            g <- gets graph
-            case (getVariantsNode g s,getVariantsNode g t) of
-              (vs,vs')     ->  let  vsi = intersect (map (extractPS . pvs) vs) (map (extractPS . pvs) vs')
-                               in   if not . null $ vsi
-                                      then  do  removeEdge s t
-                                                progress (Message $ "Resolved self-block cycle for " ++ (showPS $ head vsi)
-                                                                                                    ++ " (redirected " ++ show (s,t,d) ++ ")")
-                                                return True
-                                      else  return False
--}
- 
     resolvePDependCycle :: [LEdge DepType] -> LEdge DepType -> GG ()
     resolvePDependCycle cedges (s,t,d) =
         do
