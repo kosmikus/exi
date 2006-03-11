@@ -49,7 +49,7 @@ createInstalledTree  ::  Config           -- ^ portage configuration
 createInstalledTree cfg =
     do
         cats <- unsafeInterleaveIO $ getSubdirectories dbDir
-        ebuilds' <- fmap M.fromList (mapM categoryEntries cats)
+        ebuilds' <- unsafeInterleaveIO $ fmap M.fromList (mapM categoryEntries cats)
         return (Tree M.empty ebuilds')
   where
     categoryEntries :: Category -> IO (Category, Map Package [Variant])
@@ -90,8 +90,8 @@ createTree  ::  Config                     -- ^ portage configuration
             ->  IO Tree
 createTree cfg pt cats ecs =  
     do
-        eclasses' <- getEclasses
-        ebuilds' <- fmap M.fromList (mapM categoryEntries cats)
+        eclasses'  <-  unsafeInterleaveIO $ getEclasses
+        ebuilds'   <-  unsafeInterleaveIO $ fmap M.fromList (mapM categoryEntries cats)
         return (Tree eclasses' ebuilds')
   where
     getEclasses :: IO Eclasses

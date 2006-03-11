@@ -9,6 +9,7 @@
 module Portage.Config
   where
 
+import System.IO.Unsafe
 import System.Environment
 import Data.List
 import Data.Map (Map(..))
@@ -50,7 +51,7 @@ trees c = portDir c : overlays c
 getConfig :: EnvMap -> IO Config
 getConfig c  =  
     do
-        cf <- detectCacheFormat . cacheDir $ pd
+        cf <- unsafeInterleaveIO $ detectCacheFormat . cacheDir $ pd
         return $
           Config  arch
                   (splitKeywords key)     -- unprocessed for now
@@ -85,7 +86,7 @@ incrementals   =  S.fromList ["USE","USE_EXPAND","PORTDIR_OVERLAY","FEATURES","A
 configEnvVars = ["ARCH","ACCEPT_KEYWORDS","USE","PORTDIR","PORTAGE_TMPDIR","PORTDIR_OVERLAY","FEATURES","USE_EXPAND"]
 
 getEnvironmentConfig :: IO EnvMap
-getEnvironmentConfig =  fmap M.fromList getEnvironment
+getEnvironmentConfig =  unsafeInterleaveIO $ fmap M.fromList getEnvironment
 
 -- | Reads a configuration file with the help of the shell. We unset 
 --   all we can explicity, because otherwise clutter from the current
@@ -109,7 +110,7 @@ getGlobalConfig    ::  IO EnvMap
 getProfileConfigs  ::  IO [EnvMap]
 getUserConfig      ::  IO EnvMap
 
-getGlobalConfig    =  getConfigFile globalConfig
-getProfileConfigs  =  readProfileFile profileConfig getConfigFile
-getUserConfig      =  getConfigFile userConfig
+getGlobalConfig    =  unsafeInterleaveIO $ getConfigFile globalConfig
+getProfileConfigs  =  unsafeInterleaveIO $ readProfileFile profileConfig getConfigFile
+getUserConfig      =  unsafeInterleaveIO $ getConfigFile userConfig
 

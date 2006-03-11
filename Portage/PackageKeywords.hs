@@ -44,7 +44,7 @@ readKeywordsFile :: FilePath -> IO [KeywordsForPackage]
 readKeywordsFile f = fmap parseKeywords (strictReadFileIfExists f)
 
 userKeywords  ::  IO [KeywordsForPackage]
-userKeywords  =   readKeywordsFile localKeywordsFile
+userKeywords  =   unsafeInterleaveIO $ readKeywordsFile localKeywordsFile
 
 performKeywords :: KeywordsForPackage -> Tree -> Tree
 performKeywords (KeywordsForPackage ks d) =

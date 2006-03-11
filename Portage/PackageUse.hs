@@ -45,7 +45,7 @@ readUseFile :: FilePath -> IO [UseForPackage]
 readUseFile f = fmap parseUse (strictReadFileIfExists f)
 
 userUseFlags  ::  IO [UseForPackage]
-userUseFlags  =   readUseFile localUseFlagsFile
+userUseFlags  =   unsafeInterleaveIO $ readUseFile localUseFlagsFile
 
 performUseFlags :: UseForPackage -> Tree -> Tree
 performUseFlags (UseForPackage us d) =

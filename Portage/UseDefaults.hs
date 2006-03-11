@@ -9,6 +9,8 @@
 module Portage.UseDefaults
   where
 
+import System.IO.Unsafe
+
 import Portage.Profile
 import Portage.Tree
 import Portage.Dependency
@@ -40,8 +42,9 @@ computeUseDefaults  ::  Tree                        -- ^ the tree of installed p
                     ->  IO [UseFlag]                -- ^ resulting USE flags
 computeUseDefaults t virtuals = 
     do
-        ls <- fmap concat (readProfileFile  useDefaults
-                                            (\x -> fmap getUseDefaults (strictReadFile x)))
+        ls <-  unsafeInterleaveIO $
+               fmap concat (readProfileFile  useDefaults
+                                             (\x -> fmap getUseDefaults (strictReadFile x)))
         return [ u | l@(u,_) <- ls, checkUse l ]
   where
     checkUse :: (UseFlag,[DepAtom]) -> Bool

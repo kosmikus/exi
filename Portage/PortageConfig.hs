@@ -11,6 +11,7 @@ module Portage.PortageConfig
 
 import qualified Data.Map as M
 import System.IO
+import System.IO.Unsafe
 
 import Portage.Config
 import Portage.Tree
@@ -72,7 +73,7 @@ portageConfig =
         cats      <-  categories cfg
         tree      <-  fixIO (\r ->  do
                                         pt  <-  createTree cfg (portDir cfg) cats (eclasses r)
-                                        po  <-  mapM (\t -> createTree cfg t cats (eclasses r)) (overlays cfg)
+                                        po  <-  unsafeInterleaveIO $ mapM (\t -> createTree cfg t cats (eclasses r)) (overlays cfg)
                                         return $ foldl overlayTree pt po)
 
         -- hardmasking (not on the installed tree!)
