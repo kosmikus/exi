@@ -71,14 +71,15 @@ pretend pc s d =
         graphCalcProgressTalk (mverbose s) (config pc) (fst fs)
         let gr = graph $ snd $ fs
         let mergeforest  =  dffWith lab' [0] $ gr
-        let mergelist    =  reverse . concat . preorderF $ mergeforest
+        -- note that using postorder in the following is essential for correctness!
+        let mergelist    =  concat . postorderF $ mergeforest
         -- Verbose (debug) output.
         when (mverbose s) $ do
           putStr $ if (mtree s)  then  showForest (showAllLines (config pc)) 0 mergeforest
                                  else  unlines $ map show $ mergelist
           putStrLn $ "\nShort version: "
         -- Normal output. (Only if --pretend??)
-        putStr $ if (mtree s)  then  showForest (showMergeLines (config pc)) 0 mergeforest
+        putStr $ if (mtree s)  then  showForest (showMergeLines (config pc)) (-1) mergeforest
                                else  concatMap (showMergeLine (config pc) 0) mergelist
         let cycles = cyclesFrom gr [top]
         -- If cycles remain, print them.
@@ -274,4 +275,4 @@ showOriginShort IsProvided       =  "p"
 
 showForest :: (Int -> Bool -> a -> String) -> Int -> Forest a -> String
 showForest pe d []               =  ""
-showForest pe d (Node n f : ts)  =  pe d (not (null f)) n ++ showForest pe (d+1) f ++ showForest pe d ts
+showForest pe d (Node n f : ts)  =  showForest pe (d+1) f ++ pe d (not (null f)) n ++ showForest pe d ts
