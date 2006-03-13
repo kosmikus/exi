@@ -151,6 +151,9 @@ choice cs = GG (\s -> [Right (c,s) | c <- cs])
 choiceM :: [GG a] -> GG a
 choiceM cs = GG (\s -> [r | GG f <- cs, r <- f s])
 
+firstM :: Monad m => [m Bool] -> m () -> m ()
+firstM  =  flip (foldr (\x y -> x >>= \r -> if r then return () else y)) 
+
 backtrack :: GG a
 backtrack = GG (\_ -> [])
 

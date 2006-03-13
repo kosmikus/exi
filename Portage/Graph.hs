@@ -291,16 +291,16 @@ resolveCycle cnodes dt =
         let  cedges  =  zipWith findEdge (map (out g) cnodes) (tail cnodes)
                         ++ [(s0,t0,dt)]
         progress (Message (show cnodes ++ "\n" ++ show cedges))
-        choiceM $ map (resolvePDependCycle cedges) (filter isPDependEdge cedges)
-              ++ (map  (\ (a',v',v) -> resolveBootstrapCycle cedges a' v' v)
-                       (detectBootstrapCycle g cnodes))
-              ++ [do  ds  <-  get
-                      s   <-  gets strategy
-                      let  f                     =  Cycle (cycleTrace ds cnodes dt)
-                           b  |  sbacktrack s f  =  Nothing
-                              |  otherwise       =  Just ds
-                      progress (Backtrack b f)
-                      backtrack]
+        firstM  (  map (resolvePDependCycle cedges) (filter isPDependEdge cedges) ++
+                   (map  (\ (a',v',v) -> resolveBootstrapCycle cedges a' v' v)
+                         (detectBootstrapCycle g cnodes)))
+                (do  ds  <-  get
+                     s   <-  gets strategy
+                     let  f                     =  Cycle (cycleTrace ds cnodes dt)
+                          b  |  sbacktrack s f  =  Nothing
+                             |  otherwise       =  Just ds
+                     progress (Backtrack b f)
+                     backtrack)
   where
     s0  =  last cnodes
     t0  =  head cnodes
@@ -310,7 +310,7 @@ resolveCycle cnodes dt =
        concatMap (maybeToList . hasUpgradeHistory g) ns
        ++ concatMap (maybeToList . hasAvailableHistory g) ns
 
-    resolveBootstrapCycle :: [LEdge DepType] -> Node -> Variant -> Variant -> GG ()
+    resolveBootstrapCycle :: [LEdge DepType] -> Node -> Variant -> Variant -> GG Bool
     resolveBootstrapCycle cedges a' v' v =
         do
             progress (Message "trying to resolve bootstrap cycle")
@@ -321,7 +321,8 @@ resolveCycle cnodes dt =
                                                        (isDependEdge e || isRDependEdge e || isPDependEdge e))
                                      cedges
             if null incoming
-              then progress (Message "none incoming") >> backtrack
+              then do  progress (Message "none incoming")
+                       return False
               else do  let (s',t',d'):_ = incoming
                        removeEdge s' t'
                        -- register original edge, if not selected for removal
@@ -337,10 +338,11 @@ resolveCycle cnodes dt =
                        if isNothing c0 && isNothing c1
                          then  do  progress (Message $ "Resolved bootstrap cycle at "  ++ (showPV . pv . meta $ v')
                                                                                        ++ " (dropped " ++ show incoming ++ ")")
+                                   return True
                          else  do  progress (Message $ "unsuccessful attempt to resolve bootstrap cycle")
-                                   backtrack
+                                   return False
 
-    resolvePDependCycle :: [LEdge DepType] -> LEdge DepType -> GG ()
+    resolvePDependCycle :: [LEdge DepType] -> LEdge DepType -> GG Bool
     resolvePDependCycle cedges (s,t,d) =
         do
             progress (Message "trying to resolve PDEPEND cycle")
@@ -350,7 +352,8 @@ resolveCycle cnodes dt =
                                                     (isDependEdge e || isRDependEdge e))
                                    cedges
             if null incoming
-              then progress (Message "none incoming") >> backtrack
+              then do  progress (Message "none incoming")
+                       return False
               else do  let (s',t',d'):_ = incoming
                        let pv'  =  pv . meta $ v
                        ls  <-  gets labels
@@ -361,8 +364,9 @@ resolveCycle cnodes dt =
                        cs <- registerEdge s' (built nm) d'
                        if all isNothing [c0,cs]
                          then  do  progress (Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ show incoming ++ ")" )
+                                   return True
                          else  do  progress (Message $ "unsuccessful attempt to resolve PDEPEND cycle")
-                                   backtrack
+                                   return False
 
 sumR :: [GG Bool] -> GG Bool
 sumR = foldr (liftM2 (||)) (return False)
