@@ -109,10 +109,7 @@ pretend pc s d =
         -- Perform merging.
         when (null cycles && not (mpretend s)) $
              do
-                 exit <- foldM  (\exit a ->  case exit of
-                                               ExitSuccess  ->  processMergeLine (config pc) a
-                                               _            ->  return exit)
-                                ExitSuccess mergelist
+                 exit <- whileSuccess (map (processMergeLine (config pc)) mergelist)
                  case exit of
                    ExitSuccess  ->  return ()
                    _            ->  putStrLn "Quitting due to errors."
@@ -128,16 +125,24 @@ runEbuild cfg v =
             let addEnv  =  [("USE", unwords uses)]
             let cmd     =  ebuildBin ++ " " ++ quote file ++ " merge clean"
             env <- getEnvironment
-            putStrLn (inColor cfg Green True Default (">>> " ++ cmd))
-            exit <- systemInEnv cmd (addEnv ++ [ e | e@(v,_) <- env, v /= "USE" ])
-            case exit of
-              ExitSuccess  ->  -- cleaning should look at AUTOCLEAN, and possibly call emerge unmerge directly
-                               systemInEnv (emergeBin ++ " --clean") []
-              _            ->  return exit
+            putStrLn (inColor cfg Green True Default (">>> emerging " ++ showPV (pv m)))
+            whileSuccess $
+              [  systemInEnv cmd (addEnv ++ [ e | e@(v,_) <- env, v /= "USE" ]) |
+                 cmd <- [  ebuildBin ++ " " ++ quote file ++ " " ++ op |
+                           -- the final clean should only happen if noclean is unset
+                           op <- ["clean", "merge", "clean"] ] ] ++
+              -- cleaning should look at AUTOCLEAN, and possibly call emerge unmerge directly
+              [systemInEnv (emergeBin ++ " --clean") []]
       _ -> return ExitSuccess  -- or should it be an error?
   where
     m  =  meta v
     e  =  ebuild v
+
+whileSuccess :: [IO ExitCode] -> IO ExitCode
+whileSuccess = foldM  (\exit r ->  case exit of
+                                     ExitSuccess  ->  r
+                                     _            ->  return exit)
+                      ExitSuccess
 
 showMergeLines :: Config -> Int -> Bool -> [Action] -> String
 showMergeLines c n child a =  
