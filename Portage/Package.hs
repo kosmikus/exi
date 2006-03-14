@@ -64,13 +64,14 @@ showPVS    ::  PVS -> String
 getPV      ::  String -> PV
 getP       ::  String -> P
 
-showPV        (PV cat pkg ver)  =  cat ++ "/" ++ pkg ++ "-" ++ showVersion ver
-showEbuildPV  (PV cat pkg ver)  =  cat ./. pkg ./. pkg ++ "-" ++ showVersion ver ++
-                                   ".ebuild"
-showP         (P cat pkg)       =  cat ++ "/" ++ pkg
-showPS        (PS cat pkg slot) =
+showPV'        (PV cat pkg ver)     =  pkg ++ "-" ++ showVersion ver
+showPV         pv@(PV cat pkg ver)  =  cat ./. showPV' pv
+showEbuildPV'  pv                   =  showPV' pv ++ ".ebuild"
+showEbuildPV   pv@(PV cat pkg ver)  =  cat ./. pkg ./. showEbuildPV' pv
+showP          (P cat pkg)          =  cat ++ "/" ++ pkg
+showPS         (PS cat pkg slot)    =
     cat ++ "/" ++ pkg ++ showSlot slot
-showPVS       (PVS cat pkg ver slot) =
+showPVS        (PVS cat pkg ver slot) =
     cat ++ "/" ++ pkg ++ "-" ++ showVersion ver ++ showSlot slot
 
 showSlot   ::  Slot -> String

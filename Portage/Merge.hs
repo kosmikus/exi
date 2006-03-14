@@ -123,20 +123,33 @@ runEbuild cfg v =
             let file    =  pt ./. (showEbuildPV . pv) m
             let uses    =  diffUse (mergeUse (use cfg) (locuse m)) (iuse e)
             let addEnv  =  [("USE", unwords uses)]
-            let cmd     =  ebuildBin ++ " " ++ quote file ++ " merge clean"
+            let ecmd   f op  =  ebuildBin ++ " " ++ quote f ++ " " ++ op
+            let ecmd'  f op  =  ecmd f op ++
+                                -- ignore error 127 due to a bug in ebuild
+                                "; exittemp=$?; if [[ $exittemp -eq 127 ]]; then echo \"The above error is safe to ignore.\"; (exit 0); else (exit $exittemp); fi" 
             env <- getEnvironment
             putStrLn (inColor cfg Green True Default (">>> emerging " ++ showPV (pv m)))
             whileSuccess $
               [  systemInEnv cmd (addEnv ++ [ e | e@(v,_) <- env, v /= "USE" ]) |
-                 cmd <- [  ebuildBin ++ " " ++ quote file ++ " " ++ op |
+                 cmd <- [  ecmd file op |
                            -- the final clean should only happen if noclean is unset
                            op <- ["clean", "merge", "clean"] ] ] ++
-              -- cleaning should look at AUTOCLEAN, and possibly call emerge unmerge directly
-              [systemInEnv (emergeBin ++ " --clean") []]
+              -- cleaning should look at AUTOCLEAN
+              (  case l of
+                   Just v'  ->  let  m'     =  meta v'
+                                     file'  =  dbDir ./. showPV (pv m') ./.
+                                               showEbuildPV' (pv m')
+                                in   if    (pv m') /= (pv m) -- really important!
+                                     then  [  do  putStrLn (inColor cfg Green True Default ("<<< unmerging " ++ showPV (pv m')))
+                                                  systemInEnv (ecmd' file' "unmerge") [],
+                                              systemInEnv envUpdateBin []]
+                                     else  []
+                   Nothing  ->  [])
       _ -> return ExitSuccess  -- or should it be an error?
   where
     m  =  meta v
     e  =  ebuild v
+    l  =  getLinked v
 
 whileSuccess :: [IO ExitCode] -> IO ExitCode
 whileSuccess = foldM  (\exit r ->  case exit of
