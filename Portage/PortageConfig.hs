@@ -26,6 +26,7 @@ import Portage.PackageProvided
 import Portage.Dependency
 import Portage.Virtual
 import Portage.World
+import Portage.Utilities
 
 data PortageConfig =  PortageConfig
                         {
@@ -61,7 +62,10 @@ portageConfig =
         virtuals  <-  return $ computeVirtuals pvirt inst
 
         inst      <-  return $ foldl (flip addProvided) inst uprov
-        ud        <-  computeUseDefaults inst virtuals
+        -- we don't fully support USE_ORDER, but only check if auto is in USE_ORDER
+        ud        <-  if "auto" `contains` useOrder cfg
+                        then  computeUseDefaults inst virtuals
+                        else  return []
         -- normalize keywords and USE flags; environment config overrides use.defaults
         cfg       <-  return $ cfg  {  
                                        acceptedKeywords = mergeKeywords [] (acceptedKeywords cfg),

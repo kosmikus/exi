@@ -30,6 +30,7 @@ data Config = Config  {
                          arch              ::  Keyword,
                          acceptedKeywords  ::  [Keyword],
                          use               ::  [UseFlag],
+                         useOrder          ::  String,
                          portDir           ::  FilePath,
                          tmpDir            ::  FilePath,
   --                     distDir           ::  FilePath,
@@ -56,6 +57,7 @@ getConfig c  =
           Config  arch
                   (splitKeywords key)     -- unprocessed for now
                   (splitUse use)          -- unprocessed for now
+                  useorder
                   pd
                   tmpd
   --              distd
@@ -68,7 +70,7 @@ getConfig c  =
                   False  -- debug
                   True   -- color
   where  vars        =  map (\k -> M.findWithDefault "" k c) configEnvVars
-         (arch:key:use:pd:tmpd:{- distd:pkgd:logd: -}overlays:features:exp:_) = vars
+         (arch:key:use:useorder:pd:tmpd:{- distd:pkgd:logd: -}overlays:features:exp:_) = vars
          expand      =  words exp
          expandvars  =  map (\k -> M.findWithDefault "" k c) expand
 
@@ -83,7 +85,7 @@ mergeEnvMap m1 m2 =  M.unionWithKey
 
 incrementals   =  S.fromList ["USE","USE_EXPAND","PORTDIR_OVERLAY","FEATURES","ACCEPT_KEYWORDS"]
 
-configEnvVars = ["ARCH","ACCEPT_KEYWORDS","USE","PORTDIR","PORTAGE_TMPDIR","PORTDIR_OVERLAY","FEATURES","USE_EXPAND"]
+configEnvVars = ["ARCH","ACCEPT_KEYWORDS","USE","USE_ORDER","PORTDIR","PORTAGE_TMPDIR","PORTDIR_OVERLAY","FEATURES","USE_EXPAND"]
 
 getEnvironmentConfig :: IO EnvMap
 getEnvironmentConfig =  unsafeInterleaveIO $ fmap M.fromList getEnvironment

@@ -65,6 +65,10 @@ stringSeq (x:xs)  c  =  stringSeq xs c
 (./.) :: FilePath -> FilePath -> FilePath
 path ./. file  =  path ++ "/" ++ file
 
+-- | Checks if one list is contained in another.
+contains :: Eq a => [a] -> [a] -> Bool
+contains x y = any (x `isPrefixOf`) (tails y)
+
 -- | Strip empty lines and comments from a string.
 stripComments :: String -> String
 stripComments = unlines . filter (not . null) . map (fst . break (=='#')) . lines
