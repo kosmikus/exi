@@ -54,6 +54,8 @@ systemInEnv  ::  String               -- ^ the command
 systemInEnv ""   _    = ioException (IOError Nothing InvalidArgument "systemInEnv" "null command" Nothing)
 systemInEnv cmd  env  =
     do
+        hFlush stdout
+        hFlush stderr
         let env' = if null env then Nothing else Just env
         old_int      <-  installHandler sigINT   Ignore Nothing
         old_quit     <-  installHandler sigQUIT  Ignore Nothing

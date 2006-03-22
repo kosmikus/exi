@@ -25,6 +25,7 @@ import Prelude hiding (catch)
 import Portage.Config
 import Portage.Dependency
 import Portage.Use
+import Portage.NewUse
 import Portage.Keyword
 import Portage.Version
 import Portage.Package
@@ -190,7 +191,15 @@ instance Ord Variant where
 showVariant :: Config -> Variant -> String
 showVariant cfg v@(Variant m e)  =  showVariant' cfg v
                                     ++ " " ++ unwords (map showMasked (masked m))
-                                    ++ " " ++ unwords (diffUse (mergeUse (use cfg) (locuse m)) (iuse e))
+                                    ++ useflags
+  where useflags  =  let  c = showUseFlags cfg v (getLinked v)
+                     in   if null c then "" else " USE=\"" ++ c ++ "\""
+
+showUseFlags :: Config -> Variant -> Maybe Variant -> String
+showUseFlags cfg v@(Variant m e) Nothing                    =  showUseFlags cfg v (Just v)
+showUseFlags cfg v@(Variant m e) (Just v'@(Variant m' e'))  =  let  nd  =  diffUse (mergeUse (use cfg) (locuse m)) (iuse e)
+                                                                    od  =  diffUse (mergeUse (use cfg) (locuse m')) (iuse e')
+                                                               in   (unwords . map (showExtUseFlag cfg)) (diffExtUse nd od)
 
 -- | Like "showVariant", but additionally print the reason for hard-masking.
 --   Takes up more than one line, therefore not suitable in a context where
