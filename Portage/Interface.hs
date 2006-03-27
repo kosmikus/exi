@@ -49,7 +49,8 @@ mergeCmd =  Command
                                       munmask = False,
                                       mtree = False,
                                       mbacktrack = False,
-                                      mverbose = False },
+                                      mverbose = False,
+                                      mask = False},
                 options = mergeOpts,
                 handler = doMerge
               }
@@ -61,7 +62,8 @@ mergeOpts = [Option "u" ["update"] (NoArg (\s -> s { mupdate = True })) "update 
              Option "M" ["unmask"] (NoArg (\s -> s { munmask = True, mpretend = True })) "unmask if necessary",
              Option "t" ["tree"] (NoArg (\s -> s { mtree = True })) "display packages to merge in tree form",
              Option "B" ["backtrack"] (NoArg (\s -> s { mbacktrack = True })) "backtrack to find more solutions",
-             Option "v" ["verbose"] (NoArg (\s -> s { mverbose = True })) "be verbose"]
+             Option "v" ["verbose"] (NoArg (\s -> s { mverbose = True })) "be verbose",
+             Option "a" ["ask"] (NoArg (\s -> s { mask = True})) "ask before merging"]
 
 -- | The 'nullCmd' is only for debugging purposes. It does nothing (except initialization)
 --   and therefore should be really fast.

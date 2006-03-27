@@ -14,6 +14,7 @@ import Data.Graph.Inductive hiding (Graph())
 import Data.Tree
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
+import Data.Char (toLower)
 import Data.Maybe (fromJust, maybeToList)
 import Data.IORef
 import Data.List (nub)
@@ -43,7 +44,8 @@ data MergeState =  MergeState
                        munmask     ::  Bool,
                        mtree       ::  Bool,
                        mbacktrack  ::  Bool,
-                       mverbose    ::  Bool
+                       mverbose    ::  Bool,
+                       mask        ::  Bool
                      }
 
 pretend :: PortageConfig -> MergeState -> String -> IO Graph
@@ -106,8 +108,22 @@ pretend pc s d =
                     do
                         putStrLn $ "\nChanges to " ++ (localConfigDir ./. packageUnMask) ++ ":"
                         putStr . unlines . map (\v -> "=" ++ showPV (pv . meta $ v)) $ hmask
+        let wantToMerge = null cycles && not (mpretend s)
+        -- ask the user if he/she appreves the merging
+        userApproves <-
+            -- ask only if --ask and we acctually could merge
+            if mask s && wantToMerge
+              then do ans <- askUserYesNo (config pc) "Do you want me to merge these packages? "
+                      when (not ans) $
+                          putStrLn "Quitting."
+                      return ans
+              else return True  -- one of these holds
+                                -- (1) we can't merge anyway, doesn't matter
+                                --     what the user says
+                                -- (2) --ask is not enabled, user approves
+                                --     by default
         -- Perform merging.
-        when (null cycles && not (mpretend s)) $
+        when (wantToMerge && userApproves) $
              do
                  exit <- whileSuccess (map (processMergeLine (config pc)) mergelist)
                  case exit of
@@ -212,7 +228,49 @@ withoutBuffering x =
         return r
 
 doMerge :: IORef PortageConfig -> MergeState -> [String] -> IO ()
-doMerge r s ds = readIORef r >>= \pc -> pretend pc s (unwords ds) >> return ()
+doMerge rpc ms ds =
+    readIORef rpc >>= \pc -> do
+    msM <- sanityCheck (config pc) ms
+    case msM of
+      (Just ms') -> pretend pc ms' (unwords ds) >> return ()
+      Nothing    -> return ()  -- aborted in sanityCheck
+
+sanityCheck :: Config -> MergeState -> IO (Maybe MergeState)
+sanityCheck config ms = do
+    onTerminal <- hIsTerminalDevice stdin
+    let check ms
+            | mpretend ms && mask ms = do
+                putStrLn ">>> --pretend disables --ask... removing --ask from options."
+                check (ms { mask = False })
+            | not onTerminal && mask ms = do
+                putStrLn $ inColor config Red True Default
+                    ">>> You are not on a terminal, yet you use --ask. Aborting."
+                return Nothing
+            | otherwise = return (Just ms)
+    check ms
+
+askUserYesNo :: Config -> String -> IO Bool
+askUserYesNo config prompt =
+    withoutBuffering $ do
+    putStr $ inColor config Default True Default prompt
+    let stubbornAsk = do
+            putStr yesNo
+            ans <- getLine
+            case (map toLower ans) of
+              []    -> return True
+              "y"   -> return True
+              "yes" -> return True
+              "n"   -> return False
+              "no"  -> return False
+              _     -> do putStr $ "Sorry, response '" ++ ans ++ "' not understood. "
+                          stubbornAsk
+    stubbornAsk
+    where
+    yesNo = "[" ++
+            inColor config Green True Default "Yes" ++
+            "/" ++
+            inColor config Red   True Default "no"  ++
+            "]"
 
 showNode :: Bool -> DGraph -> Int -> String
 showNode v gr n = (show . fromJust . lab gr $ n) ++ number
