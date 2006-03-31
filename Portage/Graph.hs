@@ -196,7 +196,8 @@ buildGraphForDepAtom da
                                                                                            |  otherwise       =  Just ds
                                                                                    progress (Backtrack x f)
                                                                                    backtrack
-                                                                 in   withCallback (CbBlock nm b) $ chooseVariant [reject] (const reject) -- 3.
+                                                                 in   choiceM [withCallback (CbBlock nm b) $ chooseVariant [reject] (const reject) -- 3.
+                                                                              ,reject] -- never backtrack beyond this point
                                                            else  modify (\s -> s { active = insertPS ps' (Right (b:bs)) a }) -- 4.
                                                   case lookupPS ps' a of
                                                     Just (Left _)    ->  return () -- 2.

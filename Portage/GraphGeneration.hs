@@ -106,22 +106,43 @@ data Progress =  LookAtEbuild  PV EbuildOrigin
               |  Done
 
 -- | Graph generation monad.
-newtype GG a = GG { runGG :: DepState -> [Either Progress (a,DepState)] }
+newtype GG a = GG { runGG :: DepState -> (GGLabel,[GGStep a]) }
+
+data GGStep a  =  Step      Progress
+               |  Return    (a,DepState)
+               |  Continue  (GGLabel -> Bool) (DepState -> DepState)
+
+type GGLabel = Maybe PS
 
 returnGG :: a -> GG a
-returnGG x = GG (\s -> [Right (x,s)])
+returnGG x = GG (\s -> (Nothing,[Return (x,s)]))
 
 bindGG :: GG a -> (a -> GG b) -> GG b
 bindGG (GG a) f = 
-  GG (\s -> concatMap  (\x -> case x of
-                                Right (t,s')  ->  runGG (f t) s'
-                                Left p        ->  [Left p])
-                       (a s))
+  GG (\s ->  case a s of
+               (l,xs)  ->  (l,  foldr (\x r ->
+                                  case x of
+                                    Step p         ->  Step p : r
+                                    Return (t,s')  ->  snd (runGG (f t) s') ++ r
+                                    Continue p st
+                                      | p l        ->  mapGGStep st r
+                                      | otherwise  ->  [Continue p st])
+                                  [] xs))
+
+mapGGStep :: (DepState -> DepState) -> [GGStep a] -> [GGStep a]
+mapGGStep st = map (\x ->  case x of
+                             Return (t,s)  ->  Return (t,st s)
+                             _             ->  x)
 
 fmapGG :: (a -> b) -> GG a -> GG b
 fmapGG f (GG a) =
-    GG (\s -> map  (\x -> case x of { Right (y,s') -> Right (f y,s'); Left x -> Left x })
-                   (a s))
+  GG (\s ->  case a s of
+               (l,xs)  ->  (l,  map (\x ->
+                                  case x of
+                                    Step p          ->  Step p
+                                    Return (y,s')   ->  Return (f y,s')
+                                    Continue p st   ->  Continue p st)
+                                  xs))
 
 instance Monad GG where
   return = returnGG
@@ -131,31 +152,40 @@ instance Functor GG where
   fmap = fmapGG
 
 get :: GG DepState
-get = GG (\s -> [Right (s,s)])
+get = GG (\s -> (Nothing,[Return (s,s)]))
 
 put :: DepState -> GG ()
-put s = GG (\_ -> [Right ((),s)])
+put s = GG (\_ -> (Nothing,[Return ((),s)]))
 
 gets :: (DepState -> a) -> GG a
-gets f = GG (\s -> [Right (f s,s)])
+gets f = GG (\s -> (Nothing,[Return (f s,s)]))
 
 modify :: (DepState -> DepState) -> GG ()
-modify f = GG (\s -> [Right ((),f s)])
+modify f = GG (\s -> (Nothing,[Return ((),f s)]))
 
 progress :: Progress -> GG ()
-progress p = GG (\s -> [Left p,Right ((),s)])
+progress p = GG (\s -> (Nothing,[Step p,Return ((),s)]))
+
+lchoice :: GGLabel -> [a] -> GG a
+lchoice l cs = GG (\s -> (l,[Return (c,s) | c <- cs]))
+
+lchoiceM :: GGLabel -> [GG a] -> GG a
+lchoiceM l cs = GG (\s -> (l,[r | GG f <- cs, r <- snd (f s)]))
 
 choice :: [a] -> GG a
-choice cs = GG (\s -> [Right (c,s) | c <- cs])
+choice = lchoice Nothing
 
 choiceM :: [GG a] -> GG a
-choiceM cs = GG (\s -> [r | GG f <- cs, r <- f s])
+choiceM = lchoiceM Nothing
 
 firstM :: Monad m => [m Bool] -> m () -> m ()
 firstM  =  flip (foldr (\x y -> x >>= \r -> if r then return () else y)) 
 
 backtrack :: GG a
-backtrack = GG (\_ -> [])
+backtrack = GG (\_ -> (Nothing,[]))
+
+continue :: (GGLabel -> Bool) -> (DepState -> DepState) -> GG a
+continue p st = GG (\_ -> (Nothing,[Continue p st]))
 
 lookupPS :: PS -> Map P (Map Slot a) -> Maybe a
 lookupPS (PS cat pkg slot) m = M.lookup (P cat pkg) m >>= M.lookup slot
@@ -240,10 +270,11 @@ ancestors :: Node -> Graph -> [Node]
 ancestors v g = preorderF (rdff [v] g)
 
 runGGWith :: DepState -> GG a -> ([Progress],DepState)
-runGGWith s cmp = proc (runGG cmp s)
-  where  proc []                =  ([],error "no solution found")
-         proc (Right ~(_,s):_)  =  ([],s)
-         proc (Left p:xs)       =  (\ ~(x,y) -> (p:x,y)) (proc xs)
+runGGWith s cmp = proc (snd (runGG cmp s))
+  where  proc []                 =  ([],error "no solution found")
+         proc (Return ~(_,s):_)  =  ([],s)
+         proc (Step p:xs)        =  (\ ~(x,y) -> (p:x,y)) (proc xs)
+         proc (Continue _ _:_)   =  ([],error "no solution found")
 
 
 {-
