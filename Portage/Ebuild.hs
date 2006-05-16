@@ -437,7 +437,7 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
         -- eclasses could exist now, therefore we check again
         eclassesExist  <-  unsafeInterleaveIO $ case cacheFormat of
                                                   FlatList  ->  doesFileExist eclassesFile
-                                                  FlatHash  ->  return True
+                                                  FlatHash  ->  return cacheExists
         ~(eclasses,cacheContents) <- unsafeInterleaveIO $ getEbuildAndEclasses cacheFormat eclassesFile cacheFile origCache
         let eclassesOK     =  all (\(e,l,m) ->  E.location (ecs M.! e) == l
                                                 && mtime (ecs M.! e) == m) eclasses
@@ -460,9 +460,9 @@ getEbuildFromDisk cfg pt pv@(PV cat pkg ver) ecs =
         (orc,cacheContents) <- if (not (cacheExists && cacheNewer && eclassesExist && eclassesOK))
                                then  do  when (debug cfg) $ do
                                            putStr $ " cacheExists:   " ++ show cacheExists
-                                           putStr $ " cacheNewer:    " ++ show cacheNewer
+                                           when cacheExists $ putStr $ " cacheNewer:    " ++ show cacheNewer
                                            putStr $ " eclassesExist: " ++ show eclassesExist
-                                           putStr $ " eclassesOK:    " ++ show eclassesOK
+                                           when eclassesExist $ putStr $ " eclassesOK:    " ++ show eclassesOK
                                            putStr "\n"
                                            when (eclassesExist && not eclassesOK) $ do
                                              putStrLn "Eclasses reference:"
@@ -535,6 +535,7 @@ makeCacheEntry cfg pt pv@(PV cat pkg ver) =
                  ("FILESDIR",          filesDir),
                  ("PF",                showPV pv),
                  ("ECLASSDIR",         eclassDir (portDir cfg)),
+                 ("PORTDIR_OVERLAY",   unwords (overlays cfg)),
                  -- TODO: do we need SANDBOX_LOG?
                  ("PROFILE_PATHS",     unlines profileDirs),
                  ("P",                 (pkg ++ "-" ++ ver)),
