@@ -73,12 +73,14 @@ data DepState =  DepState
                       labels    ::  Map Variant NodeMap,
                       -- precs     ::  PrecMap,
                       active    ::  ActiveMap,
+                      saved     ::  SavedMap,
                       counter   ::  !Int,
                       callback  ::  Callback,
                       strategy  ::  Strategy
                    }
 
-type ActiveMap  =  Map P (Map Slot (Either Variant [Blocker]))
+type ActiveMap  =  Map P (Map Slot Variant)
+type SavedMap   =  Map P [Blocker]
 type PrecMap    =  IntMap IntSet
 
 data Callback =  CbDepend   { nodemap :: NodeMap }

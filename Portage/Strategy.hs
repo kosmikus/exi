@@ -46,9 +46,10 @@ data Failure  =  AllMasked DepAtom [Variant]
 
 data Blocker =  Blocker
                    {
-                      bvariant  ::  Variant,   -- who's blocking?
-                      bdepatom  ::  DepAtom,   -- what's blocked?
-                      bruntime  ::  Bool       -- RDEPEND?
+                      bvariant  ::  Variant,         -- who's blocking?
+                      bdepatom  ::  DepAtom,         -- what's blocked?
+                      bruntime  ::  Maybe Bool       -- Nothing: it's a saved dependency rather than a blocker
+                                                     -- Just: it's a blocker, boolean indicated RDEPEND?
                    }
   deriving (Eq,Show)
 

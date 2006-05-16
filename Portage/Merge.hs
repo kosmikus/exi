@@ -58,6 +58,7 @@ pretend pc s d =
                                  -- precs     =  IM.empty,
                                  labels    =  M.empty,
                                  active    =  M.empty,
+                                 saved     =  M.empty,
                                  counter   =  top + 1,
                                  callback  =  CbRDepend (NodeMap top top),
                                  strategy  =  makeStrategy (mupdate s) (munmask s) (mdeep s)

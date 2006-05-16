@@ -163,7 +163,7 @@ buildGraphForDepAtom da
             let  nm  =  nodemap cb
                  t   =  itree pc
                  w   =  head (getVariantsNode g (available nm))
-                 b   =  Blocker w da (case cb of CbRDepend _ -> True; _ -> False)
+                 b   =  Blocker w da (case cb of CbRDepend _ -> Just True; _ -> Just False)
                  p   =  extractP (pv . meta $ w)
                  ps  =  extractPS (pvs w)
             ls  <-  gets labels
@@ -174,9 +174,10 @@ buildGraphForDepAtom da
             --    already, we can pass, because the blocker will be resolved
             --    for v'
             -- 3. if v is available, we have to choose another variant v'
-            -- 4. if v is unavailable, we record b as a blocker for the slot
-            --    of v
+            -- 4. if v is unavailable, we rely on the recorded blocker
             progress (Message $ "blocker " ++ show da)
+            -- remember the blocker
+            modify (\s -> s { saved = M.insertWith (++) p [b] (saved s) })
             mapM_ (\v -> do
                              let pv' = pv . meta $ v
                              let p' = extractP pv'
@@ -186,9 +187,7 @@ buildGraphForDepAtom da
                              when (p /= p') $ do -- 0.  WAS: ps /= ps'
                                case M.lookup v ls of
                                  Just _   ->  resolveBlockers v [b] -- 1.
-                                 Nothing  ->  do  a <- gets active
-                                                  let  continue bs = 
-                                                         if E.isAvailable . location . meta $ v
+                                 Nothing  ->  do  if E.isAvailable . location . meta $ v
                                                            then  let  reject = do  ds  <-  get
                                                                                    s   <-  gets strategy
                                                                                    let  f  =  Block b v
@@ -198,11 +197,7 @@ buildGraphForDepAtom da
                                                                                    backtrack
                                                                  in   choiceM [withCallback (CbBlock nm b) $ chooseVariant [reject] (const reject) -- 3.
                                                                               ,reject] -- never backtrack beyond this point
-                                                           else  modify (\s -> s { active = insertPS ps' (Right (b:bs)) a }) -- 4.
-                                                  case lookupPS ps' a of
-                                                    Just (Left _)    ->  return () -- 2.
-                                                    Just (Right bs)  ->  continue bs
-                                                    Nothing          ->  continue []
+                                                           else  return () -- 4.
                   )
                   (findVersions t (unblock da))
     | otherwise =  let  reject f =  do  ds <- get
@@ -211,14 +206,14 @@ buildGraphForDepAtom da
                                                 |  otherwise       =  Just ds
                                         progress (Backtrack b f)
                                         backtrack
-                   in   chooseVariant [] reject
+                        p = pFromDepAtom da
+                   in   chooseVariant [progress (Message "CONTINUING") >> continue (== Just p) (\s -> s { saved = M.insertWith (++) p [Blocker undefined {- TODO -} da Nothing] (saved s) })] reject
   where
     -- failChoice: what to do if all acceptable ebuilds fail (nothing normally, but error for blockers)
     -- failReject: what to do if all ebuilds are masked (complain about blocker instead?)
     chooseVariant failChoice failReject =
         do  pc  <-  gets pconfig
             s   <-  gets strategy
-            a   <-  gets active
             let  t     =  itree pc
                  p     =  pFromDepAtom da
                  -- it might be a good idea to speed up the process of finding
@@ -227,8 +222,8 @@ buildGraphForDepAtom da
             case sselect s da vs of
               Reject f      ->  failReject f
               Accept vs ns  ->
-                do   v@(Variant m e) <- choiceM (map return vs ++ failChoice)
-                     -- progress (Message $ "CHOOSING: " ++ E.showVariant' (config pc) v ++ " (out of " ++ show (length vs) ++ ")")
+                do   v@(Variant m e) <- lchoiceM (Just p) (map return vs ++ failChoice)
+                     progress (Message $ "CHOOSING: " ++ E.showVariant' (config pc) v ++ " (out of " ++ show (length vs) ++ ")")
                      let  avail  =  E.isAvailable (location m)  -- installed or provided?
                           stop   =  avail && sstop s v  -- if it's an installed ebuild, we can decide to stop here!
                           luse   =  mergeUse (use (config pc)) (locuse m)
@@ -405,23 +400,26 @@ insVariant v cb =
     do  ls <- gets labels
         case M.lookup v ls of
           Nothing  ->  do  let  ps'  =  extractPS . pvs $ v
+                                p    =  extractP . pv . meta $ v
                            a <- gets active
+                           b <- gets saved
                            let  insVariant' bs =
-                                    do  modify (\s -> s { active = insertPS ps' (Left v) a })
+                                    do  modify (\s -> s { active = insertPS ps' v a })
                                         nm <- insHistory v    -- really adds the nodes
                                         cb nm v               -- ties in the nodes with the rest of the graph
                                         resolveBlockers v bs  -- checks the previously accumulated blockers for this package
                                         return nm
                            nm <- case lookupPS ps' a of
-                                   Nothing          ->  insVariant' []
-                                   Just (Left v')   ->  do  s   <-  gets strategy
+                                   Just v'          ->  do  s   <-  gets strategy
                                                             ds  <-  get
                                                             let  f  =  SlotConflict v v'
                                                                  b  |  sbacktrack s f  =  Nothing
                                                                     |  otherwise       =  Just ds
-                                                            progress (Backtrack b f)
-                                                            backtrack
-                                   Just (Right bs)  ->  insVariant' bs
+                                                            progress (Message "Slot conflict")
+                                                            continue (== Just p) id -- testing
+                                   Nothing          ->  case M.lookup p b of
+                                                          Nothing  ->  insVariant' []
+                                                          Just bs  ->  insVariant' bs
                            return (False,nm)
           Just nm  ->  do  cb nm v
                            return (True,nm)
@@ -435,18 +433,19 @@ resolveBlockers v bs =
                            vBlocked   =  matchDepAtomVariant da v
                            bnm        =  ls M.! bvariant b
                       in   case (vBlocked,lvBlocked,bruntime b) of
-                             (False,False,_)     ->  return ()
-                             (True,False,False)  ->  registerEdgeAndResolveCycle (built nm) (built bnm)
-                                                       (Depend True (bdepatom b))
-                             (False,True,rd)     ->  registerEdgeAndResolveCycle (built bnm) (built nm)
-                                                       ((if rd then RDepend else Depend) False (bdepatom b))
-                             _                   ->  do  ds  <-  get
-                                                         let  s  =  strategy ds
-                                                              f  =  Block b v
-                                                              x  |  sbacktrack s f  =  Nothing
-                                                                 |  otherwise       =  Just ds
-                                                         progress (Backtrack x f)
-                                                         backtrack) bs
+                             (False,False,Just _)     ->  return ()
+                             (True,_,Nothing)         ->  return ()
+                             (True,False,Just False)  ->  registerEdgeAndResolveCycle (built nm) (built bnm)
+                                                            (Depend True (bdepatom b))
+                             (False,True,Just rd)     ->  registerEdgeAndResolveCycle (built bnm) (built nm)
+                                                            ((if rd then RDepend else Depend) False (bdepatom b))
+                             _                        ->  do  ds  <-  get
+                                                              let  s  =  strategy ds
+                                                                   f  =  Block b v
+                                                                   x  |  sbacktrack s f  =  Nothing
+                                                                      |  otherwise       =  Just ds
+                                                              progress (Backtrack x f)
+                                                              backtrack) bs
 
 registerEdgeAndResolveCycle :: Int -> Int -> DepType -> GG ()
 registerEdgeAndResolveCycle s t d =
