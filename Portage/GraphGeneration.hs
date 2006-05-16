@@ -106,74 +106,69 @@ data Progress =  LookAtEbuild  PV EbuildOrigin
               |  Done
 
 -- | Graph generation monad.
-newtype GG a = GG { runGG :: DepState -> (GGLabel,[GGStep a]) }
+newtype GG a = GG { runGG :: DepState -> [GGStep a] }
 
-data GGStep a  =  Step      Progress
-               |  Return    (a,DepState)
+data GGStep a  =  Step      Progress            -- made some progress
+               |  Return    (a,DepState)        -- result and new state
+               |  Label     GGLabel DepState [GG a]  -- label, saved state, delayed computations
                |  Continue  (GGLabel -> Bool) (DepState -> DepState)
+                                                -- jump
 
-type GGLabel = Maybe PS
+type GGLabel = Maybe P
 
 returnGG :: a -> GG a
-returnGG x = GG (\s -> (Nothing,[Return (x,s)]))
+returnGG x = GG (\s -> [Return (x,s)])
 
 bindGG :: GG a -> (a -> GG b) -> GG b
 bindGG (GG a) f = 
-  GG (\s ->  case a s of
-               (l,xs)  ->  (l,  foldr (\x r ->
-                                  case x of
-                                    Step p         ->  Step p : r
-                                    Return (t,s')  ->  snd (runGG (f t) s') ++ r
-                                    Continue p st
-                                      | p l        ->  mapGGStep st r
-                                      | otherwise  ->  [Continue p st])
-                                  [] xs))
-
-mapGGStep :: (DepState -> DepState) -> [GGStep a] -> [GGStep a]
-mapGGStep st = map (\x ->  case x of
-                             Return (t,s)  ->  Return (t,st s)
-                             _             ->  x)
-
-fmapGG :: (a -> b) -> GG a -> GG b
-fmapGG f (GG a) =
-  GG (\s ->  case a s of
-               (l,xs)  ->  (l,  map (\x ->
-                                  case x of
-                                    Step p          ->  Step p
-                                    Return (y,s')   ->  Return (f y,s')
-                                    Continue p st   ->  Continue p st)
-                                  xs))
+    GG (\s ->  concatMap bindSingle (a s))
+  where
+    bindSingle (Step p)         =  [Step p]
+    bindSingle (Return (a,s'))  =  runGG (f a) s'
+    bindSingle (Label l s os)   =  [Label l s (map (`bindGG` f) os)]
+    bindSingle (Continue c sf)  =  [Continue c sf]
 
 instance Monad GG where
   return = returnGG
   (>>=) = bindGG
 
-instance Functor GG where
-  fmap = fmapGG
-
 get :: GG DepState
-get = GG (\s -> (Nothing,[Return (s,s)]))
+get = GG (\s -> [Return (s,s)])
 
 put :: DepState -> GG ()
-put s = GG (\_ -> (Nothing,[Return ((),s)]))
+put s = GG (\_ -> [Return ((),s)])
 
 gets :: (DepState -> a) -> GG a
-gets f = GG (\s -> (Nothing,[Return (f s,s)]))
+gets f = GG (\s -> [Return (f s,s)])
 
 modify :: (DepState -> DepState) -> GG ()
-modify f = GG (\s -> (Nothing,[Return ((),f s)]))
+modify f = GG (\s -> [Return ((),f s)])
 
 progress :: Progress -> GG ()
-progress p = GG (\s -> (Nothing,[Step p,Return ((),s)]))
-
-lchoice :: GGLabel -> [a] -> GG a
-lchoice l cs = GG (\s -> (l,[Return (c,s) | c <- cs]))
-
-lchoiceM :: GGLabel -> [GG a] -> GG a
-lchoiceM l cs = GG (\s -> (l,[r | GG f <- cs, r <- snd (f s)]))
+progress p = GG (\s -> [Step p,Return ((),s)])
 
 choice :: [a] -> GG a
-choice = lchoice Nothing
+choice cs = GG (\s -> [Return (c,s) | c <- cs])
+
+lchoiceM :: GGLabel -> [GG a] -> GG a
+lchoiceM l cs  =
+    GG (\s -> [  Step (Message ("Choice with " ++ show (length cs) ++ " alternatives")),
+                 Label l s cs,
+                 Continue (==l) id  ])
+
+{-
+lchoiceM :: GGLabel -> [GG a] -> GG a
+lchoiceM l cs  =
+    GG (\s -> Step (
+  where
+    lchoiceM' s []      =  [] 
+    lchoiceM' s (c:cs)  =  foldr process [] (runGG c s)
+      where
+        process (Continue c sf) _
+          | c l             =  Step (Message ("Label matched, " ++ show (length cs) ++ " alternatives left")) : lchoiceM' (sf s) cs
+          | otherwise       =  [Step (Message "Label doesn't match"), Continue c sf]
+        process other r     =  other : r
+-}
 
 choiceM :: [GG a] -> GG a
 choiceM = lchoiceM Nothing
@@ -182,10 +177,10 @@ firstM :: Monad m => [m Bool] -> m () -> m ()
 firstM  =  flip (foldr (\x y -> x >>= \r -> if r then return () else y)) 
 
 backtrack :: GG a
-backtrack = GG (\_ -> (Nothing,[]))
+backtrack = GG (\_ -> [Continue (const True) id]) -- succeed always or fail always?
 
 continue :: (GGLabel -> Bool) -> (DepState -> DepState) -> GG a
-continue p st = GG (\_ -> (Nothing,[Continue p st]))
+continue c sf = GG (\_ -> [Continue c sf])
 
 lookupPS :: PS -> Map P (Map Slot a) -> Maybe a
 lookupPS (PS cat pkg slot) m = M.lookup (P cat pkg) m >>= M.lookup slot
@@ -200,8 +195,8 @@ getActives p m = M.elems (M.findWithDefault M.empty p m)
 
 isActive :: Variant -> ActiveMap -> Bool
 isActive v m =  case lookupPS (extractPS . pvs $ v) m of
-                  Nothing          ->  False
-                  Just (Left v')   ->  v == v'
+                  Nothing   ->  False
+                  Just v'   ->  v == v'
 
 -- | Modify the graph within the monad.
 modifyGraph :: (Graph -> Graph) -> GG ()
@@ -269,12 +264,25 @@ registerEdge s t d =
 ancestors :: Node -> Graph -> [Node]
 ancestors v g = preorderF (rdff [v] g)
 
-runGGWith :: DepState -> GG a -> ([Progress],DepState)
-runGGWith s cmp = proc (snd (runGG cmp s))
-  where  proc []                 =  ([],error "no solution found")
-         proc (Return ~(_,s):_)  =  ([],s)
-         proc (Step p:xs)        =  (\ ~(x,y) -> (p:x,y)) (proc xs)
-         proc (Continue _ _:_)   =  ([],error "no solution found")
+runGGWith :: DepState -> GG a
+          -> ([Progress],DepState)
+runGGWith s cmp =  case process (runGG cmp s) of
+                     ~(ps,r) -> (ps,case r of
+                                      Right _ -> error "no solution found"
+                                      Left s  -> s)
+  where  process []                 =  ([],Right (const True,id))
+         process (Return ~(_,s):_)  =  ([],Left s)
+         process (Step p:xs)        =  (\ ~(x,y) -> (p:x,y)) (process xs)
+         process (Label _ _ []:xs)  =  process (Step (Message ("Alternatives exhausted, removing label.")) : xs)
+         process ((Label l s (o:os)):xs)
+                                    =  case process xs of
+                                         ~(ps,r) ->  (\ ~(x,y) -> (ps ++ x,y)) $
+                                                        case r of
+                                                          Right (c,sf) | c l ->
+                                                            let  s' = sf s
+                                                            in   process (Step (Message ("Label matched, " ++ show (length os) ++ " alternatives left.")) : Label l s' os : runGG o s')
+                                                          x -> ([Message "Passing label"],x)
+         process (Continue c sf:_)  =  ([],Right (c,sf))
 
 
 {-
