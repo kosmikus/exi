@@ -11,6 +11,7 @@ module Portage.PackageKeywords
 
 import System.IO.Unsafe
 
+import Portage.Config
 import Portage.Keyword
 import Portage.Utilities
 import Portage.Constants
@@ -31,20 +32,23 @@ mapKeywordsForPackage :: ([Keyword] -> [Keyword]) -> KeywordsForPackage -> Keywo
 mapKeywordsForPackage f k = k { kkeywords = f (kkeywords k) }
 
 -- | Parse a @package.keywords@ file.
-parseKeywords :: String -> [KeywordsForPackage]
-parseKeywords = map parseKeywordsLine . lines . stripComments 
+parseKeywords :: Config -> String -> [KeywordsForPackage]
+parseKeywords cfg = map (parseKeywordsLine cfg) . lines . stripComments 
 
-parseKeywordsLine :: String -> KeywordsForPackage
-parseKeywordsLine x =
+parseKeywordsLine :: Config -> String -> KeywordsForPackage
+parseKeywordsLine cfg x =
     case words x of
       []      ->  error $ "parseKeywordsLine: internal error, empty line in package.keywords file"
-      (d:ks)  ->  KeywordsForPackage ks (getDepAtom d)
+      (d:ks)  ->  let  ks' =  case ks of
+                                []  ->  ["~" ++ arch cfg]
+                                _   ->  ks
+                  in   KeywordsForPackage ks' (getDepAtom d)
 
-readKeywordsFile :: FilePath -> IO [KeywordsForPackage]
-readKeywordsFile f = fmap parseKeywords (strictReadFileIfExists f)
+readKeywordsFile :: Config -> FilePath -> IO [KeywordsForPackage]
+readKeywordsFile cfg f = fmap (parseKeywords cfg) (strictReadFileIfExists f)
 
-userKeywords  ::  IO [KeywordsForPackage]
-userKeywords  =   unsafeInterleaveIO $ readKeywordsFile localKeywordsFile
+userKeywords      ::  Config -> IO [KeywordsForPackage]
+userKeywords cfg  =   unsafeInterleaveIO $ readKeywordsFile cfg localKeywordsFile
 
 performKeywords :: KeywordsForPackage -> Tree -> Tree
 performKeywords (KeywordsForPackage ks d) =

@@ -94,7 +94,7 @@ portageConfig =
         -- Portage allows the environment to override package-specific keywords.
         -- We therefore add the environment keywords at the end of each package-specific
         -- entry.
-        ukey      <-  userKeywords
+        ukey      <-  userKeywords cfg
         ukey      <-  return $ map (mapKeywordsForPackage (++ acceptedKeywords envcfg)) ukey -- environment override
         tree      <-  return $ foldl (flip performKeywords)  tree ukey
         -- USE flag distribution (again, not on the installed tree)
