@@ -21,7 +21,7 @@ import Portage.Package
 doShowInst :: IORef PortageConfig -> [String] -> IO ()
 doShowInst r ds =  readIORef r >>= \pc -> 
                    putStr $
-                     unlines . map (showVersions . (\x -> (x,findVersions (inst pc) x)) . getDepAtom) $ ds
+                     unlines . map (showVersions . (\x -> (x,findVersions (inst pc) x)) . getDepAtom' (expand pc)) $ ds
 
 showVersions :: (DepAtom, [Variant]) -> String
 showVersions (da,vs) = show da ++ ": " ++  (  concat . intersperse ", " .
