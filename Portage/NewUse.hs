@@ -8,12 +8,18 @@
 
 module Portage.NewUse where
 
+import Data.Char
+import Data.List
 import qualified Data.Set as S
 
 import Portage.Use
 import Portage.Config
 import Portage.AnsiColor
+import Portage.Utilities
 
+-- | Type for USE flags with difference information (compared to a previous
+--   version). "Nothing" means that the USE flag is new, "Just True" means
+--   it has changed, and "Just False" means that it is unchanged.
 type ExtUseFlag = (UseFlag,Maybe Bool)
 
 -- | Computes a difference of USE flag differences.
@@ -34,3 +40,17 @@ showExtUseFlag cfg (x,Nothing)    =  inColor cfg Yellow True Default x ++ "%"
 showExtUseFlag cfg (x,Just True)  =  inColor cfg Green True Default x ++ "*"
 showExtUseFlag cfg (x@('-':_),_)  =  inColor cfg Blue True Default x
 showExtUseFlag cfg (x,_)          =  inColor cfg Red True Default x
+
+-- | Perform the opposite of USE flag expansion for a list of extended USE flags.
+unexpandExtUses :: [String] -> [ExtUseFlag] -> [(String,[ExtUseFlag])]
+unexpandExtUses expanded' xs =
+  let  expanded  =  map (\x -> (x, map toLower x ++ "_")) expanded'
+       grouped   =  groupByFst $
+                    map  (\ (x,b) -> let  neg  =  if ("-" `isPrefixOf` x) then "-" else ""
+                                          px   =  drop (length neg) x
+                                     in  case find (\y -> snd y `isPrefixOf` px) expanded of
+                                           Nothing  ->  ("USE",(x,b))
+                                           Just y   ->  (fst y,((neg ++ drop (length (snd y)) px),b)))
+                         xs
+  in   grouped
+

@@ -193,13 +193,18 @@ showVariant cfg v@(Variant m e)  =  showVariant' cfg v
                                     ++ " " ++ unwords (map showMasked (masked m))
                                     ++ useflags
   where useflags  =  let  c = showUseFlags cfg v (getLinked v)
-                     in   if null c then "" else " USE=\"" ++ c ++ "\""
+                     in   if null c then "" else c
 
 showUseFlags :: Config -> Variant -> Maybe Variant -> String
 showUseFlags cfg v@(Variant m e) Nothing                    =  showUseFlags cfg v (Just v)
-showUseFlags cfg v@(Variant m e) (Just v'@(Variant m' e'))  =  let  nd  =  diffUse (mergeUse (use cfg) (locuse m)) (iuse e)
-                                                                    od  =  diffUse (mergeUse (use cfg) (locuse m')) (iuse e')
-                                                               in   (unwords . map (showExtUseFlag cfg)) (diffExtUse nd od)
+showUseFlags cfg v@(Variant m e) (Just v'@(Variant m' e'))  =
+  let  nd        =  diffUse (mergeUse (use cfg) (locuse m)) (iuse e)
+       od        =  diffUse (mergeUse (use cfg) (locuse m')) (iuse e')
+       d         =  diffExtUse nd od
+       expanded' =  map fst (useExpand cfg)
+       grouped   =  unexpandExtUses expanded' d
+       sorted    =  sortByList grouped fst ("USE" : expanded')
+  in   unwords $ map (\ (n,f) -> n ++ "=\"" ++ (unwords . map (showExtUseFlag cfg)) f ++ "\"") sorted
 
 -- | Like "showVariant", but additionally print the reason for hard-masking.
 --   Takes up more than one line, therefore not suitable in a context where

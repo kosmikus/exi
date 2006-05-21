@@ -45,6 +45,15 @@ groupnr n = map (take n) . takeWhile (not . null) . iterate (drop n)
 splitAtLast :: (Eq a) => a -> [a] -> ([a],[a])
 splitAtLast s xs  =   splitAt (maximum (elemIndices s xs)) xs
 
+-- | Sort a list according to another list.
+sortByList :: Ord b => [a] -> (a -> b) -> [b] -> [a]
+sortByList xs p rs =  let  m = Map.fromList (zip rs [1..])
+                      in   sortBy (\x y -> compare (m Map.! p x) (m Map.! p y)) xs
+
+-- | Group by first element.
+groupByFst :: Ord a => [(a,b)] -> [(a,[b])]
+groupByFst  =  Map.toList . Map.fromListWith (++) . reverse . map (\ (x,y) -> (x,[y]))
+
 -- | Reads a file completely into memory.
 strictReadFile :: FilePath -> IO String
 strictReadFile f  =   do  f <- readFile f

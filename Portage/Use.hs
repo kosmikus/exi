@@ -43,3 +43,4 @@ diffUse xs ys =  let  sx     =  S.fromList xs
 expandUse :: [(String,String)] -> [UseFlag]
 expandUse = concatMap expand
   where  expand (v,c)   =  [map toLower v ++ "_" ++ w | w <- words c ]
+
