@@ -110,9 +110,9 @@ pretend pc s d =
                         putStrLn $ "\nChanges to " ++ (localConfigDir ./. packageUnMask) ++ ":"
                         putStr . unlines . map (\v -> "=" ++ showPV (pv . meta $ v)) $ hmask
         let wantToMerge = null cycles && not (mpretend s)
-        -- ask the user if he/she appreves the merging
+        -- ask the user if he/she approves the merging
         userApproves <-
-            -- ask only if --ask and we acctually could merge
+            -- ask only if --ask and we actually could merge
             if mask s && wantToMerge
               then do ans <- askUserYesNo (config pc) "Do you want me to merge these packages? "
                       when (not ans) $
