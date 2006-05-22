@@ -7,12 +7,14 @@
 -}
 
 module Portage.PortageConfig
+  (module Portage.PortageConfig, module Portage.PortageConfig.Type)
   where
 
 import qualified Data.Map as M
 import System.IO
 import System.IO.Unsafe
 
+import Portage.PortageConfig.Type
 import Portage.Config
 import Portage.Tree
 import Portage.Keyword
@@ -27,18 +29,6 @@ import Portage.Dependency
 import Portage.Virtual
 import Portage.World
 import Portage.Utilities
-
-data PortageConfig =  PortageConfig
-                        {
-                           config    ::  Config,
-                           tree      ::  Tree,
-                           inst      ::  Tree,
-                           itree     ::  Tree,
-                           virtuals  ::  DepAtom -> Maybe DepTerm,
-                           expand    ::  Package -> [Category],
-                           system    ::  DepString,                 -- ^ system target
-                           world     ::  DepString                  -- ^ world target
-                        }
 
 -- | Portage configuration is read in the following order, in increasing priority:
 --   global < profile < user < environment < (package specific)

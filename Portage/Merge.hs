@@ -35,6 +35,7 @@ import Portage.Utilities
 import Portage.AnsiColor
 import Portage.Shell
 import Portage.Use
+import Portage.World
 
 data MergeState =  MergeState
                      {
@@ -43,11 +44,13 @@ data MergeState =  MergeState
                        mdeep       ::  Bool,
                        munmask     ::  Bool,
                        mtree       ::  Bool,
+                       moneshot    ::  Bool,
                        mbacktrack  ::  Bool,
                        mverbose    ::  Bool,
                        mask        ::  Bool
                      }
 
+-- | Generate a dependency graph for a user-specified dependency string.
 pretend :: PortageConfig -> MergeState -> String -> IO Graph
 pretend pc s d = 
     do  let initialState =  DepState
@@ -63,6 +66,9 @@ pretend pc s d =
                                  callback  =  CbRDepend (NodeMap top top),
                                  strategy  =  makeStrategy (mupdate s) (munmask s) (mdeep s)
                               }
+        -- In "d'", we store the dependency string. If the user specified one
+        -- of the special targets "system" or "world", we expand the special
+        -- target. Otherwise, we parse the dependency string.
         let d' | d == "system"  =  system pc
                | d == "world"   =  world pc ++ system pc
                | otherwise      =  getDepString' (expand pc) d
@@ -126,14 +132,17 @@ pretend pc s d =
         -- Perform merging.
         when (wantToMerge && userApproves) $
              do
-                 exit <- whileSuccess (map (processMergeLine (config pc)) mergelist)
+                 exit <- whileSuccess (map (processMergeLine pc s d') mergelist)
                  case exit of
                    ExitSuccess  ->  return ()
                    _            ->  putStrLn "Quitting due to errors."
         return gr
 
-runEbuild :: Config -> Variant -> IO ExitCode
-runEbuild cfg v =
+-- | Merges a single variant. The "DepString" is only passed along to recognize
+--   user-specified targets and possibly add them to the world file after a
+--   successful merge.
+runEbuild :: PortageConfig -> MergeState -> DepString -> Variant -> IO ExitCode
+runEbuild pc s d' v =
     case location m of
       PortageTree pt _ ->
         do
@@ -152,7 +161,7 @@ runEbuild cfg v =
                            -- the final clean should only happen if noclean is unset
                            op <- ["clean", "merge", "clean"] ] ] ++
               -- cleaning should look at AUTOCLEAN
-              (  case l of
+              (  case l of -- do we have an older version of the same package?
                    Just v'  ->  let  m'     =  meta v'
                                      file'  =  dbDir ./. showPV (pv m') ./.
                                                showEbuildPV' (pv m')
@@ -161,12 +170,20 @@ runEbuild cfg v =
                                                   systemInEnv (ecmd' file' "unmerge") [],
                                               systemInEnv envUpdateBin []]
                                      else  []
-                   Nothing  ->  [])
+                   Nothing  ->  []) ++
+              (  if    not (moneshot s) && p `elem` dps
+                 then  [do  r <- addToWorldFile pc p
+                            when r $ putStrLn (inColor cfg Green True Default (">>> added " ++ showP p ++ " to world file"))
+                            return ExitSuccess]
+                 else  []) 
       _ -> return ExitSuccess  -- or should it be an error?
   where
-    m  =  meta v
-    e  =  ebuild v
-    l  =  getLinked v
+    cfg  =  config pc
+    m    =  meta v
+    e    =  ebuild v
+    p    =  extractP . pv $ m
+    dps  =  map pFromDepAtom (depStringAtoms d')
+    l    =  getLinked v
 
 whileSuccess :: [IO ExitCode] -> IO ExitCode
 whileSuccess = foldM  (\exit r ->  case exit of
@@ -188,10 +205,10 @@ showMergeLine c n a =  case a of
                          Built v  ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
                          _        ->  ""
 
-processMergeLine :: Config -> Action -> IO ExitCode
-processMergeLine c a =  case a of
-                          Built v  ->  runEbuild c v
-                          _        ->  return ExitSuccess
+processMergeLine :: PortageConfig -> MergeState -> DepString -> Action -> IO ExitCode
+processMergeLine pc s d' a =  case a of
+                                Built v  ->  runEbuild pc s d' v
+                                _        ->  return ExitSuccess
 
 showAllLines :: Config -> Int -> Bool -> [Action] -> String
 showAllLines c n child a =

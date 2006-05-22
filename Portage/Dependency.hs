@@ -77,6 +77,14 @@ data DepTerm    =  Plain  DepAtom
                           DepTerm
   deriving (Eq)
 
+-- | Returns all the atoms contained in a dependency string.
+depStringAtoms         ::  DepString -> [DepAtom]
+depStringAtoms  =  concatMap depTermAtoms
+  where  depTermAtoms (Plain da)    =  [da]
+         depTermAtoms (Or ds)       =  depStringAtoms ds
+         depTermAtoms (And ds)      =  depStringAtoms ds
+         depTermAtoms (Use _ _ dt)  =  depTermAtoms dt
+
 -- | Interprets a DepString according to given USE flags (non-negatives).
 interpretDepString     ::  [UseFlag] -> DepString -> DepString
 interpretDepString fs  =   concatMap (interpretDepTerm fs)

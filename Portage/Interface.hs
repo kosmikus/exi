@@ -48,6 +48,7 @@ mergeCmd =  Command
                                       mdeep = False,
                                       munmask = False,
                                       mtree = False,
+                                      moneshot = False,
                                       mbacktrack = False,
                                       mverbose = False,
                                       mask = False},
@@ -61,6 +62,7 @@ mergeOpts = [Option "u" ["update"] (NoArg (\s -> s { mupdate = True })) "update 
              Option "p" ["pretend"] (NoArg (\s -> s { mpretend = True })) "calculate dependencies only",
              Option "M" ["unmask"] (NoArg (\s -> s { munmask = True, mpretend = True })) "unmask if necessary",
              Option "t" ["tree"] (NoArg (\s -> s { mtree = True })) "display packages to merge in tree form",
+             Option "1" ["oneshot"] (NoArg (\s -> s { moneshot = True })) "do not modify world file",
              Option "B" ["backtrack"] (NoArg (\s -> s { mbacktrack = True })) "backtrack to find more solutions",
              Option "v" ["verbose"] (NoArg (\s -> s { mverbose = True })) "be verbose",
              Option "a" ["ask"] (NoArg (\s -> s { mask = True})) "ask before merging"]
