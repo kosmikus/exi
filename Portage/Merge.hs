@@ -145,7 +145,7 @@ runEbuild cfg v =
                                 -- ignore error 127 due to a bug in ebuild
                                 "; exittemp=$?; if [[ $exittemp -eq 127 ]]; then echo \"The above error is safe to ignore.\"; (exit 0); else (exit $exittemp); fi" 
             env <- getEnvironment
-            putStrLn (inColor cfg Green True Default (">>> emerging " ++ showPV (pv m)))
+            putStrLn (inColor cfg Green True Default (">>> merging " ++ showPV (pv m)))
             whileSuccess $
               [  systemInEnv cmd (addEnv ++ [ e | e@(v,_) <- env, v /= "USE" ]) |
                  cmd <- [  ecmd file op |
