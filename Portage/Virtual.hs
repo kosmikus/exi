@@ -51,10 +51,13 @@ profileVirtuals  =  unsafeInterleaveIO $
 providedByTree :: Tree -> Map P [DepAtom]
 providedByTree t = M.fold (\p r -> M.fold (\vs s -> foldr addProvide s vs) r p) M.empty (ebuilds t)
   where
+    -- There used to be a bug in |addProvide|, because the call to |depStringAtoms| was
+    -- missing, as interpreted PROVIDE strings can still contain |And| constructors. Note
+    -- that we implicitly assume that at this point, there are no |Or|s or |Use|s left ...
     addProvide :: Variant -> Map P [DepAtom] -> Map P [DepAtom]
     addProvide (Variant m e) t =  foldr  (\d -> updateWithDefault  (Just . (depAtomFromPV (pv m):))
-                                                                   (pFromDepTerm d) [])
-                                         t (provide e)
+                                                                   (pFromDepAtom d) [])
+                                         t (depStringAtoms . provide $ e)
     -- We ignore the version:
     depAtomFromPV :: PV -> DepAtom
     depAtomFromPV (PV cat pkg _) = DepAtom False False DNONE cat pkg NoVer

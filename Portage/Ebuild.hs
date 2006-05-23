@@ -384,6 +384,7 @@ getInstalledVariantFromDisk cfg pv@(PV cat pkg ver) =
                     (getDepString cdep)
                     (getDepString pdep)
                     (interpretDepString use . getDepString $ prov)
+                         -- interpet provided packages with the USE flags at time of installation
                     "0"  -- does EAPI make sense for installed ebuilds?
         return (Variant m e)
 
