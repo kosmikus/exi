@@ -3,30 +3,43 @@ Version:		0.1
 License:		GPL
 Author:			Andres Loeh
 Build-Depends:		base, parsec, unix, mtl, fgl>=5.2
+Ghc-Options:            -O
 Synopsis:		Reimplementation of Gentoo Portage functions
-Exposed-Modules:	Portage.Config,
-			Portage.Constants,
-			Portage.Dependency,
-			Portage.Ebuild,
-			Portage.Eclass,
-			Portage.Graph,
-			Portage.GraphGeneration,
-			Portage.GraphUtils,
-			Portage.Keyword,
-			Portage.Mask,
-			Portage.Match,
-			Portage.Package,
-			Portage.PackageKeywords,
+Exposed-Modules:	Portage.AnsiColor,
+			Portage.Profile,
+			Portage.PortageConfig,
 			Portage.PackageProvided,
 			Portage.PackageUse,
-			Portage.Profile,
-			Portage.Shell,
+			Portage.GraphGeneration,
+			Portage.Match,
+			Portage.NewUse,
+			Portage.Info,
+			Portage.World,
 			Portage.Strategy,
-			Portage.Tree,
 			Portage.Use,
-			Portage.UseDefaults,
+			Portage.Ebuild,
+			Portage.ProgramVersion,
+			Portage.Virtual,
+			Portage.Eclass,
+			Portage.Dependency,
+			Portage.Mask,
+			Portage.Shell,
+			Portage.PackageKeywords,
 			Portage.Utilities,
-			Portage.Version
+			Portage.Package,
+			Portage.PortageConfig.Type,
+			Portage.Merge,
+			Portage.Interface,
+			Portage.GraphUtils,
+			Portage.Version,
+			Portage.Graph,
+			Portage.Config,
+			Portage.Keyword,
+			Portage.Tree,
+			Portage.UseDefaults,
+			Portage.Constants,
+			Portage.Cache
 
 Executable:		exi
 Main-Is:		Main.hs
+Ghc-Options:            -O
