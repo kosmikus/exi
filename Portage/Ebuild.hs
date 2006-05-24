@@ -370,8 +370,11 @@ getInstalledVariantFromDisk cfg pv@(PV cat pkg ver) =
                     []
                     FromInstalledDB
         let e  =  Ebuild
-                    (getDepString dep)
-                    (getDepString rdep)
+                    (interpretDepString use . getDepString $ dep)
+                    (interpretDepString use . getDepString $ rdep)
+                         -- interpret dependencies of installed packages with the USE flags at
+                         -- time of installation; this is inadequate if we ever want to reinstall
+                         -- installed ebuilds from the information in the installed-packages-database
                     (stripNewlines slt)
                     src
                     (words restr)
