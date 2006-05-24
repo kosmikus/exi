@@ -9,7 +9,10 @@
 module Portage.Utilities
   where
 
+import Prelude hiding (catch)
+import Control.Exception
 import System.Directory
+import System.IO
 import Data.List
 import Data.Maybe (fromJust)
 import Data.Map (Map)
@@ -64,6 +67,17 @@ strictReadFile f  =   do  f <- readFile f
 strictReadFileIfExists :: FilePath -> IO String
 strictReadFileIfExists f  =   do  x <- doesFileExist f
                                   if x then strictReadFile f else return []
+
+-- | Normalize the end of a file to a newline character.
+normalizeEOF :: FilePath -> IO ()
+normalizeEOF f  =  do  h  <-  openFile f ReadWriteMode
+                       c  <-  catch  (do  hSeek h SeekFromEnd (-1)
+                                          hGetChar h)
+                                     (const $ return '\n')
+                       case c of
+                         '\n'  ->  return ()
+                         _     ->  hPutChar h '\n'
+                       hClose h
 
 -- | Completely evaluates a string.
 stringSeq :: String -> b -> b

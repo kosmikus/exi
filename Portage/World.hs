@@ -40,7 +40,8 @@ addToWorldFile pc p =
             let matches = filter (\x -> pFromDepAtom x == p) w
             case matches of
               []  ->  -- no entry yet; we update the file
-                      do  f <- openFile worldFile AppendMode
+                      do  normalizeEOF worldFile -- make sure we write a new line
+                          f <- openFile worldFile AppendMode
                           hPutStrLn f (showP p)
                           hClose f
                           return True
