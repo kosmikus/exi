@@ -9,7 +9,7 @@
 module Portage.Merge
   where
 
-import Control.Monad (when, foldM)
+import Control.Monad (when)
 import Data.Graph.Inductive hiding (Graph())
 import Data.Tree
 import qualified Data.Map as M
@@ -19,8 +19,8 @@ import Data.Maybe (fromJust, maybeToList)
 import Data.IORef
 import Data.List (nub)
 import System.IO
-import System.Environment
 import System.Exit
+import System.Environment
 
 import Portage.Dependency hiding (getDepAtom)
 import Portage.Ebuild
@@ -50,9 +50,23 @@ data MergeState =  MergeState
                        mask        ::  Bool
                      }
 
+-- | Expand the user-specified goals into a dependency string.
+--   Handles the case where the user specified "system" or "world",
+--   or in the future possibly more package sets.
+expandGoals :: PortageConfig -> MergeState -> String -> IO DepString
+expandGoals pc s d =
+    do  let d' | d == "system"  =  system pc
+               | d == "world"   =  world pc ++ system pc
+               | otherwise      =  getDepString' (expand pc) d
+        when (mverbose s) $ putStrLn $ "goal: " ++ show d'
+        return d'
+
 -- | Generate a dependency graph for a user-specified dependency string.
-pretend :: PortageConfig -> MergeState -> String -> IO Graph
-pretend pc s d = 
+--   Produces output according to settings. Returns the graph, the flattened
+--   graph, plus a boolean indicating whether merging could proceed (i.e., False if
+--   the graph is cyclic).
+depgraph :: PortageConfig -> MergeState -> DepString -> IO (Graph,[Action],Bool)
+depgraph pc s d' = 
     do  let initialState =  DepState
                               {
                                  pconfig   =  pc,
@@ -66,13 +80,6 @@ pretend pc s d =
                                  callback  =  CbRDepend (NodeMap top top),
                                  strategy  =  makeStrategy (mupdate s) (munmask s) (mdeep s)
                               }
-        -- In "d'", we store the dependency string. If the user specified one
-        -- of the special targets "system" or "world", we expand the special
-        -- target. Otherwise, we parse the dependency string.
-        let d' | d == "system"  =  system pc
-               | d == "world"   =  world pc ++ system pc
-               | otherwise      =  getDepString' (expand pc) d
-        when (mverbose s) $ putStrLn $ "goal: " ++ show d'
         let fs = runGGWith initialState $ 
                            do  buildGraphForUDepString d'
                                gr <- gets graph
@@ -115,28 +122,22 @@ pretend pc s d =
                     do
                         putStrLn $ "\nChanges to " ++ (localConfigDir ./. packageUnMask) ++ ":"
                         putStr . unlines . map (\v -> "=" ++ showPV (pv . meta $ v)) $ hmask
-        let wantToMerge = null cycles && not (mpretend s)
-        -- ask the user if he/she approves the merging
+        return (gr,mergelist,null cycles)
+
+merge pc s mergelist d' =
+    do  -- If --ask is specified, ask the user if he/she approves the merging.
         userApproves <-
-            -- ask only if --ask and we actually could merge
-            if mask s && wantToMerge
+            if mask s
               then do ans <- askUserYesNo (config pc) "Do you want me to merge these packages? "
                       when (not ans) $
                           putStrLn "Quitting."
                       return ans
-              else return True  -- one of these holds
-                                -- (1) we can't merge anyway, doesn't matter
-                                --     what the user says
-                                -- (2) --ask is not enabled, user approves
-                                --     by default
-        -- Perform merging.
-        when (wantToMerge && userApproves) $
-             do
-                 exit <- whileSuccess (map (processMergeLine pc s d') mergelist)
-                 case exit of
-                   ExitSuccess  ->  return ()
-                   _            ->  putStrLn "Quitting due to errors."
-        return gr
+              else return True
+        -- Perform merging if approved.
+        when userApproves $
+            do  whileSuccess (map (processMergeLine pc s d') mergelist)
+                  >|| (putStrLn "Quitting due to errors." >> succeed)
+                return ()
 
 -- | Merges a single variant. The "DepString" is only passed along to recognize
 --   user-specified targets and possibly add them to the world file after a
@@ -174,9 +175,9 @@ runEbuild pc s d' v =
               (  if    not (moneshot s) && p `elem` dps
                  then  [do  r <- addToWorldFile pc p
                             when r $ putStrLn (inColor cfg Green True Default (">>> added " ++ showP p ++ " to world file"))
-                            return ExitSuccess]
+                            succeed]
                  else  []) 
-      _ -> return ExitSuccess  -- or should it be an error?
+      _ -> succeed  -- or should it be an error?
   where
     cfg  =  config pc
     m    =  meta v
@@ -184,12 +185,6 @@ runEbuild pc s d' v =
     p    =  extractP . pv $ m
     dps  =  map pFromDepAtom (depStringAtoms d')
     l    =  getLinked v
-
-whileSuccess :: [IO ExitCode] -> IO ExitCode
-whileSuccess = foldM  (\exit r ->  case exit of
-                                     ExitSuccess  ->  r
-                                     _            ->  return exit)
-                      ExitSuccess
 
 showMergeLines :: Config -> Int -> Bool -> [Action] -> String
 showMergeLines c n child a =  
@@ -208,7 +203,7 @@ showMergeLine c n a =  case a of
 processMergeLine :: PortageConfig -> MergeState -> DepString -> Action -> IO ExitCode
 processMergeLine pc s d' a =  case a of
                                 Built v  ->  runEbuild pc s d' v
-                                _        ->  return ExitSuccess
+                                _        ->  succeed
 
 showAllLines :: Config -> Int -> Bool -> [Action] -> String
 showAllLines c n child a =
@@ -245,14 +240,19 @@ withoutBuffering x =
         hSetBuffering stdout b
         return r
 
+-- | "Main" function for the "merge" command.
 doMerge :: IORef PortageConfig -> MergeState -> [String] -> IO ()
 doMerge rpc ms ds =
     readIORef rpc >>= \pc -> do
     msM <- sanityCheck (config pc) ms
     case msM of
-      (Just ms') -> pretend pc ms' (unwords ds) >> return ()
-      Nothing    -> return ()  -- aborted in sanityCheck
+      (Just ms')  ->  do  d <- expandGoals pc ms' (unwords ds)
+                          (_,pkgs,ok) <- depgraph pc ms' d
+                          when (ok && not (mpretend ms')) (merge pc ms' pkgs d)
+      Nothing     ->  return ()  -- aborted in sanityCheck
 
+-- | Performs a sanity check on the options specified for the "merge" command.
+--   Checks whether certain options are incompatible or imply each other.
 sanityCheck :: Config -> MergeState -> IO (Maybe MergeState)
 sanityCheck config ms = do
     onTerminal <- hIsTerminalDevice stdin
@@ -267,6 +267,7 @@ sanityCheck config ms = do
             | otherwise = return (Just ms)
     check ms
 
+-- | Function that asks the user a yes/no question, used for --ask.
 askUserYesNo :: Config -> String -> IO Bool
 askUserYesNo config prompt =
     withoutBuffering $ do

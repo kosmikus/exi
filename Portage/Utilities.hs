@@ -11,8 +11,10 @@ module Portage.Utilities
 
 import Prelude hiding (catch)
 import Control.Exception
+import Control.Monad
 import System.Directory
 import System.IO
+import System.Exit
 import Data.List
 import Data.Maybe (fromJust)
 import Data.Map (Map)
@@ -78,6 +80,33 @@ normalizeEOF f  =  do  h  <-  openFile f ReadWriteMode
                          '\n'  ->  return ()
                          _     ->  hPutChar h '\n'
                        hClose h
+
+-- | Performs the list of actions sequentially, as long as they
+--   return an exit code indicating success.
+whileSuccess :: [IO ExitCode] -> IO ExitCode
+whileSuccess = foldM ((>&&) . return) ExitSuccess
+
+-- | Combines two IO actions. The second is performed if and
+--   only if the first returns an exit code indicating success.
+--   Like && in bash.
+(>&&) :: IO ExitCode -> IO ExitCode -> IO ExitCode
+a >&& b = do  exit <- a
+              case exit of
+                ExitSuccess  ->  b
+                _            ->  return exit
+
+-- | Combines two IO actions. The second is performed if and
+--   only if the first returns an exit code indicating failure.
+--   Like || in bash.
+(>||) :: IO ExitCode -> IO ExitCode -> IO ExitCode
+a >|| b = do  exit <- b
+              case exit of
+                ExitSuccess  ->  return ExitSuccess
+                _            ->  b
+
+-- | Abbreviation for "return ExitSuccess"
+succeed :: IO ExitCode
+succeed = return ExitSuccess
 
 -- | Completely evaluates a string.
 stringSeq :: String -> b -> b
