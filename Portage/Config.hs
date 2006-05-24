@@ -38,6 +38,7 @@ data Config = Config  {
   --                     logDir            ::  FilePath,
                          cacheFormat       ::  CacheFormat,
                          overlays          ::  [FilePath],
+                         configProtecteds  ::  [FilePath],
                          features          ::  [String],
                          useExpand         ::  [(String,String)],
                          debug             ::  Bool,
@@ -65,12 +66,13 @@ getConfig c  =
   --              logd
                   cf
                   (nub (words overlays))  -- space as separator seems strange to me, but apparently that's the current rule
+                  (nub (words configprotecteds))  -- dito
                   (nub (words features))
                   (zip expand expandvars)
                   False  -- debug
                   True   -- color
   where  vars        =  map (\k -> M.findWithDefault "" k c) configEnvVars
-         (arch:key:use:useorder:pd:tmpd:{- distd:pkgd:logd: -}overlays:features:exp:_) = vars
+         (arch:key:use:useorder:pd:tmpd:{- distd:pkgd:logd: -}overlays:configprotecteds:features:exp:_) = vars
          expand      =  words exp
          expandvars  =  map (\k -> M.findWithDefault "" k c) expand
 
@@ -83,9 +85,23 @@ mergeEnvMap m1 m2 =  M.unionWithKey
   where  x <<< y  |  null y     =  x
                   |  otherwise  =  y
 
-incrementals   =  S.fromList ["USE","USE_EXPAND","PORTDIR_OVERLAY","FEATURES","ACCEPT_KEYWORDS"]
+incrementals   =  S.fromList  [  "USE",
+                                 "USE_EXPAND",
+                                 "PORTDIR_OVERLAY",
+                                 "CONFIG_PROTECT",
+                                 "FEATURES",
+                                 "ACCEPT_KEYWORDS"  ]
 
-configEnvVars = ["ARCH","ACCEPT_KEYWORDS","USE","USE_ORDER","PORTDIR","PORTAGE_TMPDIR","PORTDIR_OVERLAY","FEATURES","USE_EXPAND"]
+configEnvVars  =  [  "ARCH",
+                     "ACCEPT_KEYWORDS",
+                     "USE",
+                     "USE_ORDER",
+                     "PORTDIR",
+                     "PORTAGE_TMPDIR",
+                     "PORTDIR_OVERLAY",
+                     "CONFIG_PROTECT",
+                     "FEATURES",
+                     "USE_EXPAND"  ]
 
 getEnvironmentConfig :: IO EnvMap
 getEnvironmentConfig =  unsafeInterleaveIO $ fmap M.fromList getEnvironment
