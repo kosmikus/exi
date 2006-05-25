@@ -99,7 +99,7 @@ a >&& b = do  exit <- a
 --   only if the first returns an exit code indicating failure.
 --   Like || in bash.
 (>||) :: IO ExitCode -> IO ExitCode -> IO ExitCode
-a >|| b = do  exit <- b
+a >|| b = do  exit <- a
               case exit of
                 ExitSuccess  ->  return ExitSuccess
                 _            ->  b
