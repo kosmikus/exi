@@ -110,7 +110,7 @@ buildGraphForOr' ds@(dt:_)  =
 -- || ( ( a b ) c )
 -- genone says in #gentoo-portage:
 -- if nothing is installed it selects a+b, 
--- if only a and/or b is installed it selects a+b, 
+-- if only a and\/or b is installed it selects a+b, 
 -- if c and one of a or b is installed it selects c
 
 isInstalled :: PortageConfig -> DepAtom -> Bool

@@ -26,7 +26,7 @@ worldTarget =  unsafeInterleaveIO $
                      (strictReadFileIfExists worldFile)
 
 -- | Potentially updates the world file. According to
---   "man 5 portage" from 05/2006, the world file may only
+--   "man 5 portage" from 05\/2006, the world file may only
 --   contain depend atom bases (i.e., values of type P),
 --   therefore we write only a P (even though we allow to
 --   read arbitrary DepAtom's). Returns whether a change

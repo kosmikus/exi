@@ -267,7 +267,7 @@ sanityCheck config ms = do
             | otherwise = return (Just ms)
     check ms
 
--- | Function that asks the user a yes/no question, used for --ask.
+-- | Function that asks the user a yes\/no question, used for --ask.
 askUserYesNo :: Config -> String -> IO Bool
 askUserYesNo config prompt =
     withoutBuffering $ do

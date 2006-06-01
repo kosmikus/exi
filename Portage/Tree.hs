@@ -175,7 +175,7 @@ overlayInstalledTree t i@(Tree ec2 eb2) =
   where
     (Tree ec1 eb1) = linkInstalledEbuilds t i
 
--- | Link variants to installed variants of the same package/slot combination.
+-- | Link variants to installed variants of the same package\/slot combination.
 linkInstalledEbuilds :: Tree -> Tree -> Tree
 linkInstalledEbuilds t i = 
     traverseTree  (\v -> v { meta = 
