@@ -38,6 +38,10 @@ data Action  =  Available    Variant       -- ^ used for PDEPENDs
              |  Built        Variant
              |  Top
 
+isBuilt :: Action -> Bool
+isBuilt (Built _) = True
+isBuilt _ = False
+
 getVariant :: Action -> Maybe Variant
 getVariant (Available v)  =  Just v
 getVariant (Built v)      =  Just v

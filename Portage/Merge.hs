@@ -126,8 +126,18 @@ depgraph pc s d' =
                         putStr . unlines . map (\v -> "=" ++ showPV (pv . meta $ v)) $ hmask
         return (gr,mergelist,null cycles)
 
-merge pc s mergelist d' =
-    do  -- If --ask is specified, ask the user if he/she approves the merging.
+
+merge pc s mergelist d' = do
+        let mergelist' = filter isBuilt mergelist
+            count = length mergelist'
+        putStrLn $ show count ++ case count of
+                                     1 -> " package to merge."
+                                     _ -> " packages to merge."
+        let zeroCheck cont | null mergelist' =
+                putStrLn "Nothing to do, exiting."
+                           | otherwise = cont
+        zeroCheck $ do
+        -- If --ask is specified, ask the user if he/she approves the merging.
         userApproves <-
             if mask s
               then do ans <- askUserYesNo (config pc) "Do you want me to merge these packages? "
@@ -137,7 +147,7 @@ merge pc s mergelist d' =
               else return True
         -- Perform merging if approved.
         when userApproves $
-            do  whileSuccess (map (processMergeLine pc s d') mergelist)
+            do  whileSuccess (map (processMergeLine pc s d') mergelist')
                   >|| (putStrLn "Quitting due to errors." >> succeed)
                 return ()
 
