@@ -35,6 +35,7 @@ import Portage.Utilities
 import Portage.AnsiColor
 import Portage.Shell
 import Portage.Use
+import Portage.Tree
 import Portage.World
 
 data MergeState =  MergeState
@@ -47,7 +48,8 @@ data MergeState =  MergeState
                        moneshot    ::  Bool,
                        mbacktrack  ::  Bool,
                        mverbose    ::  Bool,
-                       mask        ::  Bool
+                       mask        ::  Bool,
+                       mcomplete   ::  Bool
                      }
 
 -- | Expand the user-specified goals into a dependency string.
@@ -246,7 +248,10 @@ doMerge rpc ms ds =
     readIORef rpc >>= \pc -> do
     msM <- sanityCheck (config pc) ms
     case msM of
-      (Just ms')  ->  do  d <- expandGoals pc ms' (unwords ds)
+      (Just ms') | mcomplete ms' ->
+                      do complete pc ds
+                 | otherwise ->
+                      do  d <- expandGoals pc ms' (unwords ds)
                           (_,pkgs,ok) <- depgraph pc ms' d
                           when (ok && not (mpretend ms')) (merge pc ms' pkgs d)
       Nothing     ->  return ()  -- aborted in sanityCheck
@@ -290,6 +295,32 @@ askUserYesNo config prompt =
             "/" ++
             inColor config Red   True Default "no"  ++
             "]"
+
+complete :: PortageConfig -> [String] -> IO ()
+complete pc [] = complete pc [""]
+complete pc [x] = do
+    let ptree = tree pc
+        (gle, category, packageM) =
+            let (gle, rest) = span (`elem` "><=") x
+                (cat, rest') = span (/='/') rest
+                pkg = case rest' of '/':p -> Just p ; _ -> Nothing
+            in (gle, cat, pkg) 
+    case packageM of
+        Nothing -> do -- no package given, complete categories
+            cats <- categories (config pc)
+            mapM_ putStrLn [ gle ++ c ++ "/" | c <- cats ]
+        Just pkg -> do
+            let packagesMap = M.findWithDefault M.empty category (ebuilds . tree $ pc)
+                packages = M.toList packagesMap
+            mapM_ putStrLn $ do
+                (name, variants) <- packages
+                v <- case () of
+                        _ | null gle -> return ""
+                          | otherwise -> map (("-"++) . show . verPV . pv . meta) variants
+                return (gle ++ category ++ '/':name ++ v)
+complete pc xs = complete pc [last xs] -- this case should never be needed
+                                       -- since the bash completion function
+                                       -- only sends one word to complete
 
 showNode :: Bool -> DGraph -> Int -> String
 showNode v gr n = (show . fromJust . lab gr $ n) ++ number

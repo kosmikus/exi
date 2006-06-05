@@ -1,0 +1,42 @@
+#-*- mode: shell-script;-*-
+
+# exi command line completion.
+# Copyright 2006 "Lennart Kolmodin" <kolmodin@dtek.chalmers.se>
+#
+
+# have exi &&
+_exi()
+{
+    local cur
+    cur=${COMP_WORDS[COMP_CWORD]}
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    
+    COMPREPLY=()
+    
+    if [[ ${prev} == '>>' || ${prev} == '>' || ${prev} == '<' ]]; then
+        # if rederecting to/from file, complete filenames
+        COMPREPLY=($(compgen -f -- ${cur})) ;
+        return 0 ;
+    fi
+
+    if (($COMP_CWORD == 1)); then
+        # completing the first word, it should be an action
+        COMPREPLY=( $( exi commands | grep "^$cur" ) )
+        if ((${#COMPREPLY[@]} == 1)); then
+            # exactly one result, add space
+            COMPREPLY[0]="${COMPREPLY[0]} " ;
+        fi
+        return 0
+    fi
+
+    COMPREPLY=( $( exi ${COMP_WORDS[1]} --list-options $cur | grep "^$cur") )
+    
+    if [[ ${#COMPREPLY[@]} == 1 ]] && [[ ${COMPREPLY[0]} =~ "[^/]\$" ]]; then
+        # exactly one result and it's not a category (not ending with '/'),
+        # add space
+        COMPREPLY[0]="${COMPREPLY[0]} " ;
+    fi
+}
+#[ "$have" ] &&
+complete -F _exi -o nospace exi
+
