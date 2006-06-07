@@ -8,9 +8,13 @@
 
 module Portage.Version
   (
-  Version(..),
-  Suffix(..),
+  Version(),
+  Suffix(),
+  Version'(..),
+  projectVersion,
+  makeVersion,
   showVersion,
+  showVersion',
   showSuffix,
   readVersion,
   parseVersion,
@@ -40,6 +44,9 @@ data Version'  =  Version'  [Int]
 
 projectVersion :: Version -> Version'
 projectVersion (Version ver c suf rev _) = Version' ver c suf rev
+
+makeVersion :: Version' -> Version
+makeVersion v@(Version' ver c suf rev) = Version ver c suf rev (showVersion' v)
 
 data Suffix   =  Alpha Int | Beta Int | Pre Int | RC Int | Normal | P_ Int
   deriving (Eq,Ord)
