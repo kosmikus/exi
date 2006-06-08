@@ -128,46 +128,43 @@ depgraph pc s d' =
 
 
 merge pc s mergelist d' = do
-        let mergelist' = filter isBuilt mergelist
-            count = length mergelist'
-        putStrLn $ show count ++ case count of
-                                     1 -> " package to merge."
-                                     _ -> " packages to merge."
-        let zeroCheck cont | null mergelist' =
-                putStrLn "Nothing to do, exiting."
-                           | otherwise = cont
+        let zeroCheck cont
+              | null mergelist  =  putStrLn "Nothing to do."
+              | otherwise       =  cont
         zeroCheck $ do
-        -- If --ask is specified, ask the user if he/she approves the merging.
-        userApproves <-
-            if mask s
-              then do ans <- askUserYesNo (config pc) "Do you want me to merge these packages? "
-                      when (not ans) $
-                          putStrLn "Quitting."
-                      return ans
-              else return True
-        -- Perform merging if approved.
-        when userApproves $
-            do  whileSuccess (map (processMergeLine pc s d') mergelist')
-                  >|| (putStrLn "Quitting due to errors." >> succeed)
-                return ()
+          -- If --ask is specified, ask the user if he/she approves the merging.
+          userApproves <-
+              if mask s
+                then do  ans <- askUserYesNo (config pc) "Do you want me to merge these packages? "
+                         return ans
+                else return True
+          -- Perform merging if approved.
+          when userApproves $
+              do  whileSuccess (map  (processMergeLine pc s d')
+                                     (zip (zip [1..] (repeat (length mergelist))) mergelist))
+                    >|| (putStrLn "Quitting due to errors." >> succeed)
+                  return ()
 
 -- | Merges a single variant. The "DepString" is only passed along to recognize
 --   user-specified targets and possibly add them to the world file after a
 --   successful merge.
-runEbuild :: PortageConfig -> MergeState -> DepString -> Variant -> IO ExitCode
-runEbuild pc s d' v =
+runEbuild :: PortageConfig -> MergeState -> DepString -> Int -> Int -> Variant -> IO ExitCode
+runEbuild pc s d' c t v =
     case location m of
       PortageTree pt _ ->
         do
-            let file    =  pt ./. (showEbuildPV . pv) m
-            let uses    =  diffUse (mergeUse (use cfg) (locuse m)) (iuse e)
-            let addEnv  =  [("USE", unwords uses)]
-            let ecmd   f op  =  ebuildBin ++ " " ++ quote f ++ " " ++ op
-            let ecmd'  f op  =  ecmd f op ++
-                                -- ignore error 127 due to a bug in ebuild
-                                "; exittemp=$?; if [[ $exittemp -eq 127 ]]; then echo \"The above error is safe to ignore.\"; (exit 0); else (exit $exittemp); fi" 
+            let counter
+                  | t == 0     =  ""
+                  | otherwise  =  "(" ++ show c ++ "/" ++ show t ++ ") "
+            let file           =  pt ./. (showEbuildPV . pv) m
+            let uses           =  diffUse (mergeUse (use cfg) (locuse m)) (iuse e)
+            let addEnv         =  [("USE", unwords uses)]
+            let ecmd   f op    =  ebuildBin ++ " " ++ quote f ++ " " ++ op
+            let ecmd'  f op    =  ecmd f op ++
+                                    -- ignore error 127 due to a bug in ebuild
+                                    "; exittemp=$?; if [[ $exittemp -eq 127 ]]; then echo \"The above error is safe to ignore.\"; (exit 0); else (exit $exittemp); fi" 
             env <- getEnvironment
-            putStrLn (inColor cfg Green True Default (">>> merging " ++ showPV (pv m)))
+            putStrLn (inColor cfg Green True Default (">>> merging " ++ counter ++ showPV (pv m)))
             whileSuccess $
               [  systemInEnv cmd (addEnv ++ [ e | e@(v,_) <- env, v /= "USE" ]) |
                  cmd <- [  ecmd file op |
@@ -212,10 +209,10 @@ showMergeLine c n a =  case a of
                          Built v  ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
                          _        ->  ""
 
-processMergeLine :: PortageConfig -> MergeState -> DepString -> Action -> IO ExitCode
-processMergeLine pc s d' a =  case a of
-                                Built v  ->  runEbuild pc s d' v
-                                _        ->  succeed
+processMergeLine :: PortageConfig -> MergeState -> DepString -> ((Int,Int),Action) -> IO ExitCode
+processMergeLine pc s d' ((c,t),a) =  case a of
+                                        Built v  ->  runEbuild pc s d' c t v
+                                        _        ->  succeed
 
 showAllLines :: Config -> Int -> Bool -> [Action] -> String
 showAllLines c n child a =
@@ -263,7 +260,12 @@ doMerge rpc ms ds =
                  | otherwise ->
                       do  d <- expandGoals pc ms' (unwords ds)
                           (_,pkgs,ok) <- depgraph pc ms' d
-                          when (ok && not (mpretend ms')) (merge pc ms' pkgs d)
+                          let  pkgs'  =  filter isBuilt pkgs
+                               count  =  length pkgs'
+                          putStrLn $ show count ++ case count of
+                                                     1 -> " package to merge."
+                                                     _ -> " packages to merge."
+                          when (ok && not (mpretend ms')) (merge pc ms' pkgs' d)
       Nothing     ->  return ()  -- aborted in sanityCheck
 
 -- | Performs a sanity check on the options specified for the "merge" command.
