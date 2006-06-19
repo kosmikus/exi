@@ -41,8 +41,8 @@ ownCacheDir  pt  =  "/var/cache/hdb/dep" ./. pt  -- for non-portage compliant ow
 dbDir            =  "/var/db/pkg"
 
 emergeBin        =  "/usr/bin/emerge"
-ebuildBin        =  "/usr/sbin/ebuild"
-ebuildsh         =  "/usr/sbin/ebuild.sh"
+ebuildBin        =  "/usr/lib/portage/bin/ebuild"
+ebuildsh         =  "/usr/lib/portage/bin/ebuild.sh"
 envUpdateBin     =  "/usr/sbin/env-update"
 
 categoriesFile  pt  =  profilesDir pt ./. "categories"
