@@ -20,6 +20,7 @@ import Portage.Tree
 import Portage.Keyword
 import Portage.Use
 import Portage.UseDefaults
+import Portage.UseMask
 import Portage.Mask
 import Portage.Package
 import Portage.PackageKeywords
@@ -56,10 +57,11 @@ portageConfig =
         ud        <-  if "auto" `contains` useOrder cfg
                         then  computeUseDefaults inst virtuals
                         else  return []
+        usemask   <-  profileUseMask
         -- normalize keywords and USE flags; environment config overrides use.defaults
         cfg       <-  return $ cfg  {  
                                        acceptedKeywords = mergeKeywords [] (acceptedKeywords cfg),
-                                       use = arch cfg : mergeUse [] (use cfg ++ ud ++ use envcfg) ++ expandUse (useExpand cfg)
+                                       use = arch cfg : mergeUse [] (use cfg ++ ud ++ expandUse (useExpand cfg) ++ use envcfg ++ usemask)
                                     }
                           -- the outer (++) for expandUse is to produce the same order as original portage
 
@@ -90,7 +92,7 @@ portageConfig =
         -- USE flag distribution (again, not on the installed tree)
         -- Same thing as for keywords with the environment-specific USE flags.
         uuse      <-  userUseFlags
-        uuse      <-  return $ map (mapUseForPackage (++ use envcfg)) uuse -- environment override
+        uuse      <-  return $ map (mapUseForPackage (++ use envcfg ++ usemask)) uuse -- environment override
         tree      <-  return $ foldl (flip performUseFlags)  tree uuse
         -- keyword masking
         tree      <-  return $ traverseTree (keywordMask cfg) tree
@@ -103,5 +105,5 @@ portageConfig =
         let itree     =  overlayInstalledTree tree inst
         let exp       =  let m = categoryExpand itree in \x -> maybe [] id (M.lookup x m)
 
-        return (PortageConfig cfg tree inst itree virtuals exp system world)
+        return (PortageConfig cfg tree inst itree usemask virtuals exp system world)
 

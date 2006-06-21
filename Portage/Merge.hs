@@ -86,19 +86,19 @@ depgraph pc s d' =
                            do  buildGraphForUDepString d'
                                gr <- gets graph
                                progress Done
-        graphCalcProgressTalk (mverbose s) (config pc) (fst fs)
+        graphCalcProgressTalk (mverbose s) pc (fst fs)
         let gr = graph $ snd $ fs
         let mergeforest  =  dffWith lab' [0] $ gr
         -- note that using postorder in the following is essential for correctness!
         let mergelist    =  concat . postorderF $ mergeforest
         -- Verbose (debug) output.
         when (mverbose s) $ do
-          putStr $ if (mtree s)  then  showForest (showAllLines (config pc)) 0 mergeforest
+          putStr $ if (mtree s)  then  showForest (showAllLines pc) 0 mergeforest
                                  else  unlines $ map show $ mergelist
           putStrLn $ "\nShort version: "
         -- Normal output. (Only if --pretend??)
-        putStr $ if (mtree s)  then  showForest (showMergeLines (config pc)) (-1) mergeforest
-                               else  concatMap (showMergeLine (config pc) 0) mergelist
+        putStr $ if (mtree s)  then  showForest (showMergeLines pc) (-1) mergeforest
+                               else  concatMap (showMergeLine pc 0) mergelist
         let cycles = cyclesFrom gr [top]
         -- If cycles remain, print them.
         when (not (null cycles)) $
@@ -195,48 +195,52 @@ runEbuild pc s d' c t v =
     dps  =  map pFromDepAtom (depStringAtoms d')
     l    =  getLinked v
 
-showMergeLines :: Config -> Int -> Bool -> [Action] -> String
-showMergeLines c n child a =  
+showMergeLines :: PortageConfig -> Int -> Bool -> [Action] -> String
+showMergeLines pc n child a =  
     case a of
-      Built v : _   ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
+      Built v : _   ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant pc v ++ "\n"
       [Top]         ->  ""
       [a] | child   ->  "_ " ++ replicate (1 + 2*n) ' ' ++ (showPV . pv . meta . fromJust . getVariant $ a) ++ "\n"
-      _ : a'        ->  showMergeLines c n child a'
+      _ : a'        ->  showMergeLines pc n child a'
       []            ->  ""
+  where c = config pc
 
-showMergeLine :: Config -> Int -> Action -> String
-showMergeLine c n a =  case a of
-                         Built v  ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
-                         _        ->  ""
+showMergeLine :: PortageConfig -> Int -> Action -> String
+showMergeLine pc n a =
+    case a of
+      Built v  ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant pc v ++ "\n"
+      _        ->  ""
+  where c = config pc
 
 processMergeLine :: PortageConfig -> MergeState -> DepString -> ((Int,Int),Action) -> IO ExitCode
 processMergeLine pc s d' ((c,t),a) =  case a of
                                         Built v  ->  runEbuild pc s d' c t v
                                         _        ->  succeed
 
-showAllLines :: Config -> Int -> Bool -> [Action] -> String
-showAllLines c n child a =
+showAllLines :: PortageConfig -> Int -> Bool -> [Action] -> String
+showAllLines pc n child a =
     case a of
       [Top]          ->  ""
       [Available v]  ->  "_ " ++ replicate (1 + 2*n) ' ' ++ (showPV . pv . meta $ v) ++ "\n"
-      Built v : _    ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant c v ++ "\n"
-      _ : a'         ->  showAllLines c n child a'
+      Built v : _    ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant pc v ++ "\n"
+      _ : a'         ->  showAllLines pc n child a'
       []             ->  ""
+  where c = config pc
 
 -- | Prints the progress of a graph calculation.
 -- In particular, it removes the spinner if we're not running on a terminal.
 graphCalcProgressTalk :: Bool   -- ^ Verbose
-              -> Config
+              -> PortageConfig
               -> [Progress]
               -> IO ()
-graphCalcProgressTalk verbose conf ps = do
+graphCalcProgressTalk verbose pc ps = do
     putStr "Calculating dependencies: "
     when verbose $ putStr "\n"
     onTerminal <- hIsTerminalDevice stdout
     let pr | verbose        = putStrLn . concat
            | not onTerminal = putStrLn . last
            | otherwise      = withoutBuffering . putStrLn . spin 10 . concat
-    pr . foldr (showProgress verbose conf) [] $ ps
+    pr . foldr (showProgress verbose pc) [] $ ps
     putStrLn "\n"  
 
 -- | Temporarily disables buffering on stdout.
@@ -338,44 +342,44 @@ showNode :: Bool -> DGraph -> Int -> String
 showNode v gr n = (show . fromJust . lab gr $ n) ++ number
   where number = if v then " [" ++ show n ++ "]" else ""
 
-showProgress :: Bool -> Config -> Progress -> [String] -> [String]
+showProgress :: Bool -> PortageConfig -> Progress -> [String] -> [String]
 showProgress True   =  showProgressLong
 showProgress False  =  showProgressShort
 
-showProgressLong c (LookAtEbuild pv o)     r   =  (showPV pv ++ " " ++ showOriginLong o ++ "\n") : r
-showProgressLong c (AddEdge n1 n2 d)       r   =  ("added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d ++ "\n") : r
-showProgressLong c (AddNode nm v)          r   =  ("added nodes " ++ showNodeMap nm ++ " " ++ showVariant c v ++ "\n") : r
-showProgressLong c (Message s)             r   =  (s ++ "\n") : r
-showProgressLong c (Backtrack Nothing f)   r   =  showFailure c f : r
-showProgressLong c (Backtrack (Just s) f)  r   =  ("\n" ++ showFailure c f ++ printStackTrace s) : []
-showProgressLong c Done                    r   =  "\nGraph complete." : []
+showProgressLong pc (LookAtEbuild pv o)     r   =  (showPV pv ++ " " ++ showOriginLong o ++ "\n") : r
+showProgressLong pc (AddEdge n1 n2 d)       r   =  ("added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d ++ "\n") : r
+showProgressLong pc (AddNode nm v)          r   =  ("added nodes " ++ showNodeMap nm ++ " " ++ showVariant pc v ++ "\n") : r
+showProgressLong pc (Message s)             r   =  (s ++ "\n") : r
+showProgressLong pc (Backtrack Nothing f)   r   =  showFailure pc f : r
+showProgressLong pc (Backtrack (Just s) f)  r   =  ("\n" ++ showFailure pc f ++ printStackTrace s) : []
+showProgressLong pc Done                    r   =  "\nGraph complete." : []
 
-showProgressShort c (LookAtEbuild pv o)     r  =  showOriginShort o : r
-showProgressShort c (AddEdge _ _ _)         r  =  r
-showProgressShort c (AddNode _ _)           r  =  r
-showProgressShort c (Message s)             r  =  r
-showProgressShort c (Backtrack Nothing f)   r  =  "B" : r
-showProgressShort c (Backtrack (Just s) f)  r  =  ("B" ++ "\n\n" ++ showFailure c f ++ printStackTrace s) : []
-showProgressShort c Done                    r  =  "\nDone." : []
+showProgressShort pc (LookAtEbuild pv o)     r  =  showOriginShort o : r
+showProgressShort pc (AddEdge _ _ _)         r  =  r
+showProgressShort pc (AddNode _ _)           r  =  r
+showProgressShort pc (Message s)             r  =  r
+showProgressShort pc (Backtrack Nothing f)   r  =  "B" : r
+showProgressShort pc (Backtrack (Just s) f)  r  =  ("B" ++ "\n\n" ++ showFailure pc f ++ printStackTrace s) : []
+showProgressShort pc Done                    r  =  "\nDone." : []
 
-showFailure c (AllMasked da vs) =
-    inColor c Red True Default ("All variants that could satisfy " ++ show da ++ " are masked.\n" ++ "Candidates:\n") ++ 
-    unlines (map (showVariantMasked c) vs)
-showFailure c (NoneInstalled da vs) =
-    inColor c Red True Default ("None of the variants that could satisfy " ++ show da ++ " are installed.\n") ++
+showFailure pc (AllMasked da vs) =
+    inColor (config pc) Red True Default ("All variants that could satisfy " ++ show da ++ " are masked.\n" ++ "Candidates:\n") ++ 
+    unlines (map (showVariantMasked pc) vs)
+showFailure pc (NoneInstalled da vs) =
+    inColor (config pc) Red True Default ("None of the variants that could satisfy " ++ show da ++ " are installed.\n") ++
     "Candidates:\n" ++
-    unlines (map (showVariantMasked c) vs)
-showFailure c (Block (Blocker v1 da _) v2) =
-    inColor c Red True Default ("The package\n" ++ showVariant c v1 ++ "\nis blocked (" ++ show da ++ ") by the package\n" ++
-    showVariant c v2 ++ "\n")
-showFailure c (Cycle p) =
-    unlines (  inColor c Red True Default ("Could not resolve cyclic dependencies in graph:") : 
-               map (showStackLine c) p)
-showFailure c (SlotConflict v1 v2) =
-    inColor c Red True Default ("Dependencies require two incompatible variants simultaneously.\n") ++ 
-    showVariantMasked c v1 ++ "\n" ++
-    showVariantMasked c v2 ++ "\n"
-showFailure c (Other s) = inColor c Red True Default s ++ "\n"
+    unlines (map (showVariantMasked pc) vs)
+showFailure pc (Block (Blocker v1 da _) v2) =
+    inColor (config pc) Red True Default ("The package\n" ++ showVariant pc v1 ++ "\nis blocked (" ++ show da ++ ") by the package\n" ++
+    showVariant pc v2 ++ "\n")
+showFailure pc (Cycle p) =
+    unlines (  inColor (config pc) Red True Default ("Could not resolve cyclic dependencies in graph:") : 
+               map (showStackLine (config pc)) p)
+showFailure pc (SlotConflict v1 v2) =
+    inColor (config pc) Red True Default ("Dependencies require two incompatible variants simultaneously.\n") ++ 
+    showVariantMasked pc v1 ++ "\n" ++
+    showVariantMasked pc v2 ++ "\n"
+showFailure pc (Other s) = inColor (config pc) Red True Default s ++ "\n"
 
 printStackTrace :: DepState -> String
 printStackTrace s =

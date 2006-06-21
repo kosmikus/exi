@@ -7,6 +7,7 @@
 -}
 
 module Portage.Ebuild
+  (module Portage.Ebuild, module Portage.Ebuild.Type)
   where
 
 import System.Environment
@@ -17,11 +18,13 @@ import System.Exit
 import Data.Monoid
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.List (isPrefixOf, intersperse)
+import Data.List (isPrefixOf, intersperse, (\\))
 import Control.Monad
 import Control.Exception
 import Prelude hiding (catch)
 
+import Portage.Ebuild.Type
+import Portage.PortageConfig.Type
 import Portage.Config
 import Portage.Dependency
 import Portage.Use
@@ -38,88 +41,10 @@ import Portage.Profile
 import Portage.Cache
 import Portage.AnsiColor
 
--- The ebuild cache format (as created by calling @ebuild depend@) is as follows:
--- DEPEND
--- RDEPEND
--- SLOT
--- SRC_URI
--- RESTRICT
--- HOMEPAGE
--- LICENSE
--- DESCRIPTION
--- KEYWORDS
--- INHERITED
--- IUSE
--- CDEPEND
--- PDEPEND
--- PROVIDE
--- In addition, we store the tree in which the ebuild is located.
-
-data Ebuild = Ebuild  {
-                         depend       ::  DepString,
-                         rdepend      ::  DepString,
-                         slot         ::  String,
-                         src_uri      ::  String,
-                         restrict     ::  [String],
-                         homepage     ::  String,
-                         license      ::  String,
-                         description  ::  String,
-                         keywords     ::  [Keyword],
-                         inherited    ::  [Eclass],
-                         iuse         ::  [UseFlag],
-                         cdepend      ::  DepString,
-                         pdepend      ::  DepString,
-                         provide      ::  DepString,
-                         eapi         ::  String
-                      }
-  deriving (Show,Eq)
-
--- | The 'EbuildMeta' type contains additional information about an ebuild
---   that is not directly stored within the ebuild file or cache entry.
-data EbuildMeta =  EbuildMeta
-                      {
-                         pv           ::  PV,
-                         location     ::  TreeLocation,
-                         masked       ::  [Mask],           -- ^ empty means the ebuild is visible
-                         locuse       ::  [UseFlag],        -- ^ local USE flags
-                         lockey       ::  [Keyword],        -- ^ local ACCEPT_KEYWORDS
-                         origin       ::  EbuildOrigin      -- ^ where did we get this data from?
-                      }
-  deriving (Show)
-
-instance Eq EbuildMeta where
-  EbuildMeta { pv = pv1, location = loc1 } == EbuildMeta { pv = pv2, location = loc2 } =
-     pv1 == pv2 && loc1 == loc2
-
-instance Ord EbuildMeta where
-  compare (EbuildMeta { pv = pv1, location = loc1 }) (EbuildMeta { pv = pv2, location = loc2 }) =
-     compare pv1 pv2 `mappend` compare loc1 loc2
 
 pvs :: Variant -> PVS
 pvs v = addSlot (pv . meta $ v) (slot . ebuild $ v)
 
-data EbuildOrigin = FromCache | CacheRegen | EclassDummy | FromInstalledDB | IsProvided
-  deriving (Show,Eq)
-
-data TreeLocation  =  Installed
-                   |  Provided       FilePath               -- ^ in which file?
-                   |  PortageTree    FilePath Link
-  deriving (Show)
-
-instance Eq TreeLocation where
-  Installed        ==  Installed        =  True
-  Provided _       ==  Provided _       =  True
-  PortageTree x _  ==  PortageTree y _  =  x == y 
-  _                ==  _                =  False
-
-instance Ord TreeLocation where
-  compare Installed Installed                  =  EQ
-  compare Installed _                          =  LT
-  compare (Provided _) Installed               =  GT
-  compare (Provided _) (Provided _)            =  EQ
-  compare (Provided _) _                       =  LT
-  compare (PortageTree x _) (PortageTree y _)  =  compare x y
-  compare (PortageTree _ _) _                  =  GT
 
 showLocation :: Config -> TreeLocation -> String
 showLocation c Installed          =  " (installed)"
@@ -137,12 +62,6 @@ isAvailable Installed     =  True
 isAvailable (Provided _)  =  True
 isAvailable _             =  False
 
--- | The 'Link' is used to link an uninstalled variant to an installed variant
---   of the same slot and to an installed variant of another slot. 
---   We can thus say whether selecting this variant would be
---   an up- or a downgrade, and we can compare use flags.
-data Link          =  Linked     (Maybe Variant) (Maybe Variant)   -- ^ installed variant, and installed variant of other slot
-  deriving (Show,Eq)
 
 showLink :: Link -> String
 showLink (Linked Nothing Nothing)   =  ""
@@ -154,14 +73,6 @@ getLinked v = case (location . meta) v of
                 PortageTree _ (Linked (Just l) _)  ->  Just l
                 _                                  ->  Nothing
 
--- The list added to KeywordMasked is supposed not to contain keywords
--- that do not affect the current arch.
-data Mask          =  KeywordMasked  [Keyword]              -- ^ reasoning
-                   |  HardMasked     FilePath [String]      -- ^ filename and reason
-                   |  ProfileMasked  FilePath               -- ^ in which file?
-                   |  NotInProfile                          -- ^ without further reason
-                   |  Shadowed       TreeLocation           -- ^ by which tree?
-  deriving (Show,Eq)
 
 hardMask :: Mask -> String
 hardMask (HardMasked f r) = "\n" ++ unlines r
@@ -173,44 +84,32 @@ showMasked (HardMasked f r) = "(hardmasked in " ++ f ++ ")"
 showMasked (ProfileMasked f) = "(excluded from profile in " ++ f ++")"
 showMasked (Shadowed t) = "(shadowed by " ++ showTreeLocation t ++ ")"
 
--- | A variant is everything that makes a specific instance of an ebuild.
---   It's supposed to be more than this datatype currently encodes.
-data Variant =  Variant
-                  {
-                     meta    ::  EbuildMeta,
-                     ebuild  ::  Ebuild
-                  }
-  deriving (Show)
-
-instance Eq Variant where
-  Variant { meta = m1 } == Variant { meta = m2 } = m1 == m2
-
-instance Ord Variant where
-  compare (Variant { meta = m1 }) (Variant { meta = m2 }) = compare m1 m2  
-
-showVariant :: Config -> Variant -> String
-showVariant cfg v@(Variant m e)  =  showVariant' cfg v
-                                    ++ " " ++ unwords (map showMasked (masked m))
-                                    ++ useflags
-  where useflags  =  let  c = showUseFlags cfg v (getLinked v)
+showVariant :: PortageConfig -> Variant -> String
+showVariant pc v@(Variant m e)  =  showVariant' (config pc) v
+                                     ++ " " ++ unwords (map showMasked (masked m))
+                                     ++ useflags
+  where useflags  =  let  c = showUseFlags pc v (getLinked v)
                      in   if null c then "" else c
 
-showUseFlags :: Config -> Variant -> Maybe Variant -> String
-showUseFlags cfg v@(Variant m e) Nothing                    =  showUseFlags cfg v (Just v)
-showUseFlags cfg v@(Variant m e) (Just v'@(Variant m' e'))  =
-  let  nd        =  diffUse (mergeUse (use cfg) (locuse m)) (iuse e)
+showUseFlags :: PortageConfig -> Variant -> Maybe Variant -> String
+showUseFlags pc v@(Variant m e) Nothing                    =  showUseFlags pc v (Just v)
+showUseFlags pc v@(Variant m e) (Just v'@(Variant m' e'))  =
+  let  cfg       =  config pc
+       nd        =  diffUse (mergeUse (use cfg) (locuse m)) (iuse e)
        od        =  diffUse (mergeUse (use cfg) (locuse m')) (iuse e')
        d         =  diffExtUse nd od
+       masked    =  usemask pc
+       d'        =  filter (\ (f,_) -> not (f `elem` masked)) d
        expanded' =  map fst (useExpand cfg)
-       grouped   =  unexpandExtUses expanded' d
+       grouped   =  unexpandExtUses expanded' d'
        sorted    =  sortByList grouped fst ("USE" : expanded')
   in   unwords $ map (\ (n,f) -> n ++ "=\"" ++ (unwords . map (showExtUseFlag cfg)) f ++ "\"") sorted
 
 -- | Like "showVariant", but additionally print the reason for hard-masking.
 --   Takes up more than one line, therefore not suitable in a context where
 --   space is critical.
-showVariantMasked :: Config -> Variant -> String
-showVariantMasked cfg v@(Variant m e)  = showVariant cfg v ++ concatMap hardMask (masked m)
+showVariantMasked :: PortageConfig -> Variant -> String
+showVariantMasked pc v@(Variant m e)  = showVariant pc v ++ concatMap hardMask (masked m)
 
 showVariant' :: Config -> Variant -> String
 showVariant' cfg (Variant m e)  =  inColor cfg Green False Default (showPV (pv m)) ++

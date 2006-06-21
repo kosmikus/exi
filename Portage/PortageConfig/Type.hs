@@ -10,9 +10,10 @@ module Portage.PortageConfig.Type
   where
 
 import Portage.Config
-import Portage.Tree
+import Portage.Tree.Type
 import Portage.Package
 import Portage.Dependency
+import Portage.Use
 
 data PortageConfig =  PortageConfig
                         {
@@ -20,6 +21,7 @@ data PortageConfig =  PortageConfig
                            tree      ::  Tree,
                            inst      ::  Tree,
                            itree     ::  Tree,
+			   usemask   ::  [UseFlag],
                            virtuals  ::  DepAtom -> Maybe DepTerm,
                            expand    ::  Package -> [Category],
                            system    ::  DepString,                 -- ^ system target

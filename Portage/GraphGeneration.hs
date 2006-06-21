@@ -65,9 +65,9 @@ instance Show Action where
   show (Built        v) = "B  " ++ showPV (pv (meta v))
   show Top              = "/"
 
-showAction :: Config -> Action -> String
-showAction c (Built        v) = "B  " ++ E.showVariant c v
-showAction c Top              = "/"
+showAction :: PortageConfig -> Action -> String
+showAction pc (Built        v) = "B  " ++ E.showVariant pc v
+showAction pc Top              = "/"
 
 data DepState =  DepState
                    {

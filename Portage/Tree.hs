@@ -3,10 +3,10 @@
     Stability   :  provisional
     Portability :  haskell98
 
-    The data structure that contains a portage tree.
+    Operations on the portage tree.
 -}
 
-module Portage.Tree
+module Portage.Tree (module Portage.Tree.Type, module Portage.Tree)
   where
 
 import System.IO
@@ -17,6 +17,7 @@ import Data.Map (Map)
 import Data.List
 import Data.Maybe
 
+import Portage.Tree.Type
 import Portage.Package
 import Portage.Ebuild
 import Portage.Eclass (Eclass, EclassMeta(EclassMeta))
@@ -26,15 +27,6 @@ import Portage.Config
 import Portage.Utilities
 import Portage.Constants
 import Portage.Shell
-
-data Tree =  Tree
-               {
-                  eclasses  ::  Eclasses,
-                  ebuilds   ::  Ebuilds
-               }
-
-type Eclasses  =  Map Eclass EclassMeta
-type Ebuilds   =  Map Category (Map Package [Variant])
 
 -- | Utility function for maps. Updates a map but uses a default if
 --   an updated key is not yet present.

@@ -25,6 +25,7 @@ packageUnMask    =  "package.unmask"
 packageProvided  =  "package.provided"
 virtuals         =  "virtuals"
 packages         =  "packages"
+useMask          =  "use.mask"
 
 profileParent    =  "parent"
 
