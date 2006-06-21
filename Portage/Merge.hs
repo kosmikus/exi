@@ -266,7 +266,7 @@ doMerge rpc ms ds =
                           (_,pkgs,ok) <- depgraph pc ms' d
                           let  pkgs'  =  filter isBuilt pkgs
                                count  =  length pkgs'
-                          putStrLn $ show count ++ case count of
+                          putStrLn $ "\n" ++ show count ++ case count of
                                                      1 -> " package to merge."
                                                      _ -> " packages to merge."
                           when (ok && not (mpretend ms')) (merge pc ms' pkgs' d)

@@ -86,8 +86,8 @@ showMasked (Shadowed t) = "(shadowed by " ++ showTreeLocation t ++ ")"
 
 showVariant :: PortageConfig -> Variant -> String
 showVariant pc v@(Variant m e)  =  showVariant' (config pc) v
-                                     ++ " " ++ unwords (map showMasked (masked m))
-                                     ++ useflags
+                                     ++ concatMap (\x -> ' ' : showMasked x) (masked m)
+                                     ++ " " ++ useflags
   where useflags  =  let  c = showUseFlags pc v (getLinked v)
                      in   if null c then "" else c
 
