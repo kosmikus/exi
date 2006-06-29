@@ -9,7 +9,7 @@
 module Portage.Version
   (
   Version(),
-  Suffix(),
+  Suffix(..),
   Version'(..),
   projectVersion,
   makeVersion,
