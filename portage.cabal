@@ -42,6 +42,7 @@ Exposed-Modules:	Portage.AnsiColor,
 			Portage.UseDefaults,
 			Portage.Constants,
 			Portage.Cache
+
 Executable:		exi
 Main-Is:		Main.hs
 Ghc-Options:		-O
