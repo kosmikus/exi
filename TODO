@@ -37,5 +37,4 @@
   indicator.
 
 * implement --newuse
-* implement use.mask
-
+* implement USE_EXPAND_HIDDEN
