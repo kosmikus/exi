@@ -218,15 +218,16 @@ buildGraphForDepAtom da
                  p     =  pFromDepAtom da
                  -- it might be a good idea to speed up the process of finding
                  -- the correct variants by preferring currently active variants
+                 guse  =  use (config pc)
                  vs    =  findVersions t da
-            case sselect s da vs of
+            case sselect s guse da vs of
               Reject f      ->  failReject f
               Accept vs ns  ->
                 do   v@(Variant m e) <- lchoiceM (Just p) (map return vs ++ failChoice)
                      progress (Message $ "CHOOSING: " ++ E.showVariant' (config pc) v ++ " (out of " ++ show (length vs) ++ ")")
                      let  avail  =  E.isAvailable (location m)  -- installed or provided?
+                          luse   =  mergeUse guse (locuse m)
                           stop   =  avail && sstop s v  -- if it's an installed ebuild, we can decide to stop here!
-                          luse   =  mergeUse (use (config pc)) (locuse m)
                      -- set new local USE context
                      withLocUse luse $ withStrategy ns $ do
                        progress (LookAtEbuild (pv (meta v)) (origin (meta v)))

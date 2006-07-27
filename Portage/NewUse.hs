@@ -33,6 +33,17 @@ diffExtUse xs ys =  let  all  =  S.fromList (ys ++ map turn ys)
   where  turn ('-':xs)  =  xs
          turn xs        =  '-':xs
 
+-- | Computes USE flag difference information.
+--   Takes four USE lists: use flags for new ebuild,
+--                         IUSE for new ebuild,
+--                         use flags for old ebuild,
+--                         IUSE for old ebuild.
+extUse :: [UseFlag] -> [UseFlag] -> [UseFlag] -> [UseFlag] -> [ExtUseFlag]
+extUse nu ni ou oi =  diffExtUse (diffUse nu ni) (diffUse ou oi)
+
+-- | Reports if there are USE flag differences between two ebuilds.
+newUse :: [UseFlag] -> [UseFlag] -> [UseFlag] -> [UseFlag] -> Bool
+newUse nu ni ou oi =  (not . null . filter (\ (_,b) -> b == Just True)) (extUse nu ni ou oi)
 
 -- | Shows a use flag with additional information, in color.
 showExtUseFlag :: Config -> ExtUseFlag -> String

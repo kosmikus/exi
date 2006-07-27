@@ -95,9 +95,8 @@ showUseFlags :: PortageConfig -> Variant -> Maybe Variant -> String
 showUseFlags pc v@(Variant m e) Nothing                    =  showUseFlags pc v (Just v)
 showUseFlags pc v@(Variant m e) (Just v'@(Variant m' e'))  =
   let  cfg       =  config pc
-       nd        =  diffUse (mergeUse (use cfg) (locuse m)) (iuse e)
-       od        =  diffUse (mergeUse (use cfg) (locuse m')) (iuse e')
-       d         =  diffExtUse nd od
+       d         =  extUse (mergeUse (use cfg) (locuse m))   (iuse e)
+                           (mergeUse (use cfg) (locuse m'))  (iuse e')
        masked    =  usemask pc
        d'        =  filter (\ (f,_) -> not (f `elem` masked)) d
        expanded' =  map fst (useExpand cfg)

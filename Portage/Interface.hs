@@ -56,6 +56,7 @@ mergeCmd =  Command
                 state = MergeState {  mpretend = False,
                                       mupdate = False,
                                       mdeep = False,
+                                      mnewuse = False,
                                       munmask = False,
                                       mtree = False,
                                       moneshot = False,
@@ -79,6 +80,7 @@ mergeOpts :: Bool -> [OptDescr (MergeState -> MergeState)]
 mergeOpts showPrivate =
     [Option "u" ["update"] (NoArg (\s -> s { mupdate = True })) "update variants",
      Option "D" ["deep"] (NoArg (\s -> s { mdeep = True, mupdate = True })) "deep update",
+     Option "N" ["newuse"] (NoArg (\s -> s { mnewuse = True, mupdate = True })) "recompile on USE flag change",
      Option "p" ["pretend"] (NoArg (\s -> s { mpretend = True })) "calculate dependencies only",
      Option "M" ["unmask"] (NoArg (\s -> s { munmask = True, mpretend = True })) "unmask if necessary",
      Option "t" ["tree"] (NoArg (\s -> s { mtree = True })) "display packages to merge in tree form",
