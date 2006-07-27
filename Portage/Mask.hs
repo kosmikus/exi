@@ -30,9 +30,10 @@ data Masking  =  Masking
                    {
                       mreason   ::  [String],
                       mfile     ::  FilePath,
-                      mdepatom  ::  DepAtom
+                      mdepatom  ::  DepAtom,
+                      mnegate   ::  Bool
                    }
-  deriving (Eq,Show)
+  deriving (Eq,Ord,Show)
 
 -- | Parse a @package.mask@ (or @package.unmask@) file.
 parseMask :: FilePath -> String -> [Masking]
@@ -41,14 +42,23 @@ parseMask f = parseMaskByLine f [] [] . lines
 parseMaskByLine :: FilePath -> [String] -> [String] -> [String] -> [Masking]
 parseMaskByLine f acc facc (l@('#':_) : ls)  =  let  nacc = l : acc
                                                 in   parseMaskByLine f nacc (reverse nacc) ls
+parseMaskByLine f acc facc (l@('-':_) : ls)  =  Masking facc f (getDepAtom l) True  : parseMaskByLine f [] facc ls
 parseMaskByLine f acc facc (l : ls)
   | all isSpace l                            =  parseMaskByLine f [] [] ls
-  | otherwise                                =  Masking facc f (getDepAtom l) : parseMaskByLine f [] facc ls
+  | otherwise                                =  Masking facc f (getDepAtom l) False : parseMaskByLine f [] facc ls
 parseMaskByLine f acc facc []                =  []
 
 
 readMaskFile :: FilePath -> IO [Masking]
 readMaskFile f = fmap (parseMask f) (strictReadFileIfExists f)
+
+normalizeMasking :: [Masking] -> [Masking]
+normalizeMasking xs  =  S.elems $
+                        foldl  (\s m -> if mnegate m  then  S.delete m s
+                                                      else  S.insert m s
+                               )
+                               (S.empty)
+                               xs
 
 
 globalMask   ::  Config -> IO [Masking]
@@ -60,16 +70,16 @@ userUnMask   ::  IO [Masking]
 globalMask cfg  =
     unsafeInterleaveIO $
     do  r <- findOverlayFile cfg (\pt -> profilesDir pt ./. packageMask) (readMaskFile) (++)
-        return $ maybe [] id r
+        return $ maybe [] normalizeMasking r
 
 profileMask     =  unsafeInterleaveIO $ 
-                   fmap concat (readProfileFile packageMask readMaskFile)
+                   fmap (normalizeMasking . concat) (readProfileFile packageMask readMaskFile)
 
 userMask        =  unsafeInterleaveIO $
-                   readMaskFile (localConfigDir ./. packageMask)
+                   fmap normalizeMasking (readMaskFile (localConfigDir ./. packageMask))
 
 userUnMask      =  unsafeInterleaveIO $
-                   readMaskFile (localConfigDir ./. packageUnMask)
+                   fmap normalizeMasking (readMaskFile (localConfigDir ./. packageUnMask))
 
 
 performProfilePackage :: ProfilePackage -> Tree -> Tree
