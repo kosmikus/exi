@@ -207,7 +207,7 @@ buildGraphForDepAtom da
                                         progress (Backtrack b f)
                                         backtrack
                         p = pFromDepAtom da
-                   in   chooseVariant [progress (Message "CONTINUING") >> continue (== Just p) (\s -> s { saved = M.insertWith (++) p [Blocker undefined {- TODO -} da Nothing] (saved s) })] reject
+                   in   chooseVariant [progress (Message "CONTINUING") >> continue (== Just p) (\s -> s { saved = M.insertWith (++) p [Blocker (error "my brain just exploded") {- TODO -} da Nothing] (saved s) })] reject
   where
     -- failChoice: what to do if all acceptable ebuilds fail (nothing normally, but error for blockers)
     -- failReject: what to do if all ebuilds are masked (complain about blocker instead?)
