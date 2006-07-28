@@ -80,10 +80,8 @@ mergeEnvMap :: EnvMap -> EnvMap -> EnvMap
 mergeEnvMap m1 m2 =  M.unionWithKey
                        (\k -> if S.member k incrementals
                               then (\x y -> x ++ " " ++ y)
-                              else (<<<))
+                              else const id) -- prefer the second, note that an empty setting still overwrites!
                        m1 m2
-  where  x <<< y  |  null y     =  x
-                  |  otherwise  =  y
 
 incrementals   =  S.fromList  [  "USE",
                                  "USE_EXPAND",
