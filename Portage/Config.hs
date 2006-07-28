@@ -87,7 +87,6 @@ mergeEnvMap m1 m2 =  M.unionWithKey
 
 incrementals   =  S.fromList  [  "USE",
                                  "USE_EXPAND",
-                                 "PORTDIR_OVERLAY",
                                  "CONFIG_PROTECT",
                                  "FEATURES",
                                  "ACCEPT_KEYWORDS"  ]
