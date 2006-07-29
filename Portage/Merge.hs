@@ -339,7 +339,7 @@ complete pc xs = complete pc [last xs] -- this case should never be needed
                                        -- since the bash completion function
                                        -- only sends one word to complete
 
-showNode :: Bool -> DGraph -> Int -> String
+showNode :: Bool -> Graph -> Int -> String
 showNode v gr n = (show . fromJust . lab gr $ n) ++ number
   where number = if v then " [" ++ show n ++ "]" else ""
 
@@ -387,17 +387,17 @@ printStackTrace s =
     let  c = config . pconfig $ s
     in   unlines (inColor c Red True Default "Stack:" : map (showStackLine c) (stackTrace s))
 
-showStackLine :: Config -> (Variant,Maybe DepType) -> String
+showStackLine :: Config -> (Variant,Maybe SavedDep) -> String
 showStackLine c (v,d)  =  showVariant' c v ++ showDepend d
   where
-    showDepend Nothing                     =  ""
-    showDepend (Just Meta)                 =  ""
-    showDepend (Just (Depend False da))    =  " depends on " ++ show da
-    showDepend (Just (RDepend False da))   =  " runtime-depends on " ++ show da
-    showDepend (Just (PDepend False da))   =  " post-depends on " ++ show da
-    showDepend _                           =  " (illegal dependency)"
+    showDepend Nothing                                =  ""
+    showDepend (Just Meta)                            =  ""
+    showDepend (Just (SavedDep Depend _ False da))    =  " depends on " ++ show da
+    showDepend (Just (SavedDep RDepend _ False da))   =  " runtime-depends on " ++ show da
+    showDepend (Just (SavedDep PDepend _ False da))   =  " post-depends on " ++ show da
+    showDepend _                                      =  " (illegal dependency)"
 
-stackTrace :: DepState -> [(Variant,Maybe DepType)]
+stackTrace :: DepState -> [(Variant,Maybe SavedDep)]
 stackTrace s =
     let  g   =  graph s
          n   =  built (nodemap (callback s))

@@ -18,6 +18,7 @@ import Portage.Package
 import Portage.Ebuild
 import Portage.Use
 import Portage.NewUse
+import Portage.Config
 
 data Selection  =  Accept   [Variant] Strategy
                 |  Reject   Failure
@@ -32,17 +33,27 @@ data Strategy =  Strategy
                       sbacktrack  ::  Failure -> Bool
                    }
 
-data DepType = Depend        Bool DepAtom
-             | RDepend       Bool DepAtom
-             | PDepend       Bool DepAtom
-             | Meta                        -- ^ meta-logic
+-- | Stores a dependency.
+data SavedDep  =  SavedDep  DepType
+                            Variant                      -- origin (target if reversed?) of the dependency
+                            Bool                         -- reversed direction / blockers?
+                            DepAtom
+               |  Meta                                   -- meta-logic
+  deriving (Eq,Show)
+
+showSavedDep :: Config -> SavedDep -> String
+showSavedDep c (SavedDep dt v b a) = show dt ++ " " ++ showVariant' c v ++ " " ++ show b ++ " " ++ show a
+
+data DepType   =  Depend
+               |  RDepend
+               |  PDepend
   deriving (Eq,Show)
 
 data Failure  =  AllMasked DepAtom [Variant]
               |  NoneInstalled DepAtom [Variant]
               |  SlotConflict Variant Variant
               |  Block Blocker Variant
-              |  Cycle [(Variant,Maybe DepType)]
+              |  Cycle [(Variant,Maybe SavedDep)]
               |  Other String
   deriving (Eq,Show)
 

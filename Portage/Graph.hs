@@ -215,14 +215,19 @@ buildGraphForDepAtom da
                                                            else  return () -- 4.
                   )
                   (findVersions t (unblock da))
-    | otherwise =  let  reject f =  do  ds <- get
-                                        s  <- gets strategy
-                                        let  b  |  sbacktrack s f  =  Nothing
-                                                |  otherwise       =  Just ds
-                                        progress (Backtrack b f)
-                                        backtrack
-                        p = pFromDepAtom da
-                   in   chooseVariant [progress (Message "CONTINUING") >> continue (== Just p) (\s -> s { saved = M.insertWith (++) p [Blocker (error "my brain just exploded") {- TODO -} da Nothing] (saved s) })] reject
+    | otherwise =  let  reject f  =  do  ds <- get
+                                         s  <- gets strategy
+                                         let  b  |  sbacktrack s f  =  Nothing
+                                                 |  otherwise       =  Just ds
+                                         progress (Backtrack b f)
+                                         backtrack
+                        p         =  pFromDepAtom da
+                        choice    =  [  progress (Message "CONTINUING") >>
+                                        continue  (== Just p) 
+                                                  (\s -> s { saved =  M.insertWith (++) p
+                                                                        [Blocker (error "my brain just exploded") {- TODO -} da Nothing] (saved s) })
+                                     ]
+                   in   chooseVariant choice reject
   where
     -- failChoice: what to do if all acceptable ebuilds fail (nothing normally, but error for blockers)
     -- failReject: what to do if all ebuilds are masked (complain about blocker instead?)
@@ -295,18 +300,18 @@ hasAvailableHistory g n =
 --   with an outgoing PDEPEND, we redirect incoming DEPENDs and RDEPENDs from within 
 --   the cycle to the Built state.
 -- This is currently very fragile w.r.t. ordering of the resolutions.
-resolveCycle :: [Node] -> DepType -> GG ()
-resolveCycle cnodes dt = 
+resolveCycle :: [Node] -> SavedDep -> GG ()
+resolveCycle cnodes sd = 
     do  g <- gets graph
         let  cedges  =  zipWith findEdge (map (out g) cnodes) (tail cnodes)
-                        ++ [(s0,t0,dt)]
+                        ++ [(s0,t0,sd)]
         progress (Message (show cnodes ++ "\n" ++ show cedges))
         firstM  (  map (resolvePDependCycle cedges) (filter isPDependEdge cedges) ++
                    (map  (\ (a',v',v) -> resolveBootstrapCycle cedges a' v' v)
                          (detectBootstrapCycle g cnodes)))
                 (do  ds  <-  get
                      s   <-  gets strategy
-                     let  f                     =  Cycle (cycleTrace ds cnodes dt)
+                     let  f                     =  Cycle (cycleTrace ds cnodes sd)
                           b  |  sbacktrack s f  =  Nothing
                              |  otherwise       =  Just ds
                      progress (Backtrack b f)
@@ -320,7 +325,7 @@ resolveCycle cnodes dt =
        concatMap (maybeToList . hasUpgradeHistory g) ns
        ++ concatMap (maybeToList . hasAvailableHistory g) ns
 
-    resolveBootstrapCycle :: [LEdge DepType] -> Node -> Variant -> Variant -> GG Bool
+    resolveBootstrapCycle :: [LEdge SavedDep] -> Node -> Variant -> Variant -> GG Bool
     resolveBootstrapCycle cedges a' v' v =
         do
             progress (Message "trying to resolve bootstrap cycle")
@@ -336,7 +341,7 @@ resolveCycle cnodes dt =
               else do  let (s',t',d'):_ = incoming
                        removeEdge s' t'
                        -- register original edge, if not selected for removal
-                       c0 <- if s' /= s0 then registerEdge s0 t0 dt else return Nothing
+                       c0 <- if s' /= s0 then registerEdge s0 t0 sd else return Nothing
                        -- check if t' is still reachable from the top;
                        -- (this is a bit subtle: if it is not, it'd be possible
                        -- to `lose' parts of the graph by the edge removal)
@@ -352,7 +357,7 @@ resolveCycle cnodes dt =
                          else  do  progress (Message $ "unsuccessful attempt to resolve bootstrap cycle")
                                    return False
 
-    resolvePDependCycle :: [LEdge DepType] -> LEdge DepType -> GG Bool
+    resolvePDependCycle :: [LEdge SavedDep] -> LEdge SavedDep -> GG Bool
     resolvePDependCycle cedges (s,t,d) =
         do
             progress (Message "trying to resolve PDEPEND cycle")
@@ -370,7 +375,7 @@ resolveCycle cnodes dt =
                        let nm   =  ls M.! v
                        removeEdge s' t'
                        -- register original edge, if not selected for removal
-                       c0 <- if s' /= s0 then registerEdge s0 t0 dt else return Nothing
+                       c0 <- if s' /= s0 then registerEdge s0 t0 sd else return Nothing
                        cs <- registerEdge s' (built nm) d'
                        if all isNothing [c0,cs]
                          then  do  progress (Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ show incoming ++ ")" )
@@ -420,16 +425,21 @@ resolveBlockers v bs =
     do  ls <- gets labels
         let nm = ls M.! v
         mapM_ (\b ->  let  da         =  (unblock . bdepatom) b
+                           -- linked variant exists and blocked?
                            lvBlocked  =  maybe False (matchDepAtomVariant da) (E.getLinked v)
+                           -- variant itself blocked?
                            vBlocked   =  matchDepAtomVariant da v
                            bnm        =  ls M.! bvariant b
+                           -- bruntime returns Nothing on a saved dependency
+                           --                  Just False on a build-time blocker
+                           --                  Just True on a run-time blocker
                       in   case (vBlocked,lvBlocked,bruntime b) of
-                             (False,False,Just _)     ->  return ()
-                             (True,_,Nothing)         ->  return ()
+                             (False,False,Just _)     ->  return ()  -- nothing is blocked
+                             (True,_,Nothing)         ->  return ()  -- saved dependency fulfilled
                              (True,False,Just False)  ->  registerEdgeAndResolveCycle (built nm) (built bnm)
-                                                            (Depend True (bdepatom b))
+                                                            (SavedDep Depend (bvariant b) True (bdepatom b))
                              (False,True,Just rd)     ->  registerEdgeAndResolveCycle (built bnm) (built nm)
-                                                            ((if rd then RDepend else Depend) False (bdepatom b))
+                                                            (SavedDep (if rd then RDepend else Depend) (bvariant b) False (bdepatom b))
                              _                        ->  do  ds  <-  get
                                                               let  s  =  strategy ds
                                                                    f  =  Block b v
@@ -438,7 +448,7 @@ resolveBlockers v bs =
                                                               progress (Backtrack x f)
                                                               backtrack) bs
 
-registerEdgeAndResolveCycle :: Int -> Int -> DepType -> GG ()
+registerEdgeAndResolveCycle :: Int -> Int -> SavedDep -> GG ()
 registerEdgeAndResolveCycle s t d =
     do  progress (Message $ "trying to register edge " ++ show s ++ " " ++ show t ++ " " ++ show d)
         r <- registerEdge s t d
@@ -461,21 +471,21 @@ blocker b _ target v =
             resolveBlockers v [b]
 
 depend :: NodeMap -> DepAtom -> NodeMap -> Variant -> GG ()
-depend source da target _ =
+depend source da target v =
         do
             let bs  =  built source
                 at  =  available target
-                d   =  Depend False da
+                d   =  SavedDep Depend v False da
             registerEdgeAndResolveCycle bs at d
 
 rdepend, pdepend :: NodeMap -> DepAtom -> NodeMap -> Variant -> GG ()
 rdepend = rpdepend RDepend
 pdepend = rpdepend PDepend
 
-rpdepend :: (Bool -> DepAtom -> DepType) -> NodeMap -> DepAtom -> NodeMap -> Variant -> GG ()
-rpdepend rpd source da target _ =
+rpdepend :: DepType -> NodeMap -> DepAtom -> NodeMap -> Variant -> GG ()
+rpdepend dt source da target v =
         do
            let as = available source
                at = available target
-               d  = rpd False da
+               d  = SavedDep dt v False da
            registerEdgeAndResolveCycle as at d

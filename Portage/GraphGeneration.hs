@@ -32,8 +32,7 @@ import qualified Portage.Ebuild as E
 import Portage.Strategy
 import Portage.Utilities
 
-type DGraph = Graph
-type Graph = Gr [Action] DepType
+type Graph = Gr [Action] SavedDep
 
 data Action  =  Available    Variant       -- ^ used for PDEPENDs
              |  Built        Variant
@@ -48,11 +47,9 @@ getVariant (Available v)  =  Just v
 getVariant (Built v)      =  Just v
 getVariant _              =  Nothing
 
-getDepAtom :: DepType -> Maybe DepAtom
-getDepAtom (Depend _ a)   =  Just a
-getDepAtom (RDepend _ a)  =  Just a
-getDepAtom (PDepend _ a)  =  Just a
-getDepAtom _              =  Nothing
+getDepAtom :: SavedDep -> Maybe DepAtom
+getDepAtom (SavedDep _ _ _ a)  =  Just a
+getDepAtom _                   =  Nothing
 
 -- | More efficient comparison for actions.
 instance Eq Action where
@@ -78,7 +75,7 @@ data DepState =  DepState
                       labels    ::  Map Variant NodeMap,  -- nodes related to variants
                       -- precs     ::  PrecMap,
                       active    ::  ActiveMap,            -- maps slots to variants
-                      saved     ::  SavedMap,             -- remembers blockes for packages
+                      saved     ::  SavedMap,             -- remembers blockers and dependencies for packages
                       counter   ::  !Int,                 -- counter for nodes
                       callback  ::  Callback,             -- stores which dependencies we're currently processing
                       strategy  ::  Strategy
@@ -107,7 +104,7 @@ top = 0
 
 data Progress =  LookAtEbuild  PV EbuildOrigin
               |  Backtrack     (Maybe DepState) Failure
-              |  AddEdge       Node Node DepType
+              |  AddEdge       Node Node SavedDep
               |  AddNode       NodeMap Variant
               |  Message       String
               |  Done
@@ -260,7 +257,7 @@ registerNode v nm@(NodeMap a b) av =
 
 -- | Insert a new edge if it does not create a cycle. Returns the cycle
 --   that would have been created if insertion fails, and Nothing on success.
-registerEdge :: Int -> Int -> DepType -> GG (Maybe Path)
+registerEdge :: Int -> Int -> SavedDep -> GG (Maybe Path)
 registerEdge s t d =
     do  -- ps <- gets precs
         g <- gets graph
@@ -320,7 +317,7 @@ labEdge :: (DynGraph gr) => gr a b -> Node -> Node -> b
 labEdge g s t = head' "labEdge" [ l | (_,t',l) <- out g s, t == t' ]
 
 -- | Generate a debug trace of a path in the graph.
-pathTrace :: DepState -> [Node] -> Maybe DepType -> [(Variant, Maybe DepType)]
+pathTrace :: DepState -> [Node] -> Maybe SavedDep -> [(Variant, Maybe SavedDep)]
 pathTrace s p dt = 
     let  g   =  graph s
          es  =  map Just (zipWith (labEdge g) p (tail p)) ++ [dt]
@@ -330,7 +327,7 @@ pathTrace s p dt =
                          fromJust' "pathTrace" . lab g $ a ] ]
 
 -- | Generate a debug trace of a cycle in the graph.
-cycleTrace :: DepState -> [Node] -> DepType -> [(Variant,Maybe DepType)]
+cycleTrace :: DepState -> [Node] -> SavedDep -> [(Variant,Maybe SavedDep)]
 cycleTrace s p dt = pathTrace s p (Just dt)
 
 
@@ -344,25 +341,25 @@ isAvailableNode g = msum . map isAvailable . fromJust . lab g
 getVariantsNode :: Graph -> Int -> [Variant]
 getVariantsNode g = concatMap (maybeToList . getVariant) . fromJust . lab g
 
-isPDependEdge :: LEdge DepType -> Bool
-isPDependEdge  (_,_,PDepend False _)  =  True
-isPDependEdge  _                      =  False
+isPDependEdge :: LEdge SavedDep -> Bool
+isPDependEdge  (_,_,SavedDep PDepend _ False _)  =  True
+isPDependEdge  _                                 =  False
 
-isDependEdge :: LEdge DepType -> Bool
-isDependEdge   (_,_,Depend False _)   =  True
-isDependEdge   _                      =  False
+isDependEdge :: LEdge SavedDep -> Bool
+isDependEdge   (_,_,SavedDep Depend _ False _)   =  True
+isDependEdge   _                                 =  False
 
-isRDependEdge :: LEdge DepType -> Bool
-isRDependEdge  (_,_,RDepend False _)  =  True
-isRDependEdge  _                      =  False
+isRDependEdge :: LEdge SavedDep -> Bool
+isRDependEdge  (_,_,SavedDep RDepend _ False _)  =  True
+isRDependEdge  _                                 =  False
 
-isBlockingDependEdge :: LEdge DepType -> Bool
-isBlockingDependEdge   (_,_,Depend True da)   =  blocking da
-isBlockingDependEdge   _                      =  False
+isBlockingDependEdge :: LEdge SavedDep -> Bool
+isBlockingDependEdge   (_,_,SavedDep Depend _ True da)   =  blocking da
+isBlockingDependEdge   _                                 =  False
 
-isBlockingRDependEdge :: LEdge DepType -> Bool
-isBlockingRDependEdge  (_,_,RDepend True da)  =  blocking da
-isBlockingRDependEdge  _                      =  False
+isBlockingRDependEdge :: LEdge SavedDep -> Bool
+isBlockingRDependEdge  (_,_,SavedDep RDepend _ True da)  =  blocking da
+isBlockingRDependEdge  _                                 =  False
 
 findEdge :: [LEdge b] -> Node -> LEdge b
 findEdge es n = fromJust $ find (\(_,t,_) -> n == t) es
