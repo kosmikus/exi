@@ -37,3 +37,13 @@
   indicator.
 
 * implement USE_EXPAND_HIDDEN
+* add support for binary packages
+* add unit tests
+
+* add support for a test portage tree
+  --
+  The idea is to have, as part of the distribution, a small portage tree with
+  fixed package descriptions that can be used to reproduce all sorts of problems.
+  At the same time, we need a way of making the installed package db and ideally
+  even the cache have configurable locations, so that we can test completely
+  in-place for dependency-resolution problems.
