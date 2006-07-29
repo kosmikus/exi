@@ -10,7 +10,8 @@ module Portage.GraphGeneration
   (module Portage.GraphGeneration)
   where
 
-import Data.Maybe (fromJust)
+import Data.List (find)
+import Data.Maybe (fromJust, maybeToList)
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.IntMap (IntMap)
@@ -18,7 +19,7 @@ import Data.IntSet (IntSet)
 import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 import Data.Graph.Inductive hiding (version, Graph(), NodeMap())
-import Control.Monad (when)
+import Control.Monad (when, msum)
 
 import Portage.Match
 import Portage.PortageConfig
@@ -72,14 +73,14 @@ showAction pc Top              = "/"
 data DepState =  DepState
                    {
                       pconfig   ::  PortageConfig,
-                      dlocuse   ::  [UseFlag],
-                      graph     ::  Graph,
-                      labels    ::  Map Variant NodeMap,
+                      dlocuse   ::  [UseFlag],            -- USE flags at current position
+                      graph     ::  Graph,                -- the dependency graph
+                      labels    ::  Map Variant NodeMap,  -- nodes related to variants
                       -- precs     ::  PrecMap,
-                      active    ::  ActiveMap,
-                      saved     ::  SavedMap,
-                      counter   ::  !Int,
-                      callback  ::  Callback,
+                      active    ::  ActiveMap,            -- maps slots to variants
+                      saved     ::  SavedMap,             -- remembers blockes for packages
+                      counter   ::  !Int,                 -- counter for nodes
+                      callback  ::  Callback,             -- stores which dependencies we're currently processing
                       strategy  ::  Strategy
                    }
 
@@ -114,11 +115,11 @@ data Progress =  LookAtEbuild  PV EbuildOrigin
 -- | Graph generation monad.
 newtype GG a = GG { runGG :: DepState -> [GGStep a] }
 
-data GGStep a  =  Step      Progress            -- made some progress
-               |  Return    (a,DepState)        -- result and new state
+data GGStep a  =  Step      Progress                 -- made some progress
+               |  Return    (a,DepState)             -- result and new state
                |  Label     GGLabel DepState [GG a]  -- label, saved state, delayed computations
                |  Continue  (GGLabel -> Bool) (DepState -> DepState)
-                                                -- jump
+                                                     -- jump
 
 type GGLabel = Maybe P
 
@@ -226,6 +227,13 @@ newNode =
     do  g <- gets graph
         return (head' "newNode" $ newNodes 1 g)
 
+-- | Insert a specific variant into the graph. One or two nodes
+--   are added to the graph. One "available" node, indicating the
+--   package is ready for use and has all run-time dependencies
+--   fulfilled, and one "built" node, indicating the package is
+--   built, but not necessarily ready for use. Only if PDEPENDs
+--   are specified, we really distinguish between the two states.
+--   Otherwise, they are mapped to the same node.
 insHistory :: Variant -> GG NodeMap
 insHistory v  =
     do  n <- stepCounter nr
@@ -324,4 +332,38 @@ pathTrace s p dt =
 -- | Generate a debug trace of a cycle in the graph.
 cycleTrace :: DepState -> [Node] -> DepType -> [(Variant,Maybe DepType)]
 cycleTrace s p dt = pathTrace s p (Just dt)
+
+
+isAvailable :: Action -> Maybe Variant
+isAvailable (Available v)  =  Just v
+isAvailable _              =  Nothing
+
+isAvailableNode :: Graph -> Int -> Maybe Variant
+isAvailableNode g = msum . map isAvailable . fromJust . lab g
+
+getVariantsNode :: Graph -> Int -> [Variant]
+getVariantsNode g = concatMap (maybeToList . getVariant) . fromJust . lab g
+
+isPDependEdge :: LEdge DepType -> Bool
+isPDependEdge  (_,_,PDepend False _)  =  True
+isPDependEdge  _                      =  False
+
+isDependEdge :: LEdge DepType -> Bool
+isDependEdge   (_,_,Depend False _)   =  True
+isDependEdge   _                      =  False
+
+isRDependEdge :: LEdge DepType -> Bool
+isRDependEdge  (_,_,RDepend False _)  =  True
+isRDependEdge  _                      =  False
+
+isBlockingDependEdge :: LEdge DepType -> Bool
+isBlockingDependEdge   (_,_,Depend True da)   =  blocking da
+isBlockingDependEdge   _                      =  False
+
+isBlockingRDependEdge :: LEdge DepType -> Bool
+isBlockingRDependEdge  (_,_,RDepend True da)  =  blocking da
+isBlockingRDependEdge  _                      =  False
+
+findEdge :: [LEdge b] -> Node -> LEdge b
+findEdge es n = fromJust $ find (\(_,t,_) -> n == t) es
 

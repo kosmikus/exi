@@ -64,10 +64,15 @@ buildGraphForDepTerm dt =
           And ds                    ->  buildGraphForDepString ds
           Or ds                     ->  buildGraphForOr ds
 
+-- | Looks up a virtual depatom in the precomputed table
+--   of virtuals. Virtuals are usually mapped to or-dependencies.
 resolveVirtuals :: PortageConfig -> DepTerm -> DepTerm
 resolveVirtuals pc (Plain d)  =  maybe (Plain d) id (virtuals pc d)
 resolveVirtuals _  dt         =  dt
 
+-- | Assumes that the depstring is a list of alternatives. This
+--   function simplifies such a list by eliminating masked alternatives,
+--   and then calls |buildGraphForOr'| on the simplified list.
 buildGraphForOr :: DepString -> GG ()
 buildGraphForOr ds  =
     do
@@ -86,6 +91,9 @@ buildGraphForOr ds  =
         isUnmaskedTerm (And ds)    =  all isUnmaskedTerm ds
         isUnmaskedTerm (Plain d)   =  isUnmasked pc d
 
+-- | Helper function for |buildGraphForOr|. If any of the alternatives
+--   is available, it is chosen. Otherwise, we select the default (i.e.,
+--   the first element).
 buildGraphForOr' :: DepString -> GG ()
 buildGraphForOr' []         =  return ()  -- strange case, empty OR, but ok
 buildGraphForOr' ds@(dt:_)  =
@@ -113,18 +121,21 @@ buildGraphForOr' ds@(dt:_)  =
 -- if only a and\/or b is installed it selects a+b, 
 -- if c and one of a or b is installed it selects c
 
+-- | Checks whether a given depatom is available.
 isInstalled :: PortageConfig -> DepAtom -> Bool
 isInstalled pc da =
     let  t  =  itree pc
     in   not . null . filter (E.isAvailable . location . meta) $
          (t !? (pFromDepAtom da))
 
+-- | Checks whether a given depatom has an unmasked match.
 isUnmasked :: PortageConfig -> DepAtom -> Bool
 isUnmasked pc da =
     let  t  =  itree pc
     in   not . null . E.filterMaskedVariants $
          findVersions t da
 
+-- | Temporarily changes the set of local use flags.
 withLocUse :: [UseFlag] -> GG a -> GG a
 withLocUse luse' g =
     do
@@ -134,6 +145,7 @@ withLocUse luse' g =
         modify (\s -> s { dlocuse = luse })
         return r
 
+-- | Temporarily changes the callback.
 withCallback :: Callback -> GG a -> GG a
 withCallback cb' g =
     do
@@ -143,6 +155,7 @@ withCallback cb' g =
         modify (\s -> s { callback = cb })
         return r
 
+-- | Temporarily changes the strategy.
 withStrategy :: Strategy -> GG a -> GG a
 withStrategy st' g =
     do
@@ -152,6 +165,8 @@ withStrategy st' g =
         modify (\s -> s { strategy = st })
         return r
 
+-- | Handles depgraph generation for a single depatom. This is where
+--   a lot of subtle magic happens currently.
 buildGraphForDepAtom :: DepAtom -> GG ()
 buildGraphForDepAtom da
     | blocking da =
@@ -248,16 +263,11 @@ buildGraphForDepAtom da
                                   progress (Message $ "done with dependencies for " ++ showPV (pv (meta v)))
 
 
-isAvailable :: Action -> Maybe Variant
-isAvailable (Available v)  =  Just v
-isAvailable _              =  Nothing
-
-isAvailableNode :: Graph -> Int -> Maybe Variant
-isAvailableNode g = msum . map isAvailable . fromJust . lab g
-
-getVariantsNode :: Graph -> Int -> [Variant]
-getVariantsNode g = concatMap (maybeToList . getVariant) . fromJust . lab g
-
+-- | Checks whether a certain node in the graph corresponds to an upgrade.
+--   This is the case if there's an older version of the same slot that
+--   is available on the system (such packages are already linked in the
+--   ebuild data structure). If yes, we return the node, the new variant,
+--   and the old variant in a tuple.
 hasUpgradeHistory :: Graph -> Node -> Maybe (Node,Variant,Variant)
 hasUpgradeHistory g n = 
    listToMaybe $ [ (n,v',v) |  let va' = isAvailableNode g n, isJust va',
@@ -265,6 +275,9 @@ hasUpgradeHistory g n =
                                let lv = E.getLinked v', isJust lv,
                                let (Just v) = lv ]
 
+-- | Checks whether a certain node in the graph corresponds to an already
+--   installed variant. If yes, we return the node and twice that variant
+--   in a tuple.
 hasAvailableHistory :: Graph -> Node -> Maybe (Node,Variant,Variant)
 hasAvailableHistory g n =
    listToMaybe $ [ (n,v,v)  |  let va = isAvailableNode g n, isJust va,
@@ -370,29 +383,6 @@ sumR = foldr (liftM2 (||)) (return False)
 
 allR :: [GG Bool] -> GG Bool
 allR = foldr (liftM2 (&&)) (return True)
-
-isPDependEdge :: LEdge DepType -> Bool
-isPDependEdge  (_,_,PDepend False _)  =  True
-isPDependEdge  _                      =  False
-
-isDependEdge :: LEdge DepType -> Bool
-isDependEdge   (_,_,Depend False _)   =  True
-isDependEdge   _                      =  False
-
-isRDependEdge :: LEdge DepType -> Bool
-isRDependEdge  (_,_,RDepend False _)  =  True
-isRDependEdge  _                      =  False
-
-isBlockingDependEdge :: LEdge DepType -> Bool
-isBlockingDependEdge   (_,_,Depend True da)   =  blocking da
-isBlockingDependEdge   _                      =  False
-
-isBlockingRDependEdge :: LEdge DepType -> Bool
-isBlockingRDependEdge  (_,_,RDepend True da)  =  blocking da
-isBlockingRDependEdge  _                      =  False
-
-findEdge :: [LEdge b] -> Node -> LEdge b
-findEdge es n = fromJust $ find (\(_,t,_) -> n == t) es
 
 -- | Insert a set of new nodes into the graph, and connects it.
 --   Returns if the node has existed before, and the node map.
