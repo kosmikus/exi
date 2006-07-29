@@ -36,5 +36,4 @@
   option, we shouldn't stop on the error, but also continue to output a progress
   indicator.
 
-* implement --newuse
 * implement USE_EXPAND_HIDDEN
