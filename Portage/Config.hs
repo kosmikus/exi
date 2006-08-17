@@ -69,7 +69,7 @@ getConfig c  =
                   (nub (words configprotecteds))  -- dito
                   (nub (words features))
                   (zip expand expandvars)
-                  True   -- debug
+                  False  -- debug
                   True   -- color
   where  vars        =  map (\k -> M.findWithDefault "" k c) configEnvVars
          (arch:key:use:useorder:pd:tmpd:{- distd:pkgd:logd: -}overlays:configprotecteds:features:exp:_) = vars
