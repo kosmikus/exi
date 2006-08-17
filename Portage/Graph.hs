@@ -192,7 +192,7 @@ buildGraphForDepAtom da
             -- 4. if v is unavailable, we rely on the recorded blocker
             progress (Message $ "blocker " ++ show da)
             -- remember the blocker
-            modify (\s -> s { saved = M.insertWith (++) p [b] (saved s) })
+            modify (\s -> s { saved = M.insertWith (++) (pFromDepAtom da) [b] (saved s) })
             mapM_ (\v -> do
                              let pv' = pv . meta $ v
                              let p' = extractP pv'
@@ -215,6 +215,7 @@ buildGraphForDepAtom da
                                                            else  return () -- 4.
                   )
                   (findVersions t (unblock da))
+            progress (Message $ "done with blocker " ++ show da ++ " (for now)")
     | otherwise =  let  reject f  =  do  ds <- get
                                          s  <- gets strategy
                                          let  b  |  sbacktrack s f  =  Nothing
