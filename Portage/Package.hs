@@ -76,7 +76,7 @@ showPVS        (PVS cat pkg ver slot) =
 
 showSlot   ::  Slot -> String
 showSlot ['0'] = ""
-showSlot slot = "{" ++ slot ++ "}"
+showSlot slot = ":" ++ slot
 
 getPV xs      =  case parsePV xs of
                    Left   e  ->
