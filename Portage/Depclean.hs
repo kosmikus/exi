@@ -23,6 +23,7 @@ import Portage.Dependency
 import Portage.Match
 import Portage.Package
 import Portage.Virtual
+import Portage.AnsiColor
 
 -- Assumes that dependencies of installed packages are already interpreted,
 -- look in |Portage.Ebuild| in function |getInstalledVariantFromDisk|.
@@ -81,4 +82,12 @@ depcleanfp rdepclean all removed pc =
 
 depclean rdepclean pc =
     do  vs  <-  depcleanGr rdepclean pc
-        putStr (unlines (map (showVariant pc) vs))
+        putStr (unlines (map (showUnmergeLine pc) vs))
+
+-- | Is similar to |showMergeLine| from |Portage.Merge| and to |showStatus|
+--   from |Portage.Ebuild|. Refactoring necessary ...
+
+showUnmergeLine :: PortageConfig -> Variant -> String
+showUnmergeLine pc v =
+    inColor (config pc) Red True Default "X " ++
+    " " ++ showVariant pc v
