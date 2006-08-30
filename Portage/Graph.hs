@@ -27,6 +27,7 @@ import Portage.Use
 import Portage.Ebuild (Variant(..), Ebuild(iuse), EbuildMeta(..), EbuildOrigin(..), TreeLocation(..), Mask(..), Link(..), pvs)
 import Portage.Version
 import Portage.Strategy
+import Portage.Virtual
 import Portage.Ebuild (Variant(..), Ebuild(iuse), EbuildMeta(..), EbuildOrigin(..), TreeLocation(..), Mask(..), Link(..), pvs)
 import qualified Portage.Ebuild as E
 import Portage.GraphGeneration
@@ -63,12 +64,6 @@ buildGraphForDepTerm dt =
           Plain d                   ->  buildGraphForDepAtom d
           And ds                    ->  buildGraphForDepString ds
           Or ds                     ->  buildGraphForOr ds
-
--- | Looks up a virtual depatom in the precomputed table
---   of virtuals. Virtuals are usually mapped to or-dependencies.
-resolveVirtuals :: PortageConfig -> DepTerm -> DepTerm
-resolveVirtuals pc (Plain d)  =  maybe (Plain d) id (virtuals pc d)
-resolveVirtuals _  dt         =  dt
 
 -- | Assumes that the depstring is a list of alternatives. This
 --   function simplifies such a list by eliminating masked alternatives,

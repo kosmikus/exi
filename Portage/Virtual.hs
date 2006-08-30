@@ -20,7 +20,8 @@ import Portage.Tree
 import Portage.Ebuild
 import Portage.Dependency
 import Portage.Profile
-import Portage.Constants
+import qualified Portage.Constants as C
+import Portage.PortageConfig.Type
 
 data Virtual  =  Virtual
                    {
@@ -45,7 +46,7 @@ readVirtuals f = fmap parseVirtuals (strictReadFile f)
 
 profileVirtuals :: IO [Virtual]
 profileVirtuals  =  unsafeInterleaveIO $
-                    fmap concat (readProfileFile virtuals readVirtuals)
+                    fmap concat (readProfileFile C.virtuals readVirtuals)
 
 -- | Compute the virtuals that are provided by a tree.
 providedByTree :: Tree -> Map P [DepAtom]
@@ -83,6 +84,12 @@ computeVirtuals vs t =
 mergeWithTemplate :: DepAtom -> DepAtom -> DepAtom
 mergeWithTemplate (DepAtom _ False DNONE _ _ _) d = d
 mergeWithTemplate (DepAtom n r m _ _ v) (DepAtom _ _ _ c p _) = DepAtom n r m c p v
+
+-- | Looks up a virtual depatom in the precomputed table
+--   of virtuals. Virtuals are usually mapped to or-dependencies.
+resolveVirtuals :: PortageConfig -> DepTerm -> DepTerm
+resolveVirtuals pc (Plain d)  =  maybe (Plain d) id (virtuals pc d)
+resolveVirtuals _  dt         =  dt
 
 -- Note about efficiency: The default of a virtual is cheap to compute,
 -- the rest is expensive. Laziness should take care that the expensive

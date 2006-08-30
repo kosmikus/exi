@@ -17,6 +17,7 @@ import Data.IORef
 import System.Console.GetOpt
 
 import Portage.Merge
+import Portage.Depclean
 import Portage.Info
 import Portage.PortageConfig
 import Portage.ProgramVersion
@@ -38,6 +39,8 @@ data Command' = forall a. Command' (Command a)
 commands :: Bool -> [Command']
 commands showPrivate = 
     [ Command' mergeCmd
+    , Command' depcleanCmd
+    , Command' rdepcleanCmd
     , Command' showInstCmd
     ] ++ concat
     [ -- these aren't listed as available commands to the user
@@ -119,6 +122,24 @@ showInstCmd =  Command
                     options = const [],
                     handler = \cr _ atoms -> doShowInst cr atoms
                  }
+
+-- | Removes all packages that aren't either in the world file, system targets,
+--   or required by installed packages.
+
+xdepcleanCmd :: Bool -> Command ()
+xdepcleanCmd rdepclean =
+               Command
+                 {
+                    command = [if rdepclean then "rdepclean" else "depclean"],
+                    usage = \c -> myself ++ " " ++ c,
+                    description = "Remove packages that are no longer requires ",
+                    state = (),
+                    options = const [],
+                    handler = \ rpc _ _ -> readIORef rpc >>= depclean rdepclean
+                 }
+
+depcleanCmd = xdepcleanCmd False
+rdepcleanCmd = xdepcleanCmd True
 
 handleArgs :: [String] -> IO ()
 handleArgs []      =  printGlobalHelp
