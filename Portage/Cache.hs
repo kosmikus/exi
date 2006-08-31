@@ -17,9 +17,9 @@ import System.Directory
 import System.IO.Unsafe
 
 import Portage.Utilities
+import Portage.Config.Type
 
-data CacheFormat = FlatHash | FlatList
-  deriving (Eq,Show)
+-- |CacheFormat| is now declared in |Portage.Config.Type|.
 
 detectCacheFormat :: FilePath -> IO CacheFormat
 detectCacheFormat c = findCacheFile c >>= detectFileFormat

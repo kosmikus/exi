@@ -3,10 +3,11 @@
     Stability   :  provisional
     Portability :  haskell98
 
-    Configuration files.
+    Basic portage configuration (via configuration files).
 -}
 
 module Portage.Config
+  (module Portage.Config, module Portage.Config.Type)
   where
 
 import System.IO.Unsafe
@@ -17,34 +18,13 @@ import qualified Data.Map as M
 import Data.Set (Set(..))
 import qualified Data.Set as S
 
+import Portage.Config.Type
 import Portage.Constants
 import Portage.Keyword
 import Portage.Use
 import Portage.Shell
 import Portage.Profile
 import Portage.Cache
-
-type EnvMap = Map String String  -- ^ untyped environment map
-
-data Config = Config  {
-                         arch              ::  Keyword,
-                         acceptedKeywords  ::  [Keyword],
-                         use               ::  [UseFlag],
-                         useOrder          ::  String,
-                         portDir           ::  FilePath,
-                         tmpDir            ::  FilePath,
-  --                     distDir           ::  FilePath,
-  --                     pkgDir            ::  FilePath,
-  --                     logDir            ::  FilePath,
-                         cacheFormat       ::  CacheFormat,
-                         overlays          ::  [FilePath],
-                         configProtecteds  ::  [FilePath],
-                         features          ::  [String],
-                         useExpand         ::  [(String,String)],
-                         debug             ::  Bool,
-                         color             ::  Bool
-                      }
-  deriving (Eq,Show)
 
 -- | Returns main portage tree plus overlays.
 trees :: Config -> [FilePath]
