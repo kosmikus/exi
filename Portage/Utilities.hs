@@ -18,6 +18,7 @@ import System.Exit
 import Data.List
 import Data.Maybe (fromJust)
 import Data.Map (Map)
+import Control.Concurrent (threadDelay)
 import qualified Data.Map as Map
 
 -- | Implements a "spinner".
@@ -27,6 +28,12 @@ spin w = spin' w
         spin' 0 xs           =  replicate w '\b' ++ spin' w xs
         spin' c xs@('\n':_)  =  xs
         spin' c (x:xs)       =  x : ' ' : '\b' : spin' (c-1) xs
+
+-- | A delay for warning purposes. Takes the number of
+--   seconds as an argument, as well as a display function.
+warnDelay :: (Int -> IO ()) -> Int -> IO ()
+warnDelay f 0 = return ()
+warnDelay f n = f n >> threadDelay 1000000 >> warnDelay f (n-1)
 
 -- | Aligns a table of strings.
 align :: [[String]] -> String
