@@ -1,5 +1,5 @@
 Name:			portage
-Version:		0.1
+Version:		0.2
 License:		GPL
 Author:			Andres Loeh
 Build-Depends:		base, parsec, unix, mtl, fgl>=5.2
@@ -23,6 +23,7 @@ Exposed-Modules:	Portage.AnsiColor,
 			Portage.Ebuild,
 			Portage.ProgramVersion,
 			Portage.Virtual,
+			Portage.Depclean,
 			Portage.Eclass,
 			Portage.Dependency,
 			Portage.Mask,

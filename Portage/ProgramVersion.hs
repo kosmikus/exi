@@ -2,4 +2,4 @@ module Portage.ProgramVersion
   where
 
 programVersion :: String
-programVersion = "0.1"
+programVersion = "0.2"
