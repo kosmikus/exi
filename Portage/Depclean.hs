@@ -43,11 +43,21 @@ import Portage.AnsiColor
 
 depcleanGr rdepclean pc =
     do  let all = concat . concat . map snd . M.toList . M.map (map snd . M.toList) . ebuilds $ i  -- flattened list of all installed variants
-        putStrLn $ "building graph with " ++ show (length all) ++ " nodes"
-        let (g,nm)  =  mkMapGraph
-                         (Nothing : map Just all)  -- all nodes plus world node
-                         (handleDeps Nothing (world pc ++ system pc) ++ concatMap (\v -> handleDeps (Just v) (let e = ebuild v in rdepend e ++ pdepend e ++ if rdepclean then [] else depend e)) all)
+        let gnodes   =  Nothing : map Just all  -- all nodes plus world node
+        putStrLn $ "building graph with " ++ show (length gnodes) ++ " nodes"
+        let gedges   =  nub $
+                        handleDeps Nothing (world pc ++ system pc) ++
+                        concatMap
+                          (\v -> handleDeps  (Just v)
+                                             (  let  e = ebuild v
+                                                in   rdepend e ++ pdepend e ++
+                                                     if rdepclean then [] else depend e))
+                          all
+        putStrLn $ "there are " ++ show (length gedges) ++ " edges"
+        -- putStrLn $ unlines $ map show $ map (\ (v1,v2,()) -> let { m (Just v) = showPVS (pvs v); m Nothing = "world" } in (m v1, m v2)) gedges
+        let (g,nm)  =  mkMapGraph gnodes gedges
         putStrLn $ nodes g `seq` "done"
+        -- print g
         let flagged' = reachable (fst $ mkNode_ nm Nothing) (g :: Gr (Maybe Variant) ())
         putStrLn $ "flagged " ++ show (length flagged') ++ " nodes"
         let flagged = map (fromJust) (filter isJust (map (fromJust . lab g) flagged'))
@@ -55,30 +65,17 @@ depcleanGr rdepclean pc =
   where
     i = inst pc
     handleDeps :: Maybe Variant -> DepString -> [(Maybe Variant, Maybe Variant, ())]
-    handleDeps s ds = map (\t -> (s,Just t,())) $ concatMap (\d -> matchDepAtomTree d i) $ depStringAtoms $ map (resolveVirtuals pc . Plain) $ depStringAtoms ds
-
-{-
-depclean :: Bool -> PortageConfig -> IO [Variant]
-depclean rdepclean pc =
-    do  let i = inst pc  -- tree of installed packages
-        let all = concat . concat . map snd . M.toList . M.map (map snd . M.toList) . ebuilds $ i  -- flattened list of all installed variants
-        depcleanfp rdepclean all [] pc
-{- (non-fixpoint version)
-        let conservativeDeps = depStringAtoms $ map (resolveVirtuals pc . Plain) $ depStringAtoms $ world pc ++ system pc ++ concatMap (\v -> let e = ebuild v in rdepend e ++ pdepend e ++ if rdepclean then [] else depend e) all
-        let flagged = concatMap (\d -> matchDepAtomTree d i) conservativeDeps
-        return $ all \\ flagged
--}
-
--- depcleanfp :: Bool -> PortageConfig -> IO [Variant]
-depcleanfp rdepclean all removed pc =
-    do  let i = inst pc
-        putStrLn $ "started with " ++ show (length all) ++ " packages"
-        let conservativeDeps = depStringAtoms $ map (resolveVirtuals pc . Plain) $ depStringAtoms $ world pc ++ system pc ++ concatMap (\v -> let e = ebuild v in rdepend e ++ pdepend e ++ if rdepclean then [] else depend e) all
-        let flagged = concatMap (\d -> matchDepAtomTree d i) conservativeDeps
-        let removable = all \\ flagged
-        putStrLn $ "removing " ++ show (length removable) ++ " packages"
-        if null removable then return removed else depcleanfp rdepclean (intersect all flagged) (removable ++ removed) pc
--}
+    handleDeps s ds =
+      map (\t -> (s,Just t,())) $
+      concatMap (\d -> matchDepAtomTree d i) $
+      depStringAtoms $
+      -- We keep the virtual itself during resolution of virtuals, because there
+      -- are new-style virtual packages which are still PROVIDEd. assuming worst
+      -- case, the PROVIDEs could have been installed later than the new-style virtual,
+      -- and of course we don't know if the new-style virtual doesn't provide any
+      -- functionality itself, so it shouldn't be removed.
+      concatMap (\v -> let pv = Plain v in [pv,resolveVirtuals pc pv]) $
+      depStringAtoms ds
 
 depclean rdepclean pc =
     do  vs  <-  depcleanGr rdepclean pc

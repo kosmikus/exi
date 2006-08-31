@@ -132,7 +132,9 @@ xdepcleanCmd rdepclean =
                  {
                     command = [if rdepclean then "rdepclean" else "depclean"],
                     usage = \c -> myself ++ " " ++ c,
-                    description = "Remove packages that are no longer requires ",
+                    description = "Remove packages that are no longer required by "
+                               ++ (if rdepclean then "" else "buildtime and ") ++
+                               "runtime dependencies.",
                     state = (),
                     options = const [],
                     handler = \ rpc _ _ -> readIORef rpc >>= depclean rdepclean
