@@ -39,6 +39,7 @@ data Command' = forall a. Command' (Command a)
 commands :: Bool -> [Command']
 commands showPrivate = 
     [ Command' mergeCmd
+    , Command' unmergeCmd
     , Command' depcleanCmd
     , Command' rdepcleanCmd
     , Command' showInstCmd
@@ -66,7 +67,9 @@ mergeCmd =  Command
                                       mbacktrack = False,
                                       mverbose = False,
                                       mask = False,
-                                      mcomplete = False},
+                                      mdebug = False,
+                                      mcomplete = False
+                                   },
                 options = mergeOpts,
                 handler = \rpc ms ds -> do
                             when (mcomplete ms) $
@@ -90,7 +93,8 @@ mergeOpts showPrivate =
      Option "1" ["oneshot"] (NoArg (\s -> s { moneshot = True })) "do not modify world file",
      Option "B" ["backtrack"] (NoArg (\s -> s { mbacktrack = True })) "backtrack to find more solutions",
      Option "v" ["verbose"] (NoArg (\s -> s { mverbose = True })) "be verbose",
-     Option "a" ["ask"] (NoArg (\s -> s { mask = True})) "ask before merging"
+     Option "a" ["ask"] (NoArg (\s -> s { mask = True })) "ask before merging",
+     Option "d" ["debug"] (NoArg (\s -> s { mdebug = True })) "print debugging info"
     ] ++
     [Option ""  ["list-options"] (NoArg (\s -> s { mcomplete = True })) "list available options"
     | showPrivate
@@ -116,7 +120,7 @@ showInstCmd :: Command ()
 showInstCmd =  Command
                  {
                     command = ["showinst"],
-                    usage = \c -> myself ++ " " ++ c ++ " dependency atoms",
+                    usage = \c -> myself ++ " " ++ c ++ " <dependency atoms>",
                     description = "Show installed versions of one or more packages.",
                     state = (),
                     options = const [],
@@ -132,7 +136,7 @@ xdepcleanCmd rdepclean =
                  {
                     command = [if rdepclean then "rdepclean" else "depclean"],
                     usage = \c -> myself ++ " " ++ c,
-                    description = "Remove packages that are no longer required by "
+                    description = "Remove variants that are no longer required by "
                                ++ (if rdepclean then "" else "buildtime and ") ++
                                "runtime dependencies.",
                     state = (),
@@ -142,6 +146,19 @@ xdepcleanCmd rdepclean =
 
 depcleanCmd = xdepcleanCmd False
 rdepcleanCmd = xdepcleanCmd True
+
+-- | Removes a package and everything that (runtime-)depends on it.
+
+unmergeCmd :: Command ()
+unmergeCmd =   Command
+                 {
+                    command = ["unmerge"],
+                    usage = \c -> myself ++ " " ++ c ++ " <dependency atoms>",
+                    description = "Remove one or more variants.",
+                    state = (),
+                    options = const [],
+                    handler = \ rpc _ atoms -> readIORef rpc >>= \ pc -> revdep pc atoms
+                 }
 
 handleArgs :: [String] -> IO ()
 handleArgs []      =  printGlobalHelp

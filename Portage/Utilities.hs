@@ -20,6 +20,7 @@ import Data.Maybe (fromJust)
 import Data.Map (Map)
 import Control.Concurrent (threadDelay)
 import qualified Data.Map as Map
+import Data.Tree
 
 -- | Implements a "spinner".
 spin :: Int -> String -> String
@@ -184,3 +185,8 @@ head' err (x:_)  =  x
 fromJust' :: String -> Maybe a -> a
 fromJust' err Nothing   =  error ("(" ++ err ++ ") fromJust applied to Nothing")
 fromJust' err (Just x)  =  x
+
+-- | Prints a forest.
+showForest :: (Int -> Bool -> a -> String) -> Int -> Forest a -> String
+showForest pe d []               =  ""
+showForest pe d (Node n f : ts)  =  showForest pe (d+1) f ++ pe d (not (null f)) n ++ showForest pe d ts

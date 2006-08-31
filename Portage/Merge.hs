@@ -50,6 +50,7 @@ data MergeState =  MergeState
                        mbacktrack  ::  Bool,
                        mverbose    ::  Bool,
                        mask        ::  Bool,
+                       mdebug      ::  Bool,
                        mcomplete   ::  Bool
                      }
 
@@ -258,6 +259,8 @@ withoutBuffering x =
 doMerge :: IORef PortageConfig -> MergeState -> [String] -> IO ()
 doMerge rpc ms ds =
     readIORef rpc >>= \pc -> do
+    pc <-  return $
+           if mdebug ms then pc { config = (config pc) { debug = True } } else pc
     msM <- sanityCheck (config pc) ms
     case msM of
       (Just ms') | mcomplete ms' ->
@@ -416,6 +419,3 @@ showOriginShort EclassDummy      =  "E"
 showOriginShort FromInstalledDB  =  "i"
 showOriginShort IsProvided       =  "p"
 
-showForest :: (Int -> Bool -> a -> String) -> Int -> Forest a -> String
-showForest pe d []               =  ""
-showForest pe d (Node n f : ts)  =  showForest pe (d+1) f ++ pe d (not (null f)) n ++ showForest pe d ts
