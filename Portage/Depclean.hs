@@ -4,18 +4,23 @@
     Portability :  haskell98
 
     Performing depclean calculation to determine packages that
-    can safely be removed.
+    can safely be removed. Also contains code for the unmerge command
+    at the moment.
 -}
 
 module Portage.Depclean
   where
 
+import Control.Monad
 import Data.Graph.Inductive
 import Data.List
 import Data.Maybe
 import Data.Tree
+import Data.IORef
 import qualified Data.Map as M
+import System.IO
 
+import Portage.Config
 import Portage.PortageConfig
 import Portage.Tree
 import Portage.Ebuild
@@ -26,6 +31,18 @@ import Portage.Package
 import Portage.Virtual
 import Portage.AnsiColor
 import Portage.Utilities
+import qualified Portage.Merge as Merge
+
+data UnmergeState =  UnmergeState
+                     {
+                       upretend    ::  Bool,
+                       utree       ::  Bool,
+                       uoneshot    ::  Bool,
+                       uverbose    ::  Bool,
+                       uask        ::  Bool,
+                       udebug      ::  Bool,
+                       ucomplete   ::  Bool
+                     }
 
 -- Assumes that dependencies of installed packages are already interpreted,
 -- look in |Portage.Ebuild| in function |getInstalledVariantFromDisk|.
@@ -80,7 +97,42 @@ depcleanGr rdepclean pc =
       concatMap (\v -> let pv = Plain v in [pv,resolveVirtuals pc pv]) $
       depStringAtoms ds
 
-revdep pc ds =
+-- | "Main" function for the "unmerge" command. This is very similar
+--   to "doMerge" from "Portage.Merge".
+doUnmerge :: IORef PortageConfig -> UnmergeState -> [String] -> IO ()
+doUnmerge rpc ms ds =
+    readIORef rpc >>= \pc -> do
+    pc <-  return $
+           if udebug ms then pc { config = (config pc) { debug = True } } else pc
+    msM <- sanityCheck (config pc) ms
+    case msM of
+      (Just ms') | ucomplete ms' -> Merge.complete pc ds
+                 | otherwise ->
+                     do  v <- revdep pc ms' ds
+                         case v of
+                           (Just vs)  ->  do  countMessage "unmerge" (length vs)
+                                              when (not (upretend ms')) (return ())
+                           _          ->  return ()
+
+-- | Performs a sanity check on the options specified for the "unmerge" command.
+--   Checks whether certain options are incompatible or imply each other.
+sanityCheck :: Config -> UnmergeState -> IO (Maybe UnmergeState)
+sanityCheck config ms = do
+    onTerminal <- hIsTerminalDevice stdin
+    let check ms
+            | upretend ms && uask ms = do
+                putStrLn ">>> --pretend disables --ask... removing --ask from options."
+                check (ms { uask = False })
+            | not onTerminal && uask ms = do
+                putStrLn $ inColor config Red True Default
+                    ">>> You are not on a terminal, yet you use --ask. Aborting."
+                return Nothing
+            | otherwise = return (Just ms)
+    check ms
+
+
+revdep :: PortageConfig -> UnmergeState -> [String] -> IO (Maybe [Variant])
+revdep pc s ds =
     do  let vs  = map Just $ concatMap (flip matchDepAtomTree i) $ depStringAtoms $ getDepString' (expand pc) (unwords ds)
         let all = concat . concat . map snd . M.toList . M.map (map snd . M.toList) . ebuilds $ i  -- flattened list of all installed variants
         let gnodes   =  Nothing : map Just all  -- all nodes plus world node
@@ -92,10 +144,15 @@ revdep pc ds =
                                                 in   rdepend e ++ pdepend e {- ++ depend e -}))
                           all
         let (g,nm)  =  mkMapGraph gnodes gedges
-        let t       =  unfoldForest (\ (Node x xs) -> (fromJust (lab g x), xs))
-                       $ rdff (map (fst . mkNode_ nm) vs) (g :: Gr (Maybe Variant) ())
-        putStr $ showForest (showUnmergeLine pc) 0 t
-        -- putStr $ unlines $ map (\ (s,_,_) -> case s of Just v -> showVariant pc v; Nothing -> "world") $ filter (\ (_,t,_) -> t `elem` vs) gedges
+        let unmergeforest  =  unfoldForest (\ (Node x xs) -> (fromJust (lab g x), xs))
+                              $ rdff (map (fst . mkNode_ nm) vs) (g :: Gr (Maybe Variant) ())
+        let unmergelist    =  postorderF $ unmergeforest
+        -- Normal output. (Only if --pretend??)
+        putStr $ if (utree s)  then  showForest (showUnmergeLine pc) 0 unmergeforest
+                               else  concatMap (showUnmergeLine pc 0 False) unmergelist
+        -- Check for occurrence of "system" target.
+        return (if any isNothing unmergelist  then  Nothing 
+                                              else  Just (map fromJust unmergelist))
   where
     i = inst pc
     handleDeps :: Maybe Variant -> DepString -> [(Maybe Variant, Maybe Variant, ())]

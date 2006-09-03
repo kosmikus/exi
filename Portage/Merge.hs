@@ -93,8 +93,8 @@ depgraph pc s d' =
         let mergeforest  =  dffWith lab' [0] $ gr
         -- note that using postorder in the following is essential for correctness!
         let mergelist    =  concat . postorderF $ mergeforest
-        -- Verbose (debug) output.
-        when (mverbose s) $ do
+        -- Debug output.
+        when (mdebug s) $ do
           putStr $ if (mtree s)  then  showForest (showAllLines pc) 0 mergeforest
                                  else  unlines $ map show $ mergelist
           putStrLn $ "\nShort version: "
@@ -129,6 +129,7 @@ depgraph pc s d' =
         return (gr,mergelist,null cycles)
 
 
+merge :: PortageConfig -> MergeState -> [Action] -> DepString -> IO ()
 merge pc s mergelist d' = do
         let zeroCheck cont
               | null mergelist  =  putStrLn "Nothing to do."
@@ -150,8 +151,8 @@ merge pc s mergelist d' = do
 -- | Merges a single variant. The "DepString" is only passed along to recognize
 --   user-specified targets and possibly add them to the world file after a
 --   successful merge.
-runEbuild :: PortageConfig -> MergeState -> DepString -> Int -> Int -> Variant -> IO ExitCode
-runEbuild pc s d' c t v =
+runEbuild :: PortageConfig -> Bool -> DepString -> Int -> Int -> Variant -> IO ExitCode
+runEbuild pc updateworld d' c t v =
     case location m of
       PortageTree pt _ ->
         do
@@ -183,7 +184,8 @@ runEbuild pc s d' c t v =
                                               systemInEnv envUpdateBin []]
                                      else  []
                    Nothing  ->  []) ++
-              (  if    not (moneshot s) && p `elem` dps
+              -- world file update:
+              (  if    updateworld && p `elem` dps
                  then  [do  r <- addToWorldFile pc p
                             when r $ putStrLn (inColor cfg Green True Default (">>> added " ++ showP p ++ " to world file"))
                             succeed]
@@ -216,7 +218,7 @@ showMergeLine pc n a =
 
 processMergeLine :: PortageConfig -> MergeState -> DepString -> ((Int,Int),Action) -> IO ExitCode
 processMergeLine pc s d' ((c,t),a) =  case a of
-                                        Built v  ->  runEbuild pc s d' c t v
+                                        Built v  ->  runEbuild pc (moneshot s) d' c t v
                                         _        ->  succeed
 
 showAllLines :: PortageConfig -> Int -> Bool -> [Action] -> String
@@ -263,16 +265,13 @@ doMerge rpc ms ds =
            if mdebug ms then pc { config = (config pc) { debug = True } } else pc
     msM <- sanityCheck (config pc) ms
     case msM of
-      (Just ms') | mcomplete ms' ->
-                      do complete pc ds
+      (Just ms') | mcomplete ms' -> complete pc ds
                  | otherwise ->
                       do  d <- expandGoals pc ms' (unwords ds)
                           (_,pkgs,ok) <- depgraph pc ms' d
                           let  pkgs'  =  filter isBuilt pkgs
                                count  =  length pkgs'
-                          putStrLn $ "\n" ++ show count ++ case count of
-                                                     1 -> " package to merge."
-                                                     _ -> " packages to merge."
+                          when ok $ countMessage "merge" count
                           when (ok && not (mpretend ms')) (merge pc ms' pkgs' d)
       Nothing     ->  return ()  -- aborted in sanityCheck
 

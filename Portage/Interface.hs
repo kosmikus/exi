@@ -56,7 +56,7 @@ mergeCmd =  Command
               {
                 command = ["merge"],
                 description = "Merge one or more variants.",
-                usage = \c -> myself ++ " " ++ c ++ " [OPTIONS] dependency atoms ...",
+                usage = \c -> myself ++ " " ++ c ++ " [OPTIONS] <dependency atoms>",
                 state = MergeState {  mpretend = False,
                                       mupdate = False,
                                       mdeep = False,
@@ -149,16 +149,44 @@ rdepcleanCmd = xdepcleanCmd True
 
 -- | Removes a package and everything that (runtime-)depends on it.
 
-unmergeCmd :: Command ()
+unmergeCmd :: Command UnmergeState
 unmergeCmd =   Command
                  {
                     command = ["unmerge"],
-                    usage = \c -> myself ++ " " ++ c ++ " <dependency atoms>",
+                    usage = \c -> myself ++ " " ++ c ++ " [OPTIONS] <dependency atoms>",
                     description = "Remove one or more variants.",
-                    state = (),
-                    options = const [],
-                    handler = \ rpc _ atoms -> readIORef rpc >>= \ pc -> revdep pc atoms
+                    state = UnmergeState {  upretend = False,
+                                            utree = False,
+                                            uoneshot = False,
+                                            uverbose = False,
+                                            uask = False,
+                                            udebug = False,
+                                            ucomplete = False
+                                       },
+                    options = unmergeOpts,
+                    handler = \rpc ms ds -> do
+                               when (ucomplete ms) $
+                                   unmergeListOpts rpc ms ds
+                               doUnmerge rpc ms ds
                  }
+
+unmergeListOpts :: IORef PortageConfig -> UnmergeState -> [String] -> IO ()
+unmergeListOpts rpc ms ds =
+    mapM_ putStrLn $
+        [ "--" ++ o | Option _ os _ _ <- unmergeOpts False, o <- os ]
+
+unmergeOpts :: Bool -> [OptDescr (UnmergeState -> UnmergeState)]
+unmergeOpts showPrivate =
+    [Option "p" ["pretend"] (NoArg (\s -> s { upretend = True })) "calculate dependencies only",
+     Option "t" ["tree"] (NoArg (\s -> s { utree = True })) "display packages to merge in tree form",
+     Option "1" ["oneshot"] (NoArg (\s -> s { uoneshot = True })) "do not modify world file",
+     Option "v" ["verbose"] (NoArg (\s -> s { uverbose = True })) "be verbose",
+     Option "a" ["ask"] (NoArg (\s -> s { uask = True })) "ask before merging",
+     Option "d" ["debug"] (NoArg (\s -> s { udebug = True })) "print debugging info"
+    ] ++
+    [Option ""  ["list-options"] (NoArg (\s -> s { ucomplete = True })) "list available options"
+    | showPrivate
+    ]
 
 handleArgs :: [String] -> IO ()
 handleArgs []      =  printGlobalHelp

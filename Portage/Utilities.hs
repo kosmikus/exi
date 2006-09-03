@@ -43,6 +43,15 @@ align ts =  let  maxlengths = map (maximum . map length) (transpose ts)
   where  formatIn :: Int -> String -> String
          formatIn n s = s ++ replicate (n - length s) ' '
 
+-- | Status message about a number of packages that are eligible for
+--   a certain action.
+countMessage :: String -> Int -> IO ()
+countMessage action n =  putStrLn $  "\n" ++ show n ++
+                                     (  case n of
+                                          1  ->  " package "
+                                          _  ->  " packages "  ) ++
+                                     "to " ++ action ++ "."
+
 -- | Variant of |words| that accepts a custom separator.
 split :: Char -> String -> [String]
 split c s = case dropWhile (==c) s of
