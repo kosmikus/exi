@@ -106,7 +106,8 @@ showUseFlags pc verbose v@(Variant m e) (Just v'@(Variant m' e'))  =
        expanded' :: [String]
        expanded' =  map fst (useExpand cfg)
        grouped, sorted :: [(String, [ExtUseFlag])]
-       grouped   =  unexpandExtUses expanded' d'
+       grouped   =  filter  (\ (u,_) ->  not (u `elem` useExpandHidden cfg))
+                            (unexpandExtUses expanded' d')
        sorted    =  sortByList grouped fst ("USE" : expanded')
   in   unwords $ map (\ (n,f) -> n ++ "=\"" ++ (unwords . map (showExtUseFlag cfg)) f ++ "\"") sorted
 

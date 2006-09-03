@@ -49,10 +49,11 @@ getConfig c  =
                   (nub (words configprotecteds))  -- dito
                   (nub (words features))
                   (zip expand expandvars)
+                  (nub (words exphidden))
                   False  -- debug
                   True   -- color
   where  vars        =  map (\k -> M.findWithDefault "" k c) configEnvVars
-         (arch:key:use:useorder:pd:tmpd:{- distd:pkgd:logd: -}overlays:configprotecteds:features:exp:_) = vars
+         (arch:key:use:useorder:pd:tmpd:{- distd:pkgd:logd: -}overlays:configprotecteds:features:exp:exphidden:_) = vars
          expand      =  words exp
          expandvars  =  map (\k -> M.findWithDefault "" k c) expand
 
@@ -65,6 +66,7 @@ mergeEnvMap m1 m2 =  M.unionWithKey
 
 incrementals   =  S.fromList  [  "USE",
                                  "USE_EXPAND",
+                                 "USE_EXPAND_HIDDEN",
                                  "CONFIG_PROTECT",
                                  "FEATURES",
                                  "ACCEPT_KEYWORDS"  ]
@@ -78,7 +80,8 @@ configEnvVars  =  [  "ARCH",
                      "PORTDIR_OVERLAY",
                      "CONFIG_PROTECT",
                      "FEATURES",
-                     "USE_EXPAND"  ]
+                     "USE_EXPAND",
+                     "USE_EXPAND_HIDDEN"  ]
 
 getEnvironmentConfig :: IO EnvMap
 getEnvironmentConfig =  unsafeInterleaveIO $ fmap M.fromList getEnvironment

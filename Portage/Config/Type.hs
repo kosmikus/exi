@@ -30,6 +30,7 @@ data Config = Config  {
                          configProtecteds  ::  [FilePath],
                          features          ::  [String],
                          useExpand         ::  [(String,String)],
+                         useExpandHidden   ::  [String],
                          debug             ::  Bool,
                          color             ::  Bool
                       }
