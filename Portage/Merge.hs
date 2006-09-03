@@ -62,7 +62,7 @@ expandGoals pc s d =
     do  let d' | d == "system"  =  system pc
                | d == "world"   =  world pc ++ system pc
                | otherwise      =  getDepString' (expand pc) d
-        when (mverbose s) $ putStrLn $ "goal: " ++ show d'
+        when (mdebug s) $ putStrLn $ "goal: " ++ show d'
         return d'
 
 -- | Generate a dependency graph for a user-specified dependency string.
@@ -88,25 +88,25 @@ depgraph pc s d' =
                            do  buildGraphForUDepString d'
                                gr <- gets graph
                                progress Done
-        graphCalcProgressTalk (mverbose s) pc (fst fs)
+        graphCalcProgressTalk (mdebug s) pc (fst fs)
         let gr = graph $ snd $ fs
         let mergeforest  =  dffWith lab' [0] $ gr
         -- note that using postorder in the following is essential for correctness!
         let mergelist    =  concat . postorderF $ mergeforest
         -- Debug output.
         when (mdebug s) $ do
-          putStr $ if (mtree s)  then  showForest (showAllLines pc) 0 mergeforest
+          putStr $ if (mtree s)  then  showForest (showAllLines pc (mverbose s)) 0 mergeforest
                                  else  unlines $ map show $ mergelist
           putStrLn $ "\nShort version: "
         -- Normal output. (Only if --pretend??)
-        putStr $ if (mtree s)  then  showForest (showMergeLines pc) (-1) mergeforest
-                               else  concatMap (showMergeLine pc 0) mergelist
+        putStr $ if (mtree s)  then  showForest (showMergeLines pc (mverbose s)) (-1) mergeforest
+                               else  concatMap (showMergeLine pc (mverbose s) 0) mergelist
         let cycles = cyclesFrom gr [top]
         -- If cycles remain, print them.
         when (not (null cycles)) $
             do
                 putStrLn "\nThe graph has cycles:" 
-                putStr $ unlines $ map (unlines . map (showNode (mverbose s) gr)) cycles
+                putStr $ unlines $ map (unlines . map (showNode (mdebug s) gr)) cycles
         -- If --unmask, print a list of necessary changes to package.keywords and package.unmask.
         when (munmask s) $
             do
@@ -199,20 +199,20 @@ runEbuild pc updateworld d' c t v =
     dps  =  map pFromDepAtom (depStringAtoms d')
     l    =  getLinked v
 
-showMergeLines :: PortageConfig -> Int -> Bool -> [Action] -> String
-showMergeLines pc n child a =  
+showMergeLines :: PortageConfig -> Bool -> Int -> Bool -> [Action] -> String
+showMergeLines pc verbose n child a =  
     case a of
-      Built v : _   ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant pc v ++ "\n"
+      Built v : _   ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant pc verbose v ++ "\n"
       [Top]         ->  ""
       [a] | child   ->  "_ " ++ replicate (1 + 2*n) ' ' ++ (showPV . pv . meta . fromJust . getVariant $ a) ++ "\n"
-      _ : a'        ->  showMergeLines pc n child a'
+      _ : a'        ->  showMergeLines pc verbose n child a'
       []            ->  ""
   where c = config pc
 
-showMergeLine :: PortageConfig -> Int -> Action -> String
-showMergeLine pc n a =
+showMergeLine :: PortageConfig -> Bool -> Int -> Action -> String
+showMergeLine pc verbose n a =
     case a of
-      Built v  ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant pc v ++ "\n"
+      Built v  ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant pc verbose v ++ "\n"
       _        ->  ""
   where c = config pc
 
@@ -221,13 +221,13 @@ processMergeLine pc s d' ((c,t),a) =  case a of
                                         Built v  ->  runEbuild pc (moneshot s) d' c t v
                                         _        ->  succeed
 
-showAllLines :: PortageConfig -> Int -> Bool -> [Action] -> String
-showAllLines pc n child a =
+showAllLines :: PortageConfig -> Bool -> Int -> Bool -> [Action] -> String
+showAllLines pc verbose n child a =
     case a of
       [Top]          ->  ""
       [Available v]  ->  "_ " ++ replicate (1 + 2*n) ' ' ++ (showPV . pv . meta $ v) ++ "\n"
-      Built v : _    ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant pc v ++ "\n"
-      _ : a'         ->  showAllLines pc n child a'
+      Built v : _    ->  showStatus c v ++ replicate (1 + 2*n) ' ' ++ showVariant pc verbose v ++ "\n"
+      _ : a'         ->  showAllLines pc verbose n child a'
       []             ->  ""
   where c = config pc
 
@@ -351,7 +351,7 @@ showProgress False  =  showProgressShort
 
 showProgressLong pc (LookAtEbuild pv o)     r   =  (showPV pv ++ " " ++ showOriginLong o ++ "\n") : r
 showProgressLong pc (AddEdge n1 n2 d)       r   =  ("added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d ++ "\n") : r
-showProgressLong pc (AddNode nm v)          r   =  ("added nodes " ++ showNodeMap nm ++ " " ++ showVariant pc v ++ "\n") : r
+showProgressLong pc (AddNode nm v)          r   =  ("added nodes " ++ showNodeMap nm ++ " " ++ showVariant pc True v ++ "\n") : r
 showProgressLong pc (Message s)             r   =  (s ++ "\n") : r
 showProgressLong pc (Backtrack Nothing f)   r   =  showFailure pc f : r
 showProgressLong pc (Backtrack (Just s) f)  r   =  ("\n" ++ showFailure pc f ++ printStackTrace s) : []
@@ -367,21 +367,21 @@ showProgressShort pc Done                    r  =  "\nDone." : []
 
 showFailure pc (AllMasked da vs) =
     inColor (config pc) Red True Default ("All variants that could satisfy " ++ show da ++ " are masked.\n" ++ "Candidates:\n") ++ 
-    unlines (map (showVariantMasked pc) vs)
+    unlines (map (showVariantMasked pc True) vs)
 showFailure pc (NoneInstalled da vs) =
     inColor (config pc) Red True Default ("None of the variants that could satisfy " ++ show da ++ " are installed.\n") ++
     "Candidates:\n" ++
-    unlines (map (showVariantMasked pc) vs)
+    unlines (map (showVariantMasked pc True) vs)
 showFailure pc (Block (Blocker v1 da _) v2) =
-    inColor (config pc) Red True Default ("The package\n" ++ showVariant pc v1 ++ "\nis blocked (" ++ show da ++ ") by the package\n" ++
-    showVariant pc v2 ++ "\n")
+    inColor (config pc) Red True Default ("The package\n" ++ showVariant pc True v1 ++ "\nis blocked (" ++ show da ++ ") by the package\n" ++
+    showVariant pc True v2 ++ "\n")
 showFailure pc (Cycle p) =
     unlines (  inColor (config pc) Red True Default ("Could not resolve cyclic dependencies in graph:") : 
                map (showStackLine (config pc)) p)
 showFailure pc (SlotConflict v1 v2) =
     inColor (config pc) Red True Default ("Dependencies require two incompatible variants simultaneously.\n") ++ 
-    showVariantMasked pc v1 ++ "\n" ++
-    showVariantMasked pc v2 ++ "\n"
+    showVariantMasked pc True v1 ++ "\n" ++
+    showVariantMasked pc True v2 ++ "\n"
 showFailure pc (Other s) = inColor (config pc) Red True Default s ++ "\n"
 
 printStackTrace :: DepState -> String

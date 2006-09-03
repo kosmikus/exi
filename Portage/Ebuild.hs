@@ -84,22 +84,28 @@ showMasked (HardMasked f r) = "(hardmasked in " ++ f ++ ")"
 showMasked (ProfileMasked f) = "(excluded from profile in " ++ f ++")"
 showMasked (Shadowed t) = "(shadowed by " ++ showTreeLocation t ++ ")"
 
-showVariant :: PortageConfig -> Variant -> String
-showVariant pc v@(Variant m e)  =  showVariant' (config pc) v
-                                     ++ concatMap (\x -> ' ' : showMasked x) (masked m)
-                                     ++ " " ++ useflags
-  where useflags  =  let  c = showUseFlags pc v (getLinked v)
+showVariant :: PortageConfig -> Bool -> Variant -> String
+showVariant pc verbose v@(Variant m e)  =
+    showVariant' (config pc) v
+    ++ concatMap (\x -> ' ' : showMasked x) (masked m)
+    ++ " " ++ useflags
+  where useflags  =  let  c = showUseFlags pc verbose v (getLinked v)
                      in   if null c then "" else c
 
-showUseFlags :: PortageConfig -> Variant -> Maybe Variant -> String
-showUseFlags pc v@(Variant m e) Nothing                    =  showUseFlags pc v (Just v)
-showUseFlags pc v@(Variant m e) (Just v'@(Variant m' e'))  =
+showUseFlags :: PortageConfig -> Bool -> Variant -> Maybe Variant -> String
+showUseFlags pc verbose v@(Variant m e) Nothing                    =
+  showUseFlags pc True v (Just v)
+showUseFlags pc verbose v@(Variant m e) (Just v'@(Variant m' e'))  =
   let  cfg       =  config pc
        d         =  extUse (mergeUse (use cfg) (locuse m))   (iuse e)
                            (mergeUse (use cfg) (locuse m'))  (iuse e')
        masked    =  usemask pc
-       d'        =  filter (\ (f,_) -> not (f `elem` masked)) d
+       d' :: [ExtUseFlag]
+       d'        =  filter (\ (f,b) ->  not (f `elem` masked) &&
+                                        (verbose || b /= Just False)) d
+       expanded' :: [String]
        expanded' =  map fst (useExpand cfg)
+       grouped, sorted :: [(String, [ExtUseFlag])]
        grouped   =  unexpandExtUses expanded' d'
        sorted    =  sortByList grouped fst ("USE" : expanded')
   in   unwords $ map (\ (n,f) -> n ++ "=\"" ++ (unwords . map (showExtUseFlag cfg)) f ++ "\"") sorted
@@ -107,8 +113,9 @@ showUseFlags pc v@(Variant m e) (Just v'@(Variant m' e'))  =
 -- | Like "showVariant", but additionally print the reason for hard-masking.
 --   Takes up more than one line, therefore not suitable in a context where
 --   space is critical.
-showVariantMasked :: PortageConfig -> Variant -> String
-showVariantMasked pc v@(Variant m e)  = showVariant pc v ++ concatMap hardMask (masked m)
+showVariantMasked :: PortageConfig -> Bool -> Variant -> String
+showVariantMasked pc verbose v@(Variant m e) =
+  showVariant pc verbose v ++ concatMap hardMask (masked m)
 
 showVariant' :: Config -> Variant -> String
 showVariant' cfg (Variant m e)  =  inColor cfg Green False Default (showPV (pv m)) ++

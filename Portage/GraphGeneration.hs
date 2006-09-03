@@ -64,7 +64,7 @@ instance Show Action where
   show Top              = "/"
 
 showAction :: PortageConfig -> Action -> String
-showAction pc (Built        v) = "B  " ++ E.showVariant pc v
+showAction pc (Built        v) = "B  " ++ E.showVariant pc True v
 showAction pc Top              = "/"
 
 data DepState =  DepState

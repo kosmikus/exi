@@ -148,8 +148,8 @@ revdep pc s ds =
                               $ rdff (map (fst . mkNode_ nm) vs) (g :: Gr (Maybe Variant) ())
         let unmergelist    =  postorderF $ unmergeforest
         -- Normal output. (Only if --pretend??)
-        putStr $ if (utree s)  then  showForest (showUnmergeLine pc) 0 unmergeforest
-                               else  concatMap (showUnmergeLine pc 0 False) unmergelist
+        putStr $ if (utree s)  then  showForest (showUnmergeLine pc (uverbose s)) 0 unmergeforest
+                               else  concatMap (showUnmergeLine pc (uverbose s) 0 False) unmergelist
         -- Check for occurrence of "system" target.
         return (if any isNothing unmergelist  then  Nothing 
                                               else  Just (map fromJust unmergelist))
@@ -171,16 +171,16 @@ revdep pc s ds =
 
 depclean rdepclean pc =
     do  vs  <-  depcleanGr rdepclean pc
-        putStr (concatMap (showUnmergeLine pc 0 False) (map Just vs))
+        putStr (concatMap (showUnmergeLine pc True {- TODO -} 0 False) (map Just vs))
 
 -- | Is similar to |showMergeLine| from |Portage.Merge| and to |showStatus|
 --   from |Portage.Ebuild|. Refactoring necessary ...
 
-showUnmergeLine :: PortageConfig -> Int -> Bool -> Maybe Variant -> String
-showUnmergeLine pc n _ Nothing  =
+showUnmergeLine :: PortageConfig -> Bool -> Int -> Bool -> Maybe Variant -> String
+showUnmergeLine pc _ n _ Nothing  =
     inColor (config pc) Red True Default "X " ++
     replicate (1 + 2*n) ' ' ++ inColor (config pc) Red True Default "system" ++ "\n"
-showUnmergeLine pc n _ (Just v) =
+showUnmergeLine pc verbose n _ (Just v) =
     inColor (config pc) Red True Default "X " ++
     replicate (1 + 2*n) ' ' ++
-    showVariant pc v ++ "\n"
+    showVariant pc verbose v ++ "\n"
