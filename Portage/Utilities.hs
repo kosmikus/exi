@@ -21,6 +21,10 @@ import Data.Map (Map)
 import Control.Concurrent (threadDelay)
 import qualified Data.Map as Map
 import Data.Tree
+import Data.Char
+
+import Portage.AnsiColor
+import Portage.Config.Type
 
 -- | Implements a "spinner".
 spin :: Int -> String -> String
@@ -199,3 +203,38 @@ fromJust' err (Just x)  =  x
 showForest :: (Int -> Bool -> a -> String) -> Int -> Forest a -> String
 showForest pe d []               =  ""
 showForest pe d (Node n f : ts)  =  showForest pe (d+1) f ++ pe d (not (null f)) n ++ showForest pe d ts
+
+-- | Function that asks the user a yes\/no question, used for --ask.
+askUserYesNo :: Config -> String -> IO Bool
+askUserYesNo config prompt =
+    withoutBuffering $ do
+    putStr $ inColor config Default True Default prompt
+    let stubbornAsk = do
+            putStr yesNo
+            ans <- getLine
+            case (map toLower ans) of
+              []    -> return False -- ks, I've changed this 03.09.2006, deviating from portage
+              "y"   -> return True
+              "yes" -> return True
+              "n"   -> return False
+              "no"  -> return False
+              _     -> do putStr $ "Sorry, response '" ++ ans ++ "' not understood. "
+                          stubbornAsk
+    stubbornAsk
+    where
+    yesNo = "[" ++
+            inColor config Green True Default "Yes" ++
+            "/" ++
+            inColor config Red   True Default "no"  ++
+            "]"
+
+-- | Temporarily disables buffering on stdout.
+withoutBuffering :: IO a -> IO a
+withoutBuffering x =
+    do
+        b <- hGetBuffering stdout
+        hSetBuffering stdout NoBuffering
+        r <- x
+        hSetBuffering stdout b
+        return r
+

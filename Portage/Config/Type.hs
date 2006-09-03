@@ -31,6 +31,7 @@ data Config = Config  {
                          features          ::  [String],
                          useExpand         ::  [(String,String)],
                          useExpandHidden   ::  [String],
+                         cleanDelay        ::  Int,
                          debug             ::  Bool,
                          color             ::  Bool
                       }

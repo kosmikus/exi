@@ -9,7 +9,7 @@
 module Portage.AnsiColor
   where
 
-import Portage.Config
+import Portage.Config.Type
 import Data.List
 
 data Color  =  Black

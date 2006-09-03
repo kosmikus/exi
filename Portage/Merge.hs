@@ -128,22 +128,26 @@ depgraph pc s d' =
                         putStr . unlines . map (\v -> "=" ++ showPV (pv . meta $ v)) $ hmask
         return (gr,mergelist,null cycles)
 
-
 merge :: PortageConfig -> MergeState -> [Action] -> DepString -> IO ()
-merge pc s mergelist d' = do
+merge pc s mergelist d' = action pc "merge" (mask s) (return ()) mergelist (processMergeLine pc s d')
+
+action :: PortageConfig -> String -> Bool -> IO () -> [a] -> (((Int,Int),a) -> IO ExitCode) -> IO ()
+action pc name ask delay mergelist proc = do
         let zeroCheck cont
               | null mergelist  =  putStrLn "Nothing to do."
               | otherwise       =  cont
         zeroCheck $ do
           -- If --ask is specified, ask the user if he/she approves the merging.
           userApproves <-
-              if mask s
-                then do  ans <- askUserYesNo (config pc) "Do you want me to merge these packages? "
+              if ask
+                then do  ans <- askUserYesNo (config pc) $ "Do you want me to " ++ name ++ " these packages? "
                          return ans
                 else return True
           -- Perform merging if approved.
           when userApproves $
-              do  whileSuccess (map  (processMergeLine pc s d')
+              do  withoutBuffering $ delay
+                  putStrLn "\n"
+                  whileSuccess (map  proc
                                      (zip (zip [1..] (repeat (length mergelist))) mergelist))
                     >|| (putStrLn "Quitting due to errors." >> succeed)
                   return ()
@@ -151,21 +155,12 @@ merge pc s mergelist d' = do
 -- | Merges a single variant. The "DepString" is only passed along to recognize
 --   user-specified targets and possibly add them to the world file after a
 --   successful merge.
-runEbuild :: PortageConfig -> Bool -> DepString -> Int -> Int -> Variant -> IO ExitCode
-runEbuild pc updateworld d' c t v =
-    case location m of
-      PortageTree pt _ ->
+runEbuild :: PortageConfig -> Bool -> Bool -> DepString -> Int -> Int -> Variant -> IO ExitCode
+runEbuild pc merge updateworld d' c t v =
+    case (merge,location m) of
+      (True,PortageTree pt _) ->
         do
-            let counter
-                  | t == 0     =  ""
-                  | otherwise  =  "(" ++ show c ++ "/" ++ show t ++ ") "
-            let file           =  pt ./. (showEbuildPV . pv) m
-            let uses           =  diffUse (mergeUse (use cfg) (locuse m)) (iuse e)
-            let addEnv         =  [("USE", unwords uses)]
-            let ecmd   f op    =  ebuildBin ++ " " ++ quote f ++ " " ++ op
-            let ecmd'  f op    =  ecmd f op ++
-                                    -- ignore error 127 due to a bug in ebuild
-                                    "; exittemp=$?; if [[ $exittemp -eq 127 ]]; then echo \"The above error is safe to ignore.\"; (exit 0); else (exit $exittemp); fi" 
+            let file = pt ./. (showEbuildPV . pv) m
             env <- getEnvironment
             putStrLn (inColor cfg Green True Default (">>> merging " ++ counter ++ showPV (pv m)))
             whileSuccess $
@@ -180,24 +175,45 @@ runEbuild pc updateworld d' c t v =
                                                showEbuildPV' (pv m')
                                 in   if    (pv m') /= (pv m) -- really important!
                                      then  [  do  putStrLn (inColor cfg Green True Default ("<<< unmerging " ++ showPV (pv m')))
-                                                  systemInEnv (ecmd' file' "unmerge") [],
-                                              systemInEnv envUpdateBin []]
+                                                  systemInEnv (ecmd' file' "unmerge") []  ]
                                      else  []
                    Nothing  ->  []) ++
+              [ systemInEnv envUpdateBin [] ] ++
               -- world file update:
               (  if    updateworld && p `elem` dps
                  then  [do  r <- addToWorldFile pc p
                             when r $ putStrLn (inColor cfg Green True Default (">>> added " ++ showP p ++ " to world file"))
                             succeed]
                  else  []) 
+      (False,Installed) ->
+        do
+            let file = dbDir ./. showPV (pv m) ./. showEbuildPV' (pv m)
+            env <- getEnvironment
+            putStrLn (inColor cfg Green True Default ("<<< unmerging " ++ counter ++ showPV (pv m)))
+            whileSuccess $
+              [  systemInEnv (ecmd' file "unmerge") [],
+                 systemInEnv envUpdateBin [] ] ++
+              -- world file update:
+              (  if    updateworld && p `elem` dps
+                 then  [succeed] -- TODO: remove from world file
+                 else  [])
       _ -> succeed  -- or should it be an error?
   where
-    cfg  =  config pc
-    m    =  meta v
-    e    =  ebuild v
-    p    =  extractP . pv $ m
-    dps  =  map pFromDepAtom (depStringAtoms d')
-    l    =  getLinked v
+    cfg            =  config pc
+    m              =  meta v
+    e              =  ebuild v
+    p              =  extractP . pv $ m
+    dps            =  map pFromDepAtom (depStringAtoms d')
+    l              =  getLinked v
+    counter
+      | t == 0     =  ""
+      | otherwise  =  "(" ++ show c ++ "/" ++ show t ++ ") "
+    uses           =  diffUse (mergeUse (use cfg) (locuse m)) (iuse e)
+    addEnv         =  [("USE", unwords uses)]
+    ecmd   f op    =  ebuildBin ++ " " ++ quote f ++ " " ++ op
+    ecmd'  f op    =  ecmd f op ++
+                      -- ignore error 127 due to a bug in ebuild
+                      "; exittemp=$?; if [[ $exittemp -eq 127 ]]; then echo \"The above error is safe to ignore.\"; (exit 0); else (exit $exittemp); fi" 
 
 showMergeLines :: PortageConfig -> Bool -> Int -> Bool -> [Action] -> String
 showMergeLines pc verbose n child a =  
@@ -218,7 +234,7 @@ showMergeLine pc verbose n a =
 
 processMergeLine :: PortageConfig -> MergeState -> DepString -> ((Int,Int),Action) -> IO ExitCode
 processMergeLine pc s d' ((c,t),a) =  case a of
-                                        Built v  ->  runEbuild pc (moneshot s) d' c t v
+                                        Built v  ->  runEbuild pc True (moneshot s) d' c t v
                                         _        ->  succeed
 
 showAllLines :: PortageConfig -> Bool -> Int -> Bool -> [Action] -> String
@@ -247,16 +263,6 @@ graphCalcProgressTalk verbose pc ps = do
     pr . foldr (showProgress verbose pc) [] $ ps
     putStrLn "\n"  
 
--- | Temporarily disables buffering on stdout.
-withoutBuffering :: IO a -> IO a
-withoutBuffering x =
-    do
-        b <- hGetBuffering stdout
-        hSetBuffering stdout NoBuffering
-        r <- x
-        hSetBuffering stdout b
-        return r
-
 -- | "Main" function for the "merge" command.
 doMerge :: IORef PortageConfig -> MergeState -> [String] -> IO ()
 doMerge rpc ms ds =
@@ -273,7 +279,7 @@ doMerge rpc ms ds =
                                count  =  length pkgs'
                           when ok $ countMessage "merge" count
                           when (ok && not (mpretend ms')) (merge pc ms' pkgs' d)
-      Nothing     ->  return ()  -- aborted in sanityCheck
+      _ -> return ()  -- aborted in sanityCheck
 
 -- | Performs a sanity check on the options specified for the "merge" command.
 --   Checks whether certain options are incompatible or imply each other.
@@ -291,29 +297,6 @@ sanityCheck config ms = do
             | otherwise = return (Just ms)
     check ms
 
--- | Function that asks the user a yes\/no question, used for --ask.
-askUserYesNo :: Config -> String -> IO Bool
-askUserYesNo config prompt =
-    withoutBuffering $ do
-    putStr $ inColor config Default True Default prompt
-    let stubbornAsk = do
-            putStr yesNo
-            ans <- getLine
-            case (map toLower ans) of
-              []    -> return True
-              "y"   -> return True
-              "yes" -> return True
-              "n"   -> return False
-              "no"  -> return False
-              _     -> do putStr $ "Sorry, response '" ++ ans ++ "' not understood. "
-                          stubbornAsk
-    stubbornAsk
-    where
-    yesNo = "[" ++
-            inColor config Green True Default "Yes" ++
-            "/" ++
-            inColor config Red   True Default "no"  ++
-            "]"
 
 complete :: PortageConfig -> [String] -> IO ()
 complete pc [] = complete pc [""]

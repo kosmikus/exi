@@ -130,22 +130,37 @@ showInstCmd =  Command
 -- | Removes all packages that aren't either in the world file, system targets,
 --   or required by installed packages.
 
-xdepcleanCmd :: Bool -> Command ()
+xdepcleanCmd :: Bool -> Command UnmergeState
 xdepcleanCmd rdepclean =
                Command
                  {
                     command = [if rdepclean then "rdepclean" else "depclean"],
-                    usage = \c -> myself ++ " " ++ c,
+                    usage = \c -> myself ++ " " ++ c ++ " [OPTIONS]",
                     description = "Remove variants that are no longer required by "
                                ++ (if rdepclean then "" else "buildtime and ") ++
                                "runtime dependencies.",
-                    state = (),
-                    options = const [],
-                    handler = \ rpc _ _ -> readIORef rpc >>= depclean rdepclean
+                    state = defaultUnmergeState,
+                    options = unmergeOpts,
+                    handler = \rpc ms ds -> do
+                               if (ucomplete ms)
+                                 then  unmergeListOpts rpc ms ds
+                                 else  doDepclean rdepclean rpc ms
                  }
 
 depcleanCmd = xdepcleanCmd False
 rdepcleanCmd = xdepcleanCmd True
+
+-- | Default state for unmerge commands.
+defaultUnmergeState :: UnmergeState
+defaultUnmergeState =
+  UnmergeState {  upretend = False,
+                  utree = False,
+                  uoneshot = False,
+                  uverbose = False,
+                  uask = False,
+                  udebug = False,
+                  ucomplete = False  }
+                            
 
 -- | Removes a package and everything that (runtime-)depends on it.
 
@@ -155,14 +170,7 @@ unmergeCmd =   Command
                     command = ["unmerge"],
                     usage = \c -> myself ++ " " ++ c ++ " [OPTIONS] <dependency atoms>",
                     description = "Remove one or more variants.",
-                    state = UnmergeState {  upretend = False,
-                                            utree = False,
-                                            uoneshot = False,
-                                            uverbose = False,
-                                            uask = False,
-                                            udebug = False,
-                                            ucomplete = False
-                                       },
+                    state = defaultUnmergeState,
                     options = unmergeOpts,
                     handler = \rpc ms ds -> do
                                when (ucomplete ms) $

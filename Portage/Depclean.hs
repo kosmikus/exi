@@ -60,10 +60,11 @@ data UnmergeState =  UnmergeState
 -- and add system and world depencies. Finally, we check what isn't reachable
 -- from the world node.
 
-depcleanGr rdepclean pc =
+depcleanGr :: Bool -> UnmergeState -> PortageConfig -> IO [Variant]
+depcleanGr rdepclean s pc =
     do  let all = concat . concat . map snd . M.toList . M.map (map snd . M.toList) . ebuilds $ i  -- flattened list of all installed variants
         let gnodes   =  Nothing : map Just all  -- all nodes plus world node
-        putStrLn $ "building graph with " ++ show (length gnodes) ++ " nodes"
+        when (udebug s) $ putStrLn $ "building graph with " ++ show (length gnodes) ++ " nodes"
         let gedges   =  nub $
                         handleDeps Nothing (world pc ++ system pc) ++
                         concatMap
@@ -72,15 +73,16 @@ depcleanGr rdepclean pc =
                                                 in   rdepend e ++ pdepend e ++
                                                      if rdepclean then [] else depend e))
                           all
-        putStrLn $ "there are " ++ show (length gedges) ++ " edges"
-        -- putStrLn $ unlines $ map show $ map (\ (v1,v2,()) -> let { m (Just v) = showPVS (pvs v); m Nothing = "world" } in (m v1, m v2)) gedges
+        when (udebug s) $ putStrLn $ "there are " ++ show (length gedges) ++ " edges"
         let (g,nm)  =  mkMapGraph gnodes gedges
-        putStrLn $ nodes g `seq` "done"
+        when (udebug s) $ putStrLn $ nodes g `seq` "done"
         -- print g
         let flagged' = reachable (fst $ mkNode_ nm Nothing) (g :: Gr (Maybe Variant) ())
-        putStrLn $ "flagged " ++ show (length flagged') ++ " nodes"
+        when (udebug s) $ putStrLn $ "flagged " ++ show (length flagged') ++ " nodes"
         let flagged = map (fromJust) (filter isJust (map (fromJust . lab g) flagged'))
-        return (all \\ flagged)
+        let unmergelist = all \\ flagged
+        putStr (concatMap (showUnmergeLine pc True {- TODO -} 0 False) (map Just unmergelist))
+        return unmergelist
   where
     i = inst pc
     handleDeps :: Maybe Variant -> DepString -> [(Maybe Variant, Maybe Variant, ())]
@@ -108,11 +110,13 @@ doUnmerge rpc ms ds =
     case msM of
       (Just ms') | ucomplete ms' -> Merge.complete pc ds
                  | otherwise ->
-                     do  v <- revdep pc ms' ds
+                     do  d <- return $ getDepString' (expand pc) (unwords ds)
+                         v <- revdep pc ms' d
                          case v of
                            (Just vs)  ->  do  countMessage "unmerge" (length vs)
-                                              when (not (upretend ms')) (return ())
+                                              when (not (upretend ms')) (unmerge pc ms' vs d)
                            _          ->  return ()
+      _ -> return ()  -- aborted in sanityCheck
 
 -- | Performs a sanity check on the options specified for the "unmerge" command.
 --   Checks whether certain options are incompatible or imply each other.
@@ -131,9 +135,9 @@ sanityCheck config ms = do
     check ms
 
 
-revdep :: PortageConfig -> UnmergeState -> [String] -> IO (Maybe [Variant])
+revdep :: PortageConfig -> UnmergeState -> DepString -> IO (Maybe [Variant])
 revdep pc s ds =
-    do  let vs  = map Just $ concatMap (flip matchDepAtomTree i) $ depStringAtoms $ getDepString' (expand pc) (unwords ds)
+    do  let vs  = map Just $ concatMap (flip matchDepAtomTree i) $ depStringAtoms $ ds
         let all = concat . concat . map snd . M.toList . M.map (map snd . M.toList) . ebuilds $ i  -- flattened list of all installed variants
         let gnodes   =  Nothing : map Just all  -- all nodes plus world node
         let gedges   =  nub $
@@ -151,8 +155,10 @@ revdep pc s ds =
         putStr $ if (utree s)  then  showForest (showUnmergeLine pc (uverbose s)) 0 unmergeforest
                                else  concatMap (showUnmergeLine pc (uverbose s) 0 False) unmergelist
         -- Check for occurrence of "system" target.
-        return (if any isNothing unmergelist  then  Nothing 
-                                              else  Just (map fromJust unmergelist))
+        if any isNothing unmergelist
+          then  do  putStrLn "\nSystem depends on unmerged packages, cannot unmerge safely."
+                    return Nothing
+          else  return (Just (map fromJust unmergelist))
   where
     i = inst pc
     handleDeps :: Maybe Variant -> DepString -> [(Maybe Variant, Maybe Variant, ())]
@@ -169,9 +175,19 @@ revdep pc s ds =
       concatMap (\v -> let pv = Plain v in [pv,resolveVirtuals pc pv]) $
       depStringAtoms ds
 
-depclean rdepclean pc =
-    do  vs  <-  depcleanGr rdepclean pc
-        putStr (concatMap (showUnmergeLine pc True {- TODO -} 0 False) (map Just vs))
+-- | "Main" function for the "depclean" and "rdepclean" commands.
+doDepclean :: Bool -> IORef PortageConfig -> UnmergeState -> IO ()
+doDepclean rdepclean rpc ms =
+    readIORef rpc >>= \pc -> do
+    msM <- sanityCheck (config pc) ms
+    case msM of
+      (Just ms') ->  do  vs  <-  depcleanGr rdepclean ms' pc
+                         countMessage "unmerge" (length vs)
+                         when (not (upretend ms')) (unmerge pc ms' vs [])
+      _ -> return ()  -- aborted in sanityCheck
+{-
+    vs  <-  depcleanGr rdepclean pc
+-}
 
 -- | Is similar to |showMergeLine| from |Portage.Merge| and to |showStatus|
 --   from |Portage.Ebuild|. Refactoring necessary ...
@@ -184,3 +200,11 @@ showUnmergeLine pc verbose n _ (Just v) =
     inColor (config pc) Red True Default "X " ++
     replicate (1 + 2*n) ' ' ++
     showVariant pc verbose v ++ "\n"
+
+unmerge :: PortageConfig -> UnmergeState -> [Variant] -> DepString -> IO ()
+unmerge pc s unmergelist d' =
+  Merge.action  pc "unmerge" (uask s) 
+                (warnDelay  (\n -> putStr $ inColor (config pc) Red True Default (show n ++ " "))
+                            (cleanDelay (config pc)))
+                unmergelist
+                (\ ((m,n),v) -> Merge.runEbuild pc False (uoneshot s) d' m n v)

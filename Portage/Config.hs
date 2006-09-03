@@ -50,10 +50,11 @@ getConfig c  =
                   (nub (words features))
                   (zip expand expandvars)
                   (nub (words exphidden))
+                  (read cleandelay)
                   False  -- debug
                   True   -- color
   where  vars        =  map (\k -> M.findWithDefault "" k c) configEnvVars
-         (arch:key:use:useorder:pd:tmpd:{- distd:pkgd:logd: -}overlays:configprotecteds:features:exp:exphidden:_) = vars
+         (arch:key:use:useorder:pd:tmpd:{- distd:pkgd:logd: -}overlays:configprotecteds:features:exp:exphidden:cleandelay:_) = vars
          expand      =  words exp
          expandvars  =  map (\k -> M.findWithDefault "" k c) expand
 
@@ -81,7 +82,8 @@ configEnvVars  =  [  "ARCH",
                      "CONFIG_PROTECT",
                      "FEATURES",
                      "USE_EXPAND",
-                     "USE_EXPAND_HIDDEN"  ]
+                     "USE_EXPAND_HIDDEN",
+                     "CLEAN_DELAY"  ]
 
 getEnvironmentConfig :: IO EnvMap
 getEnvironmentConfig =  unsafeInterleaveIO $ fmap M.fromList getEnvironment
