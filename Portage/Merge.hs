@@ -175,10 +175,10 @@ runEbuild pc merge updateworld d' c t v =
                                                showEbuildPV' (pv m')
                                 in   if    (pv m') /= (pv m) -- really important!
                                      then  [  do  putStrLn (inColor cfg Green True Default ("<<< unmerging " ++ showPV (pv m')))
-                                                  systemInEnv (ecmd' file' "unmerge") []  ]
+                                                  systemInEnv (ecmd' file' "unmerge") [] 
+                                                  systemInEnv envUpdateBin [] {- included in merge, but not unmerge -} ]
                                      else  []
                    Nothing  ->  []) ++
-              [ systemInEnv envUpdateBin [] ] ++
               -- world file update:
               (  if    updateworld && p `elem` dps
                  then  [do  r <- addToWorldFile pc p
@@ -234,7 +234,7 @@ showMergeLine pc verbose n a =
 
 processMergeLine :: PortageConfig -> MergeState -> DepString -> ((Int,Int),Action) -> IO ExitCode
 processMergeLine pc s d' ((c,t),a) =  case a of
-                                        Built v  ->  runEbuild pc True (moneshot s) d' c t v
+                                        Built v  ->  runEbuild pc True (not (moneshot s)) d' c t v
                                         _        ->  succeed
 
 showAllLines :: PortageConfig -> Bool -> Int -> Bool -> [Action] -> String

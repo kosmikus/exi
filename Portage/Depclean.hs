@@ -207,4 +207,4 @@ unmerge pc s unmergelist d' =
                 (warnDelay  (\n -> putStr $ inColor (config pc) Red True Default (show n ++ " "))
                             (cleanDelay (config pc)))
                 unmergelist
-                (\ ((m,n),v) -> Merge.runEbuild pc False (uoneshot s) d' m n v)
+                (\ ((m,n),v) -> Merge.runEbuild pc False (not (uoneshot s)) d' m n v)
