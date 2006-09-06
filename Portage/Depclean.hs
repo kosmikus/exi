@@ -38,6 +38,7 @@ data UnmergeState =  UnmergeState
                        upretend    ::  Bool,
                        utree       ::  Bool,
                        uoneshot    ::  Bool,
+                       unodeps     ::  Bool,
                        uverbose    ::  Bool,
                        uask        ::  Bool,
                        udebug      ::  Bool,
@@ -140,7 +141,8 @@ revdep pc s ds =
     do  let vs  = map Just $ concatMap (flip matchDepAtomTree i) $ depStringAtoms $ ds
         let all = concat . concat . map snd . M.toList . M.map (map snd . M.toList) . ebuilds $ i  -- flattened list of all installed variants
         let gnodes   =  Nothing : map Just all  -- all nodes plus world node
-        let gedges   =  nub $
+        let gedges   =  if unodeps s then [] else
+                        nub $
                         handleDeps Nothing ({- world pc ++ -} system pc) ++
                         concatMap
                           (\v -> handleDeps  (Just v)

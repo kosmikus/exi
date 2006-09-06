@@ -236,14 +236,17 @@ buildGraphForDepAtom da
                  -- the correct variants by preferring currently active variants
                  guse  =  use (config pc)
                  vs    =  findVersions t da
+                 -- the following tests whether we have --backtrack set:
+                 back  =  sbacktrack s (Other "")
             case sselect s guse da vs of
               Reject f      ->  failReject f
+              Accept [] _   ->  error "empty accept"
               Accept vs ns  ->
-                do   v@(Variant m e) <- lchoiceM (Just p) (map return vs ++ failChoice)
+                do   v@(Variant m e) <- if back  then lchoiceM (Just p) (map return vs ++ failChoice)                                         else return (head vs)
                      progress (Message $ "CHOOSING: " ++ E.showVariant' (config pc) v ++ " (out of " ++ show (length vs) ++ ")")
                      let  avail  =  E.isAvailable (location m)  -- installed or provided?
                           luse   =  mergeUse guse (locuse m)
-                          stop   =  avail && sstop s v  -- if it's an installed ebuild, we can decide to stop here!
+                          stop   =  sstop s v  -- if it's an installed ebuild (or we've selected --nodeps), we can decide to stop here!
                      -- set new local USE context
                      withLocUse luse $ withStrategy ns $ do
                        progress (LookAtEbuild (pv (meta v)) (origin (meta v)))

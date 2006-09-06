@@ -130,7 +130,7 @@ standardBacktrack (NoneInstalled _ _)  =  False
 standardBacktrack (Block _ _)          =  False
 standardBacktrack (Cycle _)            =  False
 standardBacktrack (SlotConflict _ _)   =  False -- testing
-standardBacktrack (Other _)            =  True
+standardBacktrack (Other _)            =  False
 
 deepStop :: Variant -> Bool
 deepStop v =
@@ -138,22 +138,27 @@ deepStop v =
       Provided _  ->  True
       _           ->  False
 
-makeStrategy :: Bool -> Bool -> Bool -> Bool -> Strategy
-makeStrategy update unmask deep newuse =
+makeStrategy :: Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> Strategy
+makeStrategy update unmask deep newuse empty nodeps =
     let  def  =  updateOrder  -- sic!
          new  =  if newuse  then (>>> newuseOrder) else id -- note that newuse implies update!
          upd  =  if update  then id else (availableOrder >>>)
          unm  =  if unmask  then (unmaskOrder >>>) else id
-         fl'  =  if unmask  then filterOtherArchVariants
+         fl'  =  (if empty then filterAvailableVariants else id) .
+                 if unmask  then filterOtherArchVariants
                             else filterMaskedVariants
          srt  =  \use -> sortBy ((unm . upd . new) def use)
          flt  =  \use -> srt use . fl'
-         fl0  =  if update  then flt else \use -> srt use . filterAvailableVariants . fl'
+         fl0  =  if update then flt else \use -> srt use . filterAvailableVariants . fl'
          -- the line above is to replace command-line targets in non-update mode
-         stp  =  if deep    then deepStop else const True
+         stp  =  if nodeps
+                 then const True
+                 else if deep
+                 then deepStop
+                 else (isAvailable . location . meta)
          ns   =  s { sselect = select flt ns }
          s    =  strategy' fl0 ns stp
     in   s
 
 defaultStrategy :: Strategy
-defaultStrategy = makeStrategy False False False False
+defaultStrategy = makeStrategy False False False False False False

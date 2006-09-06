@@ -47,6 +47,8 @@ data MergeState =  MergeState
                        munmask     ::  Bool,
                        mtree       ::  Bool,
                        moneshot    ::  Bool,
+                       mnodeps     ::  Bool,
+                       mempty      ::  Bool,
                        mbacktrack  ::  Bool,
                        mverbose    ::  Bool,
                        mask        ::  Bool,
@@ -82,7 +84,7 @@ depgraph pc s d' =
                                  saved     =  M.empty,
                                  counter   =  top + 1,
                                  callback  =  CbRDepend (NodeMap top top),
-                                 strategy  =  makeStrategy (mupdate s) (munmask s) (mdeep s) (mnewuse s)
+                                 strategy  =  makeStrategy (mupdate s) (munmask s) (mdeep s) (mnewuse s) (mempty s) (mnodeps s)
                               }
         let fs = runGGWith initialState $ 
                            do  buildGraphForUDepString d'
