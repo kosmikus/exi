@@ -36,7 +36,6 @@
   option, we shouldn't stop on the error, but also continue to output a progress
   indicator.
 
-* implement USE_EXPAND_HIDDEN
 * add support for binary packages
 * add unit tests
 
