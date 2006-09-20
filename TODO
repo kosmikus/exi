@@ -6,6 +6,7 @@
   error although a blocker really is the cause. I need to investigate how
   this can be fixed in such a way that the code gets cleaner rather than more
   convoluted.
+  [isn't this done already?]
 
 * nested callbacks; generate stack traces from callbacks rather than graph
   --
@@ -37,6 +38,15 @@
   indicator.
 
 * add support for binary packages
+  --
+  This is boring work, because it requires implementing the XPAK-package format
+  for binary packages.
+
+* add support for parsing and using metadata
+  --
+  This will allow to give the "total size of downloads" as portage/emerge does,
+  which would be really useful.
+
 * add unit tests
 
 * add support for a test portage tree
