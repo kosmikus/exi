@@ -149,7 +149,7 @@ getDepString' expand da =
 
 getDepString = getDepString' (const [])
 
-parseDepString expand = parse (readDepString expand) "<depstring>"
+parseDepString expand = parse (readCompleteDepString expand) "<depstring>"
 
 getDepAtom' expand da =
   case parseDepAtom expand da of
