@@ -18,12 +18,15 @@ import Portage.Use
 
 -- | Parse a @use.mask@ file.
 parseUseMask :: String -> [UseFlag]
-parseUseMask = map ('-':) . mergeUse [] . lines . stripComments
+parseUseMask = lines . stripComments
 
+-- | Simplify a @use.mask@ file.
+processUseMask :: [UseFlag] -> [UseFlag]
+processUseMask = map ('-':) . mergeUse [] 
 
 readUseMaskFile :: FilePath -> IO [UseFlag]
 readUseMaskFile f = fmap parseUseMask (strictReadFileIfExists f)
 
 profileUseMask :: IO [UseFlag]
 profileUseMask  =  unsafeInterleaveIO $
-                   fmap concat (readProfileFile useMask readUseMaskFile)
+                   fmap (processUseMask . concat) (readProfileFile useMask readUseMaskFile)
