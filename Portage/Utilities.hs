@@ -223,9 +223,9 @@ askUserYesNo config prompt =
     stubbornAsk
     where
     yesNo = "[" ++
-            inColor config Green True Default "Yes" ++
+            inColor config Green True Default "yes" ++
             "/" ++
-            inColor config Red   True Default "no"  ++
+            inColor config Red   True Default "No"  ++
             "]"
 
 -- | Temporarily disables buffering on stdout.
