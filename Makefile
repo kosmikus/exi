@@ -1,12 +1,13 @@
-HCFLAGS = -O
+HCPKGS = -hide-all-packages -package base -package parsec -package unix -package fgl
+HCFLAGS = -O $(HCPKGS)
 
 .PHONY : all prof clean exposed
 
 all:
-	ghc $(HCFLAGS) -o exi -hide-package portage --make Main.hs
+	ghc $(HCFLAGS) -o exi --make Main.hs
 
 prof:
-	ghc $(HCFLAGS) -prof -o exi.p -hide-package portage --make -auto-all Main.hs
+	ghc $(HCFLAGS) -prof -o exi.p --make -auto-all Main.hs
 
 clean:
 	rm *.o *.hi
