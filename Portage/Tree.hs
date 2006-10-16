@@ -55,10 +55,15 @@ createInstalledTree cfg =
                                    let pvss  =  groupBy  (\(PV c1 p1 _) (PV c2 p2 _)
                                                             -> c1 == c2 && p1 == p2) .
                                                 sort .
-                                                map (getPV . (cat ./.)) $
+                                                concatMap (filterCorrect . parsePV . (cat ./.)) $
                                                 pkgvers
                                    -- each of the sublists is non-empty
                                    fmap M.fromList (mapM packageEntries pvss)
+      where  -- the main reason we look at the results of parsePV in detail here is
+             -- that there might have been incomplete merges, which are -MERGING-
+             -- entries in the db ...
+             filterCorrect (Left _)    =  []
+             filterCorrect (Right x)   =  [x]
 
     packageEntries  ::  [PV]      -- ^ must be nonempty
                     ->  IO (Package, [Variant])
