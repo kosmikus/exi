@@ -63,6 +63,9 @@ instance Show Action where
   show (Built        v) = "B  " ++ showPV (pv (meta v))
   show Top              = "/"
 
+showEdge :: Config -> (Node,Node,SavedDep) -> String
+showEdge c (s,t,l) = show s ++ "->" ++ show t ++ " " ++ showSavedDep c l
+
 showAction :: PortageConfig -> Action -> String
 showAction pc (Built        v) = "B  " ++ E.showVariant pc True v
 showAction pc Top              = "/"

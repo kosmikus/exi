@@ -193,7 +193,7 @@ buildGraphForDepAtom da
                              let p' = extractP pv'
                              progress (LookAtEbuild pv' (origin (meta v)))
                              let ps' = extractPS (pvs v)
-                             progress (Message $ "comparing " ++ show p ++ "(" ++ show (pvs w) ++ ") vs. " ++ show p') -- was ps, ps'
+                             progress (Message $ "comparing " ++ showP p ++ " (" ++ showPVS (pvs w) ++ ") vs. " ++ showP p') -- was ps, ps'
                              when (p /= p') $ do -- 0.  WAS: ps /= ps'
                                case M.lookup v ls of
                                  Just _   ->  resolveBlockers v [b] -- 1.
@@ -304,7 +304,8 @@ resolveCycle cnodes sd =
     do  g <- gets graph
         let  cedges  =  zipWith findEdge (map (out g) cnodes) (tail cnodes)
                         ++ [(s0,t0,sd)]
-        progress (Message (show cnodes ++ "\n" ++ show cedges))
+        c <- gets (config . pconfig)
+        progress (Message (show cnodes ++ "\n" ++ unlines (map (showEdge c) cedges)))
         firstM  (  map (resolvePDependCycle cedges) (filter isPDependEdge cedges) ++
                    (map  (\ (a',v',v) -> resolveBootstrapCycle cedges a' v' v)
                          (detectBootstrapCycle g cnodes)))
@@ -349,9 +350,10 @@ resolveCycle cnodes sd =
                        -- structure
                        let reach = top `elem` ancestors t' g'
                        c1 <- if not reach then registerEdge top t' Meta else return Nothing
+                       cfg <- gets (config . pconfig)
                        if isNothing c0 && isNothing c1
                          then  do  progress (Message $ "Resolved bootstrap cycle at "  ++ (showPV . pv . meta $ v')
-                                                                                       ++ " (dropped " ++ show incoming ++ ")")
+                                                                                       ++ " (dropped:\n" ++ unlines (map (showEdge cfg) incoming) ++ ")")
                                    return True
                          else  do  progress (Message $ "unsuccessful attempt to resolve bootstrap cycle")
                                    return False
@@ -376,8 +378,9 @@ resolveCycle cnodes sd =
                        -- register original edge, if not selected for removal
                        c0 <- if s' /= s0 then registerEdge s0 t0 sd else return Nothing
                        cs <- registerEdge s' (built nm) d'
+                       cfg <- gets (config . pconfig)
                        if all isNothing [c0,cs]
-                         then  do  progress (Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ show incoming ++ ")" )
+                         then  do  progress (Message $ "Resolved PDEPEND cycle at " ++ showPV pv' ++ " (redirected " ++ unlines (map (showEdge cfg) incoming) ++ ")" )
                                    return True
                          else  do  progress (Message $ "unsuccessful attempt to resolve PDEPEND cycle")
                                    return False
@@ -451,7 +454,8 @@ resolveBlockers v bs =
 
 registerEdgeAndResolveCycle :: Int -> Int -> SavedDep -> GG ()
 registerEdgeAndResolveCycle s t d =
-    do  progress (Message $ "trying to register edge " ++ show s ++ " " ++ show t ++ " " ++ show d)
+    do  cfg <- gets (config . pconfig)
+        progress (Message $ "trying to register edge " ++ show s ++ " " ++ show t ++ " " ++ showSavedDep cfg d)
         r <- registerEdge s t d
         case r of
           Nothing  ->  return ()

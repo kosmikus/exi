@@ -335,7 +335,7 @@ showProgress True   =  showProgressLong
 showProgress False  =  showProgressShort
 
 showProgressLong pc (LookAtEbuild pv o)     r   =  (showPV pv ++ " " ++ showOriginLong o ++ "\n") : r
-showProgressLong pc (AddEdge n1 n2 d)       r   =  ("added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ show d ++ "\n") : r
+showProgressLong pc (AddEdge n1 n2 d)       r   =  ("added edge " ++ show n1 ++ " " ++ show n2 ++ " " ++ showSavedDep (config pc) d ++ "\n") : r
 showProgressLong pc (AddNode nm v)          r   =  ("added nodes " ++ showNodeMap nm ++ " " ++ showVariant pc True v ++ "\n") : r
 showProgressLong pc (Message s)             r   =  (s ++ "\n") : r
 showProgressLong pc (Backtrack Nothing f)   r   =  showFailure pc f : r

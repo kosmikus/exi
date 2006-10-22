@@ -43,6 +43,7 @@ data SavedDep  =  SavedDep  DepType
 
 showSavedDep :: Config -> SavedDep -> String
 showSavedDep c (SavedDep dt v b a) = show dt ++ " " ++ showVariant' c v ++ " " ++ show b ++ " " ++ show a
+showSavedDep c Meta                = "Meta"
 
 data DepType   =  Depend
                |  RDepend
