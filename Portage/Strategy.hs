@@ -129,7 +129,7 @@ standardBacktrack (AllMasked _ _)      =  False
 standardBacktrack (NoneInstalled _ _)  =  False
 standardBacktrack (Block _ _)          =  False
 standardBacktrack (Cycle _)            =  False
-standardBacktrack (SlotConflict _ _)   =  False -- testing
+standardBacktrack (SlotConflict _ _)   =  False  -- testing
 standardBacktrack (Other _)            =  False
 
 deepStop :: Variant -> Bool

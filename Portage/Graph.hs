@@ -410,8 +410,10 @@ insVariant v cb =
                                                             let  f  =  SlotConflict v v'
                                                                  b  |  sbacktrack s f  =  Nothing
                                                                     |  otherwise       =  Just ds
-                                                            progress (Message "Slot conflict")
-                                                            continue (== Just p) id -- testing
+                                                            -- progress (Message "Slot conflict")
+                                                            -- continue (== Just p) id -- testing
+                                                            progress (Backtrack b f)
+                                                            backtrack
                                    Nothing          ->  case M.lookup p b of
                                                           Nothing  ->  insVariant' []
                                                           Just bs  ->  insVariant' bs
