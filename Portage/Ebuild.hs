@@ -78,16 +78,17 @@ hardMask :: Mask -> String
 hardMask (HardMasked f r) = "\n" ++ unlines r
 hardMask _                = ""
 
-showMasked :: Mask -> String
-showMasked (KeywordMasked xs) = "(masked by keyword: " ++ show xs ++ ")"
-showMasked (HardMasked f r) = "(hardmasked in " ++ f ++ ")"
-showMasked (ProfileMasked f) = "(excluded from profile in " ++ f ++")"
-showMasked (Shadowed t) = "(shadowed by " ++ showTreeLocation t ++ ")"
+showMasked :: PortageConfig -> Bool -> Mask -> String
+showMasked _ _ (KeywordMasked xs) = "(masked by keyword: " ++ show xs ++ ")"
+showMasked _ _ (HardMasked f r) = "(hardmasked in " ++ f ++ ")"
+showMasked _ _ (ProfileMasked f) = "(excluded from profile in " ++ f ++")"
+showMasked pc verbose (PreviousChoice v) = "(masked by the previous choice of " ++ showVariant pc verbose v ++ ")"
+showMasked _ _ (Shadowed t) = "(shadowed by " ++ showTreeLocation t ++ ")"
 
 showVariant :: PortageConfig -> Bool -> Variant -> String
 showVariant pc verbose v@(Variant m e)  =
     showVariant' (config pc) v
-    ++ concatMap (\x -> ' ' : showMasked x) (masked m)
+    ++ concatMap (\x -> ' ' : showMasked pc verbose x) (masked m)
     ++ " " ++ useflags
   where useflags  =  let  c = showUseFlags pc verbose v (getLinked v)
                      in   if null c then "" else c

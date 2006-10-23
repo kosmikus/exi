@@ -230,19 +230,21 @@ buildGraphForDepAtom da
     chooseVariant failChoice failReject =
         do  pc  <-  gets pconfig
             s   <-  gets strategy
+            a   <-  gets active
             let  t     =  itree pc
                  p     =  pFromDepAtom da
-                 -- it might be a good idea to speed up the process of finding
+                 -- we now try to speed up the process of finding
                  -- the correct variants by preferring currently active variants
                  guse  =  use (config pc)
-                 vs    =  findVersions t da
+                 vs    =  filterByActive a (findVersions t da)
                  -- the following tests whether we have --backtrack set:
                  back  =  sbacktrack s (Other "")
             case sselect s guse da vs of
               Reject f      ->  failReject f
               Accept [] _   ->  error "empty accept"
               Accept vs ns  ->
-                do   v@(Variant m e) <- if back  then lchoiceM (Just p) (map return vs ++ failChoice)                                         else return (head vs)
+                do   v@(Variant m e) <- if back && length vs /= 1  then lchoiceM (Just p) (map return vs ++ failChoice)
+                                                                   else return (head vs)
                      progress (Message $ "CHOOSING: " ++ E.showVariant' (config pc) v ++ " (out of " ++ show (length vs) ++ ")")
                      let  avail  =  E.isAvailable (location m)  -- installed or provided?
                           luse   =  mergeUse guse (locuse m)
@@ -265,6 +267,12 @@ buildGraphForDepAtom da
                                   -- add pdeps to graph
                                   withCallback (CbPDepend n) $ buildGraphForUDepString pdeps
                                   progress (Message $ "done with dependencies for " ++ showPV (pv (meta v)))
+
+
+filterByActive :: ActiveMap -> [Variant] -> [Variant]
+filterByActive a = map ( \ v ->  case lookupPS (extractPS . pvs $ v) a of
+                                   Just v' | v /= v'  ->  v { meta = (meta v) { masked = PreviousChoice v' : masked (meta v) } }
+                                   _                  ->  v )
 
 
 -- | Checks whether a certain node in the graph corresponds to an upgrade.

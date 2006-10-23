@@ -110,6 +110,7 @@ data Mask          =  KeywordMasked  [Keyword]              -- ^ reasoning
                    |  HardMasked     FilePath [String]      -- ^ filename and reason
                    |  ProfileMasked  FilePath               -- ^ in which file?
                    |  NotInProfile                          -- ^ without further reason
+                   |  PreviousChoice Variant
                    |  Shadowed       TreeLocation           -- ^ by which tree?
   deriving (Show,Eq)
 
