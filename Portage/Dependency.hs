@@ -29,20 +29,20 @@ import Portage.Use
 --
 -- > depstring ::= depterm*
 
-data DepAtom  =  DepAtom DepNeg DepRev DepMod Category Package DepVer
+data DepAtom  =  DepAtom DepNeg DepRev DepMod Category Package DepVer DepSlot
   deriving (Eq,Ord)
 
 blocking :: DepAtom -> Bool
-blocking (DepAtom b _ _ _ _ _) = b
+blocking (DepAtom b _ _ _ _ _ _) = b
 
 unblock :: DepAtom -> DepAtom
-unblock (DepAtom b r m c p v) = DepAtom False r m c p v
+unblock (DepAtom b r m c p v s) = DepAtom False r m c p v s
 
 block :: DepAtom -> DepAtom
-block (DepAtom b r m c p v) = DepAtom True r m c p v
+block (DepAtom b r m c p v s) = DepAtom True r m c p v s
 
 pFromDepAtom :: DepAtom -> P
-pFromDepAtom (DepAtom _ _ _ cat pkg _) = P cat pkg
+pFromDepAtom (DepAtom _ _ _ cat pkg _ _) = P cat pkg
 
 pFromDepTerm :: DepTerm -> P
 pFromDepTerm (Plain d) = pFromDepAtom d
@@ -50,6 +50,10 @@ pFromDepTerm (Plain d) = pFromDepAtom d
 
 data DepVer   =  NoVer
               |  DepVer Version DepAst
+  deriving (Show,Eq,Ord)
+
+data DepSlot  =  NoSlot
+              |  DepSlot Slot
   deriving (Show,Eq,Ord)
 
 -- | Lifts a function on versions to a function on 'DepVer's.
@@ -113,10 +117,12 @@ showDepTerm (And depstring)           =  "( " ++ showDepString depstring ++ " )"
 showDepTerm (Use neg flag depterm)    =  (if neg then "!" else "")
                                          ++ flag ++ "? " ++ showDepTerm depterm
 
-showDepAtom (DepAtom neg rev mod cat pkg ver) = 
+showDepAtom (DepAtom neg rev mod cat pkg ver slt) = 
     (if neg then "!" else "") ++ (if rev then "~" else "") ++
-    showMod mod ++ cat ++ "/" ++ pkg ++ if null sver then "" else "-" ++ sver
-  where sver = showDepVer ver
+    showMod mod ++ cat ++ "/" ++ pkg  ++ (if null sver then "" else "-") ++ sver
+                                      ++ (if null sslt then "" else ":") ++ sslt
+  where  sver  =  showDepVer ver
+         sslt  =  showDepSlot slt
 
 showMod DNONE  =  ""
 showMod DLT    =  "<"
@@ -127,6 +133,9 @@ showMod DGT    =  ">"
 
 showDepVer NoVer             =  ""
 showDepVer (DepVer ver ast)  =  showVersion ver ++ if ast then "*" else ""
+
+showDepSlot NoSlot           =  ""
+showDepSlot (DepSlot slt)    =  slt
 
 
 -- | Parse a dependency string. Takes an 'expand' function.
@@ -190,9 +199,11 @@ readDepAtom expand
                                       Nothing   ->  case (rev,mod) of
                                                       (False,DNONE) -> return NoVer
                                                       _ -> unexpected "absence of version"
-                                      Just ver  ->  do  ast <- optchar '*'
+                                      Just ver  ->  do  ast <- try $ optchar '*'
                                                         return (DepVer ver ast)
-                    return (DepAtom neg rev mod cat pkg dver)
+                    dslt        <-  option NoSlot $  do  char ':'
+                                                         readSlot >>= (return . DepSlot)
+                    return (DepAtom neg rev mod cat pkg dver dslt)
 
 readDepMod   =  option DNONE $
                   choice $ map (\(x,s) -> liftM (const x) (try $ string s))
@@ -205,6 +216,8 @@ readDepMod   =  option DNONE $
 
 optchar c = option False (liftM (const True) (char c))
 
+readSlot  ::  CharParser st Slot
+readSlot  =   many1 (letter <|> digit <|> oneOf "_.-+")
 
 -- | Read a depstring.
 readDepString :: (Package -> [Category]) -> CharParser st DepString
@@ -267,7 +280,7 @@ depstringLang =
           commentLine      =  "",
           nestedComments   =  False,
           identStart       =  noneOf " \t\n():?!",
-          identLetter      =  noneOf " \t\n():?!",
+          identLetter      =  noneOf " \t\n()?!",
           opStart          =  oneOf "!?():|",
           opLetter         =  oneOf "|",
           reservedNames    =  [],

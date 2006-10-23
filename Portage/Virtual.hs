@@ -63,7 +63,7 @@ providedByTree t =  (  M.fromListWith (++) .
                                           (map pFromDepAtom . depStringAtoms . provide $ e)
     -- We ignore the version:
     depAtomFromPV :: PV -> DepAtom
-    depAtomFromPV (PV cat pkg _) = DepAtom False False DNONE cat pkg NoVer
+    depAtomFromPV (PV cat pkg _) = DepAtom False False DNONE cat pkg NoVer NoSlot
 
 -- | Compute the dependency that corresponds to each virtual. This function
 --   is supposed to be partially applied to the first two arguments.
@@ -82,8 +82,8 @@ computeVirtuals vs t =
 -- | The first atom is the virtual. It serves as a template w.r.t. modifiers,
 --   version etc.
 mergeWithTemplate :: DepAtom -> DepAtom -> DepAtom
-mergeWithTemplate (DepAtom _ False DNONE _ _ _) d = d
-mergeWithTemplate (DepAtom n r m _ _ v) (DepAtom _ _ _ c p _) = DepAtom n r m c p v
+mergeWithTemplate (DepAtom _ False DNONE _ _ _ _) d = d
+mergeWithTemplate (DepAtom n r m _ _ v s) (DepAtom _ _ _ c p _ _) = DepAtom n r m c p v s
 
 -- | Looks up a virtual depatom in the precomputed table
 --   of virtuals. Virtuals are usually mapped to or-dependencies.
