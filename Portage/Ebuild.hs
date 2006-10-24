@@ -154,6 +154,7 @@ filterOtherArchVariants = filter (\ (Variant m _) -> all ok (masked m))
          ok (HardMasked f r)    =  True
          ok (ProfileMasked f)   =  False
          ok NotInProfile        =  False
+         ok (PreviousChoice v)  =  False
          ok (Shadowed t)        =  False
 
 filterAvailableVariants :: [Variant] -> [Variant]
