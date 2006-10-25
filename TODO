@@ -1,3 +1,13 @@
+* || dependencies are resolved incorrectly (not as in portage)
+  --
+  Happens if there are specific versions involved, such as in many of the
+  X libraries. Which branch is taken only depends on the availability of
+  the package in exi, not of the specific version. The idea is to prefer
+  the upgrade of an already installed package over the installation of a
+  new package, which is only fair, I think. However, we should still prefer
+  using an installed exact version over an upgrade (at least if -u has
+  not been selected).
+
 * resolution of RDEPEND cycles
   --
   I'm no longer sure if something must be done in cycle resolution. The
