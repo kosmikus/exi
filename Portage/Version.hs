@@ -32,13 +32,13 @@ import Text.ParserCombinators.Parsec
 
 data Version   =  Version   [Int]         -- [1,42,3] ~= 1.42.3
                             (Maybe Char)  -- optional letter
-                            Suffix
+                            [Suffix]
                             Int           -- revision, 0 means none
                             String        -- string representation, for leading zeros
 
 data Version'  =  Version'  [Int]
                             (Maybe Char)
-                            Suffix
+                            [Suffix]
                             Int
   deriving (Eq,Ord)
 
@@ -48,7 +48,7 @@ projectVersion (Version ver c suf rev _) = Version' ver c suf rev
 makeVersion :: Version' -> Version
 makeVersion v@(Version' ver c suf rev) = Version ver c suf rev (showVersion' v)
 
-data Suffix   =  Alpha Int | Beta Int | Pre Int | RC Int | Normal | P_ Int
+data Suffix   =  Alpha Int | Beta Int | Pre Int | RC Int | P_ Int
   deriving (Eq,Ord)
 
 instance Show Version where
@@ -68,7 +68,7 @@ showVersion (Version _ _ _ _ rep) = rep
 
 showVersion' :: Version' -> String
 showVersion' (Version' ver c suf rev) 
-        = showver ++ showc ++ showSuffix suf ++ showRev rev
+        = showver ++ showc ++ concatMap showSuffix suf ++ showRev rev
   where showver  =  concat . intersperse "." . map show $ ver
         showc    =  maybe "" (:[]) c
 
@@ -77,7 +77,6 @@ showSuffix (Alpha n)  =  "_alpha" ++ showPos n
 showSuffix (Beta n)   =  "_beta"  ++ showPos n
 showSuffix (Pre n)    =  "_pre"   ++ showPos n
 showSuffix (RC n)     =  "_rc"    ++ showPos n
-showSuffix Normal     =  ""
 showSuffix (P_ n)     =  "_p"     ++ showPos n
 
 showPos :: Int -> String
@@ -104,7 +103,7 @@ parseVersion = parse (readVersion >>= \x -> eof >> return x) "<version number>"
 readVersion :: CharParser st Version
 readVersion =  do  (ver,  verr)  <-  readVer
                    (c,    cr  )  <-  readC
-                   (suf,  sufr)  <-  readSuf
+                   (suf,  sufr)  <-  readSufs
                    (rev,  revr)  <-  readRev
                    let  rep = verr ++ cr ++ sufr ++ revr
                    return (Version ver c suf rev rep)
@@ -114,6 +113,7 @@ readNum      ::  CharParser st (Int,            String)
 readC        ::  CharParser st (Maybe Char,     String)
 readSuf      ::  CharParser st (Suffix,         String)
 readSufType  ::  CharParser st (Int -> Suffix,  String)
+readSufs     ::  CharParser st ([Suffix],       String)
 readRev      ::  CharParser st (Int,            String)
 
 readVer      =  liftM ((\(x,y) -> (x, concat . intersperse "." $ y)) . unzip) (sepBy1 readNum (char '.'))
@@ -121,11 +121,11 @@ readNum      =  do  ds <- many1 digit
                     case read ds of
                       n -> return (n,ds)
 readC        =  option (Nothing,  "")  (liftM (\x -> (Just x, [x])) letter)
-readSuf      =  option (Normal,   "")  (  do  char '_'
-                                              (f,sr)  <-  readSufType
-                                              (n,nr)  <-  option (0, "") readNum
-                                              return (f n,"_" ++ sr ++ nr)
-                                       )
+readSuf      =  do  char '_'
+                    (f,sr)  <-  readSufType
+                    (n,nr)  <-  option (0, "") readNum
+                    return (f n,"_" ++ sr ++ nr)
+
 readSufType  =  choice [  
                           liftM (\x -> (Alpha,  x)) (try $ string "alpha"),
                           liftM (\x -> (Beta,   x)) (try $ string "beta" ),
@@ -133,6 +133,8 @@ readSufType  =  choice [
                           liftM (\x -> (RC,     x)) (try $ string "rc"   ),
                           liftM (\x -> (P_,     x)) (try $ string "p"    )
                        ]
+
+readSufs     =  fmap ( ( \ (x,y) -> (x, concat y) ) . unzip ) (many readSuf)
 
 readRev      =  option (0,        "")  (  do  rr      <- string "-r"
                                               (n,nr)  <-  readNum
